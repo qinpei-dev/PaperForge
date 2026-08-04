@@ -23,6 +23,8 @@ def run_agent_pipeline(
     template_path: Path | None = None,
     allow_non_paper: bool = False,
     mode: str = "ai",
+    paper_display_name: str | None = None,
+    template_display_name: str | None = None,
 ) -> dict[str, Any]:
     task_id = create_task_id()
     task_state_path = get_task_state_path(output_dir, task_id)
@@ -41,6 +43,8 @@ def run_agent_pipeline(
             output_dir=output_dir,
             allow_non_paper=allow_non_paper,
             mode=mode,
+            paper_display_name=paper_display_name,
+            template_display_name=template_display_name,
         )
     except Exception as exc:
         duration_ms = elapsed_ms(started_at)

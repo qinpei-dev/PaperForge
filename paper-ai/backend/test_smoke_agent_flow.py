@@ -98,6 +98,7 @@ def main() -> None:
     data = response.json()
     assert_ok("classify_endpoint", response.status_code == 200, response.status_code)
     assert_ok("standard_paper_not_unknown", data.get("document_type") == "academic_paper", data.get("document_type"))
+    assert_ok("classify_original_filename_preserved", data.get("filename") == "smoke-paper.docx", data.get("filename"))
 
     response = client.post(
         "/agent/run",
@@ -109,6 +110,7 @@ def main() -> None:
     breakdown = local.get("score_breakdown", {})
     assert_ok("local_ai_score_null", breakdown.get("ai_score") is None, breakdown)
     assert_ok("local_ai_used_false", breakdown.get("ai_used") is False, breakdown)
+    assert_ok("local_original_filename_preserved", local.get("original_filename") == "smoke-local.docx", local.get("original_filename"))
     local_output = OUTPUT_DIR / local["filename"]
     assert_ok("local_output_file_created", local_output.exists() and local_output.stat().st_size > 0, local_output.name)
     assert_ok("local_report_created", bool(local.get("modification_report")), local["modification_report"]["change_counts"])
@@ -135,6 +137,16 @@ def main() -> None:
     assert_ok("local_with_template_flow", response.status_code == 200 and templated.get("status") == "ok", templated.get("status"))
     templated_output = OUTPUT_DIR / templated["filename"]
     assert_ok("template_output_file_created", templated_output.exists() and templated_output.stat().st_size > 0, templated_output.name)
+    assert_ok(
+        "template_original_filename_preserved",
+        templated.get("original_template_filename") == "smoke-template-file.docx",
+        templated.get("original_template_filename"),
+    )
+    assert_ok(
+        "template_report_uses_original_filename",
+        templated.get("modification_report", {}).get("template_used") == "smoke-template-file.docx",
+        templated.get("modification_report", {}).get("template_used"),
+    )
     templated_text = "\n".join(p.text for p in Document(templated_output).paragraphs)
     assert_ok("no_unsupported_operand_error", "unsupported operand type" not in str(templated), "")
     assert_ok("c51_removed", "C-51" not in templated_text, "")

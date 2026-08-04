@@ -224,7 +224,8 @@
 推荐说明：
 
 ```powershell
-cd D:\ai_论文修改格式\paper-ai\backend
+# 在 Git 仓库根目录执行
+cd .\paper-ai\backend
 python test_smoke_agent_flow.py
 ```
 

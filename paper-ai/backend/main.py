@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import os
+import shutil
+from dataclasses import dataclass
 from pathlib import Path
+from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -30,6 +33,12 @@ if api_proxy_url:
 
 app = FastAPI(title="AI Paper Formatting Agent API")
 
+
+@dataclass(frozen=True)
+class StoredUpload:
+    path: Path
+    original_filename: str
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -46,9 +55,9 @@ def health() -> dict[str, str]:
 
 @app.post("/document/classify")
 async def classify_uploaded_document(paper: UploadFile = File(...)) -> dict[str, object]:
-    paper_path = save_docx(paper, UPLOAD_DIR)
-    result = classify_document(paper_path)
-    result["filename"] = paper_path.name
+    upload = save_docx(paper, UPLOAD_DIR, uuid4())
+    result = classify_document(upload.path)
+    result["filename"] = upload.original_filename
     return result
 
 
@@ -59,14 +68,22 @@ async def run_agent(
     allow_non_paper: bool = Form(False),
     mode: str = Form("ai"),
 ) -> dict[str, object]:
-    paper_path = save_docx(paper, UPLOAD_DIR)
-    template_path = save_docx(template, TEMPLATE_DIR) if template and template.filename else None
+    request_id = uuid4()
+    paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
+    template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
     result = run_agent_pipeline(
-        paper_path=paper_path,
-        template_path=template_path,
+        paper_path=paper_upload.path,
+        template_path=template_upload.path if template_upload else None,
         output_dir=OUTPUT_DIR,
         allow_non_paper=allow_non_paper,
         mode=mode,
+        paper_display_name=paper_upload.original_filename,
+        template_display_name=template_upload.original_filename if template_upload else None,
+    )
+    result.setdefault("original_filename", paper_upload.original_filename)
+    result.setdefault(
+        "original_template_filename",
+        template_upload.original_filename if template_upload else None,
     )
     if result["status"] == "error":
         raise HTTPException(status_code=500, detail=result)
@@ -93,9 +110,27 @@ def preview_file(filename: str) -> dict[str, str]:
     return build_docx_preview(target)
 
 
-def save_docx(file: UploadFile, directory: Path) -> Path:
-    if not file.filename or not file.filename.lower().endswith(".docx"):
+def save_docx(file: UploadFile, directory: Path, request_id: UUID) -> StoredUpload:
+    original_filename = safe_upload_filename(file.filename)
+    request_dir = directory / request_id.hex
+    request_dir.mkdir(parents=True, exist_ok=True)
+
+    target = request_dir / f"{uuid4().hex}.docx"
+    with target.open("xb") as destination:
+        shutil.copyfileobj(file.file, destination)
+    return StoredUpload(path=target, original_filename=original_filename)
+
+
+def safe_upload_filename(filename: str | None) -> str:
+    raw_filename = (filename or "").strip()
+    if not raw_filename or "\x00" in raw_filename:
         raise HTTPException(status_code=400, detail="只支持 .docx 文件。")
-    target = directory / Path(file.filename).name
-    target.write_bytes(file.file.read())
-    return target
+
+    safe_name = Path(raw_filename.replace("\\", "/")).name
+    if (
+        not safe_name
+        or any(ord(character) < 32 for character in safe_name)
+        or Path(safe_name).suffix.lower() != ".docx"
+    ):
+        raise HTTPException(status_code=400, detail="只支持 .docx 文件。")
+    return safe_name

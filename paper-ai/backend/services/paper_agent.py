@@ -74,9 +74,13 @@ def run_paper_agent(
     template_path: Path | None = None,
     allow_non_paper: bool = False,
     mode: str = "ai",
+    paper_display_name: str | None = None,
+    template_display_name: str | None = None,
 ) -> dict[str, Any]:
     state = AgentState(paper_path=paper_path, template_path=template_path, output_dir=output_dir)
     normalized_mode = "local" if mode == "local" else "ai"
+    paper_name = paper_display_name or paper_path.name
+    template_name = template_display_name or (template_path.name if template_path else None)
     trace = AgentTraceBuilder(mode=normalized_mode, has_template=template_path is not None)
     classification: dict[str, Any] | None = None
     template_profile: dict[str, Any] | None = None
@@ -109,7 +113,7 @@ def run_paper_agent(
         state.start("读取论文", "正在读取 Word 文档、正文段落和基础样式。")
         if not paper_path.exists():
             raise FileNotFoundError("论文文件不存在")
-        state.finish(f"已读取 {paper_path.name}")
+        state.finish(f"已读取 {paper_name}")
 
         state.start("分析本地格式", "正在进行结构、标题、字体、行距、页边距和参考文献基础评估。")
         before_repeat = check_repeat_risk(paper_path)
@@ -121,15 +125,17 @@ def run_paper_agent(
 
         state.start("识别模板格式", "正在读取模板页边距、正文样式和标题格式。")
         template_profile = extract_template_profile(template_path) if template_path else None
+        if template_profile and template_name:
+            template_profile["filename"] = template_name
         trace.mark_task("extract_template", "done" if template_path else "skipped", "已读取上传模板" if template_path else "未上传模板，使用默认规则")
         if template_path:
-            trace.record_tool("template_extractor.extract_template_profile", summary=f"模板：{template_path.name}")
+            trace.record_tool("template_extractor.extract_template_profile", summary=f"模板：{template_name}")
         if template_profile and template_path:
             warnings = template_profile.get("warnings") or []
             warning_text = f"；提示：{'；'.join(warnings)}" if warnings else ""
             if warnings:
                 trace.add_fallback("template_parse_warning")
-            state.finish(f"已识别模板：{template_path.name}{warning_text}", fallback_used=bool(warnings))
+            state.finish(f"已识别模板：{template_name}{warning_text}", fallback_used=bool(warnings))
         else:
             state.finish("未上传模板，按通用论文规范执行。", fallback_used=True)
 
@@ -198,6 +204,7 @@ def run_paper_agent(
             language_log,
             repeat_risk,
             template_path,
+            template_display_name=template_name,
         )
         trace.mark_task("generate_report", "done", f"人工复查项 {len(modification_report.get('manual_review_items') or [])} 项")
         trace.record_tool("report_generator/build_modification_report", summary=f"人工复查项 {len(modification_report.get('manual_review_items') or [])} 项")
@@ -215,6 +222,8 @@ def run_paper_agent(
             "repeat_risk": repeat_risk,
             "download_url": f"/download/{final_path.name}",
             "filename": final_path.name,
+            "original_filename": paper_name,
+            "original_template_filename": template_name,
             "before_analysis": before_analysis,
             "after_analysis": after_analysis,
             "modification_report": modification_report,
@@ -261,6 +270,7 @@ def build_modification_report(
     language_log: list[str],
     repeat_risk: dict[str, Any],
     template_path: Path | None,
+    template_display_name: str | None = None,
 ) -> dict[str, Any]:
     before_items = {item["key"]: item for item in before_analysis["report"]["breakdown"]}
     comparisons = []
@@ -328,7 +338,7 @@ def build_modification_report(
         "warning_items": warning_items,
         "info_items": info_items,
         "score_explanation": score_explanation,
-        "template_used": template_path.name if template_path else None,
+        "template_used": template_display_name or (template_path.name if template_path else None),
     }
 
 

@@ -6,10 +6,12 @@
 
 当前项目以本地开发方式运行：
 
+以下命令均从 Git 仓库根目录执行。
+
 Backend:
 
 ```powershell
-cd D:\ai_论文修改格式\paper-ai\backend
+cd .\paper-ai\backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -19,7 +21,7 @@ uvicorn main:app --reload --host 127.0.0.1 --port 8000
 Frontend:
 
 ```powershell
-cd D:\ai_论文修改格式\paper-ai\frontend
+cd .\paper-ai\frontend
 npm install
 npm run dev
 ```
