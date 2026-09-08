@@ -55,7 +55,7 @@ def main() -> None:
         check("output_created", output.exists() and output.stat().st_size > 0)
 
         verification = verify_output(model, before, output, None, [rule], plan, execution.unsupported_step_ids, execution.changes)
-        check("verifier_provenance_enriched", bool(verification.provenance_changes) and all(change["verification_scope"] == "rule" and "verification_evidence" in change for change in verification.provenance_changes))
+        check("verifier_provenance_enriched", bool(verification.provenance_changes) and all(change["verification_scope"] == "target" and change["verification_status"] == "verified" and "verification_evidence" in change for change in verification.provenance_changes))
         check("structure_integrity_guard", verification.structural_integrity["status"] in {"SAFE", "WARNING"})
     print("P1_EXECUTOR_PROVENANCE PASS")
 

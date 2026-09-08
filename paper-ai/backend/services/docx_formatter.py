@@ -107,10 +107,10 @@ def describe_low_risk_paragraph_property(paragraph, property_name: str) -> Any:
         return fmt.line_spacing
     if property_name in {"space_before_pt", "space_after_pt"}:
         value = getattr(fmt, property_name.removesuffix("_pt"))
-        return round(value.pt, 2) if value else None
+        return round(value.pt, 2) if value is not None else None
     attr = {"first_line_indent_cm": "first_line_indent", "left_indent_cm": "left_indent", "right_indent_cm": "right_indent"}.get(property_name)
     value = getattr(fmt, attr) if attr else None
-    return round(value.cm, 3) if value else None
+    return round(value.cm, 3) if value is not None else None
 
 
 def apply_low_risk_page_rule(document, section_indices: list[int], property_name: str, expected: Any) -> list[int]:

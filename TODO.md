@@ -2,6 +2,21 @@
 
 ## 当前路线图 / Roadmap
 
+### [DONE] PaperOps Agent v2.0 P1.2-body-target-verification
+
+目标：为既有可靠正文 paragraph locator 建立真实输出 DOCX 重读、expected/actual 比较与 paragraph target-level provenance。
+
+已完成：
+- 正文段落 provenance 新增 `target_type=body_paragraph` 与 `expected`，保持既有字段兼容。
+- 字体、字号、对齐、行距、首行/左右缩进、段前段后均按指定 paragraph target 重读验证。
+- 无 locator 或无有效目标时记录 unsupported provenance 与原因，不伪造 verified。
+- 新增 `test_p1_2_body_target_verification.py`，覆盖 target-only 修改、输出重读、expected/actual 不一致与 unsupported。
+- P1.1、P1、P0.1、P0.2、smoke、Python 编译与前端 build 全部通过。
+
+状态：已完成。引用、图表编号、交叉引用、目录域、复杂表格、无 locator 目标及内容语义改写仍维持 HITL / unsupported。
+
+---
+
 ### [DONE] PaperOps Agent v2.0 P1.1-target-level-formatting-verification
 
 目标：在既有 P1 Rule → PlanStep → Locator → Executor → Provenance 链路上，为可靠标题、图题和表题提供局部格式执行与真实 target-level verification。

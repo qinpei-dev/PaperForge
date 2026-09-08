@@ -58,6 +58,8 @@ def execute_plan(plan: ExecutionPlan, source: Path, output: Path, template_path:
         if not step.auto_fixable or step.action not in SUPPORTED_ACTIONS or not rule or not isinstance(indices, list) or not indices:
             unsupported.append(step.id)
             statuses[step.id] = "unsupported"
+            if rule and rule.target == "body":
+                changes.append(unsupported_body_change_record(plan, step, rule, locator, "missing or invalid paragraph locator"))
             continue
         started = perf_counter()
         if rule.target in {"body", "heading", "caption:figure", "caption:table"} or rule.target.startswith("heading:"):
@@ -78,6 +80,8 @@ def execute_plan(plan: ExecutionPlan, source: Path, output: Path, template_path:
         if not changed_indices:
             statuses[step.id] = "skipped"
             format_log.append(f"{step.id} 未找到可安全修改的目标。")
+            if rule.target == "body":
+                changes.append(unsupported_body_change_record(plan, step, rule, locator, "no in-range non-empty paragraph target"))
             continue
         executed.append(step.id)
         statuses[step.id] = "executed"
@@ -89,6 +93,10 @@ def execute_plan(plan: ExecutionPlan, source: Path, output: Path, template_path:
 
 
 def change_record(plan: ExecutionPlan, step: PlanStep, rule: Rule, index: int, target_key: str, locator: dict[str, Any], before: Any, after: Any, duration_ms: int) -> dict[str, Any]:
-    target = {target_key: index, "semantic_role": locator.get("semantic_role", rule.target), "locator": locator}
-    scope = "target" if locator.get("semantic_role") in {"heading", "figure_caption", "table_caption"} else "rule"
-    return {"change_id": f"chg-{uuid4().hex[:12]}", "document_id": plan.document_id, "rule_id": rule.id, "rule_type": rule.property, "plan_id": plan.plan_id, "plan_step_id": step.id, "action": step.action, "target": target, "before": before, "after": after, "executor": "executor_adapter.low_risk_format_rule", "status": "executed", "verification_status": "pending", "verification_scope": scope, "timestamp": datetime.now(timezone.utc).isoformat(), "duration_ms": duration_ms}
+    target = {target_key: index, "semantic_role": locator.get("semantic_role", rule.target), "target_type": locator.get("target_type", "body_paragraph" if rule.target == "body" else None), "locator": locator}
+    scope = "target" if locator.get("semantic_role") in {"body", "heading", "figure_caption", "table_caption"} else "rule"
+    return {"change_id": f"chg-{uuid4().hex[:12]}", "document_id": plan.document_id, "rule_id": rule.id, "rule_type": rule.property, "plan_id": plan.plan_id, "plan_step_id": step.id, "action": step.action, "target": target, "before": before, "expected": after, "after": after, "executor": "executor_adapter.low_risk_format_rule", "status": "executed", "verification_status": "pending", "verification_scope": scope, "timestamp": datetime.now(timezone.utc).isoformat(), "duration_ms": duration_ms}
+
+
+def unsupported_body_change_record(plan: ExecutionPlan, step: PlanStep, rule: Rule, locator: dict[str, Any], reason: str) -> dict[str, Any]:
+    return {"change_id": f"chg-{uuid4().hex[:12]}", "document_id": plan.document_id, "rule_id": rule.id, "rule_type": rule.property, "plan_id": plan.plan_id, "plan_step_id": step.id, "action": step.action, "target": {"semantic_role": "body", "target_type": "body_paragraph", "locator": locator}, "before": None, "expected": None, "after": None, "executor": "executor_adapter.low_risk_format_rule", "status": "unsupported", "verification_status": "unsupported", "verification_scope": "target", "verification_evidence": {"reason": reason}, "timestamp": datetime.now(timezone.utc).isoformat(), "duration_ms": 0}

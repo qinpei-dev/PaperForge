@@ -104,7 +104,7 @@ def build_execution_plan(document: DocumentModel, rules: list[Rule], analysis: d
             id=f"step-{len(steps) + 1}-{rule.id}", action=action, target="body", rule_id=rule.id,
             evidence=rule.evidence, risk_level="low", auto_fixable=True, dependencies=["document_analysis"],
             status="planned", reason=f"Analyzer 的 {analysis_key} 评分为 {item.get('score')}，低于 90；仅修改可靠定位的正文段落。",
-            related_rule_ids=[rule.id], target_locator={"kind": "paragraph_indices", "indices": document.body_paragraph_indices, "semantic_role": "body"},
+            related_rule_ids=[rule.id], target_locator={"kind": "paragraph_indices", "indices": document.body_paragraph_indices, "semantic_role": "body", "target_type": "body_paragraph"},
         ))
     # The established formatter has a safe baseline body-normalization pass.
     # Keep it explicit in the plan even when the score already looks healthy:
@@ -126,7 +126,7 @@ def build_execution_plan(document: DocumentModel, rules: list[Rule], analysis: d
                     status="planned",
                     reason="保留既有稳定 formatter 的低风险正文规范化基线，并作为显式 PlanStep 执行。",
                     related_rule_ids=[rule.id for rule in rules if rule.target == "body" and rule.auto_fixable],
-                    target_locator={"kind": "paragraph_indices", "indices": document.body_paragraph_indices, "semantic_role": "body"},
+                    target_locator={"kind": "paragraph_indices", "indices": document.body_paragraph_indices, "semantic_role": "body", "target_type": "body_paragraph"},
                 )
             )
     # Preserve established, narrowly scoped template-residual cleanup. It is

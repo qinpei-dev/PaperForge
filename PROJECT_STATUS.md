@@ -4,13 +4,15 @@
 
 项目名称：AI论文格式修改Agent
 
-当前阶段：PaperOps Agent v2.0 P1.1 Target-level Formatting Verification 已完成
+当前阶段：PaperOps Agent v2.0 P1.2 Body Paragraph Target-level Verification 已完成
 
 P0.3 Runtime UI / Task State 状态：已完成最小接入。保留 P0.2 真实闭环与 `/agent/run` 旧字段；task state 新增 runtime_state、current_phase、current_step、decision、replan_count、human_review_required 摘要。前端在既有结果与 Trace 区域旁展示 Runtime Workflow、Verification、Decision、HumanReviewRequest 与 Replan 摘要，并对旧任务字段缺失安全降级；不包含审批继续、checkpoint 恢复或自动 resume。
 
 P1 Executor Expansion + Provenance Foundation：已将低风险正文格式动作拆分为字体/字号、对齐、行距、首行缩进、段前段后，并保留低风险页边距动作；PlanStep 使用段落/节 locator。Executor 记录逐实际修改的 before/after、rule、plan、step、target 与执行状态，Verifier 以 rule 或 document scope 回填验证结论。引用、图表编号与无定位步骤仍为 unsupported / HITL；未实现内容语义改写、引用重编号或复杂表格修改。
 
 P1.1 Target-level Formatting Verification：已为 Word 标题样式和可解析编号的图题/表题建立保守 paragraph locator；标题、图题、表题仅对 locator 指定段落执行字体、字号、加粗、对齐、行距与段落间距等低风险格式动作。Verifier 会重新读取输出 DOCX 并记录 target-level expected/actual evidence；无 locator、低置信或越界目标不会伪造成功。前端 Runtime 区新增兼容降级的“实际修改”摘要。
+
+P1.2 Body Paragraph Target-level Verification：正文低风险格式修改现在将每个 paragraph index 记录为 `body_paragraph` target，并保留 before、expected、after 与 locator。Verifier 会重新读取输出 DOCX 并对字体、字号、对齐、行距、首行/左右缩进、段前段后逐 target 比较 actual；无法定位的正文 PlanStep 会写入 unsupported provenance 和原因，不再以 rule-level 分数伪装段落验证。
 
 当前稳定展示基线：tag `v1.0-showcase`，指向 commit `10904db`
 

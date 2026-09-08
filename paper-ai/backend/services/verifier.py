@@ -61,15 +61,20 @@ def verify_output(before_model: DocumentModel, before_analysis: dict[str, Any], 
         elif entry.get("verification_scope") == "target":
             target_index = (entry.get("target") or {}).get("paragraph_index")
             property_name = entry.get("rule_type")
+            if entry.get("status") == "unsupported":
+                entry["verification_status"] = "unsupported"
+                entry["verification_evidence"] = entry.get("verification_evidence") or {"reason": "executor did not receive a reliable target"}
+                provenance_changes.append(entry)
+                continue
             if not isinstance(target_index, int) or not 0 <= target_index < len(output_document.paragraphs):
-                entry["verification_status"] = "verification_failed"
+                entry["verification_status"] = "failed"
                 entry["verification_evidence"] = {"reason": "target paragraph index is unavailable after re-reading output"}
             else:
                 from .docx_formatter import describe_low_risk_paragraph_property
                 actual = describe_low_risk_paragraph_property(output_document.paragraphs[target_index], property_name)
-                expected = entry.get("after")
+                expected = entry.get("expected", entry.get("after"))
                 target_verified = values_match(actual, expected, property_name)
-                entry["verification_status"] = "verified" if target_verified else "verification_failed"
+                entry["verification_status"] = "verified" if target_verified else "failed"
                 entry["verification_evidence"] = {
                     "paragraph_index": target_index,
                     "expected": {property_name: expected},
