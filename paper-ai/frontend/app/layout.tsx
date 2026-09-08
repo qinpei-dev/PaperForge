@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI论文格式修改Agent",
-  description: "Upload a paper and let the agent format, review, and export the final Word file.",
+  title: "PaperForge | Verified Academic Document Agent",
+  description: "PaperForge is a verified agent system for academic document review, controlled transformation, provenance tracking and DOCX verification.",
 };
 
 export default function RootLayout({

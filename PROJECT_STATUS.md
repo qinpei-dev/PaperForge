@@ -1,10 +1,30 @@
 # 项目状态
 
-当前版本号：v1.0-showcase / 暑期实习展示版
+项目名称：**PaperForge**
 
-项目名称：AI论文格式修改Agent
+正式定位：**Verified Academic Document Agent**
 
-当前阶段：PaperOps Agent v2.0 P2 收尾闭环已完成
+中文定位：**学术文档可信智能处理 Agent**
+
+当前阶段：**V2 第二次大升级正式验收完成 / Release Freeze**
+
+验收日期：**2026-09-08**
+
+验收基线：`c0bcc2f80dd46d15df1d1067ef1174cd05e36d4d`
+
+正式结论：**READY**
+
+PaperForge V2 核心开发已经完成。当前进入 Release Freeze，不继续扩展 P3。后续仅允许封版文档、品牌包装、部署稳定性和 blocking regression 修复。
+
+V2 第二次大升级正式验收结果：26 项核心能力 PASS；A～F 端到端场景 PASS；Safety Audit、Provenance / Verification、Score Credibility、Frontend build、Real DOCX Regression 10/10、AI failure fallback 和 Legacy compatibility 均 PASS；0 warning，0 blocking FAIL。
+
+## 当前边界
+
+深度语义润色仍有限；复杂目录、脚注、公式、复杂表格、交叉引用、异步恢复、checkpoint/resume 和审批后继续执行尚未完成。
+
+## 历史开发状态
+
+`PaperOps Agent v2.0` 仅作为历史开发阶段代号保留。以下 P2/P1/P0 记录描述真实历史完成情况，不代表当前品牌或未来路线。
 
 P2 收尾状态：统一格式/内容 evidence summary、内容 Before/After、单条 suggestion 确认采纳、stale conflict、确认版 DOCX 重读验证和 verified-change 内容评分均已完成。Runtime/API/report 暴露 `review_summary`、`change_evidence`、`pending_actions`；前端明确区分自动修改、未写入建议、已采纳验证和 HITL。保留旧字段与老任务安全降级。
 
@@ -28,18 +48,6 @@ P1.2 Body Paragraph Target-level Verification：正文低风险格式修改现�
 - `v1.0-showcase` 是稳定展示版本，指向 `10904db`。
 - `main` 分支包含 `v1.0-showcase` 之后的公开前文档和面试材料补充；截至本轮公开前清理开始时为 `afed51e docs: polish interview showcase materials`，后续提交可能继续前进。
 - 不移动、删除或重建 `v1.0-showcase` 和 `v0.9.4-demo-screenshot-package` tag。
-
-完成度：
-
-- 格式Agent：75%
-- 内容Agent：30%
-- 论文修改Agent：45%
-
-说明：
-
-- 格式Agent 已经具备可运行主链路：上传论文、可选模板、格式修复、评分、预览、下载。
-- 内容Agent 仍处于早期：AI 模式能做少量词语级替换和语言评分，但不能稳定完成段落级润色、逻辑重组、主观化表达识别。
-- 论文修改Agent 已有 Agent 流程雏形，但“真实内容修改能力”和“修改报告可信度”仍需增强。
 
 # 已完成功能
 

@@ -2,7 +2,7 @@
 
 版本：`v0.7.3-task-state-cleanup`
 
-本文档说明 AI论文格式修改Agent 的现有架构。当前系统以 DOCX 论文格式处理为主，通过 FastAPI + Next.js 提供上传、预览和下载，通过后端工具链完成分类、格式修复、检查、评分和报告生成。
+本文档说明 PaperForge Verified Academic Document Agent 的现有架构。当前系统通过 FastAPI + Next.js 提供 DOCX 上传、预览和下载，并通过 Document Model、Rule Engine、Planner、Executor、Verification 和 Provenance 完成可追踪处理。
 
 本文档只描述已经实现的内容，不包含未接入的 RAG、LangGraph、Milvus、数据库、用户系统或云部署。
 

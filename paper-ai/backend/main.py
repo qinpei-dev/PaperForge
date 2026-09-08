@@ -34,7 +34,10 @@ if api_proxy_url:
     os.environ["HTTP_PROXY"] = api_proxy_url
     os.environ["HTTPS_PROXY"] = api_proxy_url
 
-app = FastAPI(title="AI Paper Formatting Agent API")
+app = FastAPI(
+    title="PaperForge API",
+    description="Verified Academic Document Agent API",
+)
 
 
 @dataclass(frozen=True)
@@ -44,7 +47,15 @@ class StoredUpload:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        *[
+            origin.strip()
+            for origin in os.getenv("CORS_ORIGINS", "").split(",")
+            if origin.strip()
+        ],
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

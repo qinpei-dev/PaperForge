@@ -1,4 +1,4 @@
-name: ai-paper-agent
+name: paperforge
 
 services:
   backend:

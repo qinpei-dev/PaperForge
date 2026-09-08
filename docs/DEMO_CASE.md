@@ -2,7 +2,7 @@
 
 Version: `v0.9.3-interview-demo-package`
 
-This document describes the fixed interview demo case for the AI Paper Formatting Agent. Starting from `v0.6.3-real-demo-files`, the repository includes an artificial de-identified DOCX paper sample, a DOCX template sample, and one local-mode output set. Starting from `v0.7.2-task-state-sample`, the fixed demo output set also includes a task state JSON sample.
+This document describes the fixed interview demo case for PaperForge, the Verified Academic Document Agent. Starting from `v0.6.3-real-demo-files`, the repository includes an artificial de-identified DOCX paper sample, a DOCX template sample, and one local-mode output set. Starting from `v0.7.2-task-state-sample`, the fixed demo output set also includes a task state JSON sample.
 
 Current stable demo baseline: tag `v1.0-showcase`, pointing to commit `10904db`. The `main` branch contains post-tag interview material and public-readiness documentation updates; those updates do not move the `v1.0-showcase` tag.
 

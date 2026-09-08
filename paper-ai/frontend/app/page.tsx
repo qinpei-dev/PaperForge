@@ -382,26 +382,26 @@ export default function Home() {
         <section className="landing-shell" aria-label="产品首页与处理工作台">
           <header className="hero">
             <div className="hero-copy">
-              <p className="eyebrow">AI Paper Agent</p>
-              <h1>AI论文格式修改Agent</h1>
-              <p className="hero-lead">面向 DOCX 论文/报告的本地格式 Agent：模板格式审查、自动排版、修改报告和 Agent Trace 可观测，一次上传即可进入处理链路。</p>
+              <p className="eyebrow">PaperForge</p>
+              <h1>Verified Academic Document Agent</h1>
+              <p className="hero-lead">面向 DOCX 学术文档的可信智能处理系统。通过规则检测、计划执行、局部修改、重读验证、风险控制和人工确认，建立可追踪的文档处理闭环。</p>
               <div className="hero-badges" aria-label="当前能力">
-                <span>格式 Agent</span>
-                <span>同步处理</span>
-                <span>本地 fallback</span>
+                <span>Verified Execution</span>
+                <span>Human-in-the-Loop</span>
+                <span>Provenance</span>
               </div>
               <div className="capability-grid" aria-label="核心能力">
                 <div>
-                  <strong>模板格式对齐</strong>
-                  <span>读取模板规则，统一标题、正文、段落和页边距。</span>
+                  <strong>可信执行</strong>
+                  <span>按 paragraph / section locator 执行局部修改，并重新读取输出 DOCX 验证实际结果。</span>
                 </div>
                 <div>
-                  <strong>修改报告生成</strong>
-                  <span>汇总评分变化、修复项、风险项和人工复查建议。</span>
+                  <strong>风险感知内容审查</strong>
+                  <span>自动修正、安全建议和高风险人工确认采用不同执行策略。</span>
                 </div>
                 <div>
-                  <strong>Agent Trace 可观测</strong>
-                  <span>展示处理步骤、耗时和本地规则兜底状态。</span>
+                  <strong>证据与溯源</strong>
+                  <span>记录 before / expected / after、verification、provenance 与 pending actions。</span>
                 </div>
               </div>
             </div>

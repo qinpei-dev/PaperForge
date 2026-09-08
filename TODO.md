@@ -1,5 +1,42 @@
 # TODO
 
+## [DONE] PaperForge V2 Final Acceptance
+
+状态：**READY**
+
+完成：
+
+- V2 capability matrix 26/26 PASS
+- formatting verification closure
+- content review closure
+- provenance closure
+- suggestion confirmation closure
+- stale conflict
+- confirmed DOCX verification
+- verified score credibility
+- frontend integration
+- real DOCX regression 10/10 PASS
+
+## [CURRENT] PaperForge Release Freeze
+
+仅允许：
+
+- 品牌统一
+- README / PROJECT_STATUS / release notes
+- 部署可靠性小改
+- blocking regression 修复
+- 对外项目包装
+
+禁止：
+
+- P3 功能开发
+- 大规模重构
+- 异步队列扩展
+- checkpoint/resume
+- 新 Agent 架构重写
+
+---
+
 ### [DONE] PaperOps Agent v2.0 P2 收尾 — 统一证据与确认采纳闭环
 
 已完成：

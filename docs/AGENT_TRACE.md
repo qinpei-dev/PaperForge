@@ -1,6 +1,6 @@
 # Agent Trace
 
-`agent_trace` 是 AI论文格式修改Agent 的工程执行轨迹，用来解释 Agent 做了哪些任务、调用了哪些工具、为什么 fallback、是否需要人工复查，以及当前结果的规则置信度。
+`agent_trace` 是 PaperForge 的工程执行轨迹，用来解释 Agent 做了哪些任务、调用了哪些工具、为什么 fallback、是否需要人工复查，以及当前结果的规则置信度。
 
 Agent Trace 不是 LLM 思维链。它不记录模型隐藏推理，也不尝试展示“内心过程”。它是可审计的工程日志，来自确定性的后端流程和规则判断。
 

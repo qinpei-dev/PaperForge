@@ -1,6 +1,6 @@
-# Docker 部署
+# PaperForge Docker 部署
 
-本文档用于通过 Docker Compose 启动 AI 论文格式修改 Agent。Docker 部署不改变现有 API、Agent pipeline 或前端功能。
+本文档用于通过 Docker Compose 启动 PaperForge Verified Academic Document Agent。Docker 部署不改变现有 API、Agent pipeline 或前端功能。
 
 ## 1. 环境要求
 
@@ -106,7 +106,7 @@ docker compose up -d
 
 ### 服务器 IP 或域名访问出现 CORS 错误
 
-当前后端 CORS 白名单只包含 `localhost:3000` 和 `127.0.0.1:3000`。本地 Docker Compose 部署可正常使用；使用服务器 IP 或域名前，需要单独评估 CORS 白名单配置。
+后端默认 CORS 白名单包含 `localhost:3000` 和 `127.0.0.1:3000`。服务器 IP 或域名部署时，在 `paper-ai/backend/.env` 设置逗号分隔的 `CORS_ORIGINS`，例如 `CORS_ORIGINS=https://paperforge.example.com`，然后重启后端容器。
 
 ### 输出文件在删除容器后丢失
 
