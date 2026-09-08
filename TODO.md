@@ -659,3 +659,9 @@
 目标：扩展真实低风险格式执行，并建立 Rule → PlanStep → Executor → Verification provenance 链路。
 
 状态：已完成最小实现。正文格式 PlanStep 现在带 paragraph index locator，支持字体/字号、对齐、行距、首行缩进及段前段后；页边距使用 section locator。每个实际修改会记录 change_id、document/rule/plan/step、target、before/after、executor、状态、时间和验证范围；Verifier 重读输出后以 rule 或 document scope 补充验证证据。C-51 模板残留和可靠标题正文混排保留为显式 hygiene PlanStep。引用关系、参考文献重编号、图表编号、复杂表格和无可靠 locator 的动作仍不自动执行并交由 HITL。新增 `test_p1_executor_provenance.py`。
+
+### [DONE] PaperOps Agent v2.0 P1 — Verified Execution Closure
+
+目标：完成 P1 阶段级执行可信闭环，不再拆分单点 P1.x 任务。
+
+状态：已完成。新增轻量 Plan normalization、稳定 execution ordering、重复 PlanStep 去重、同 target 同 field 冲突审计；Executor 在冲突字段上阻断自动执行并记录 provenance。Verifier 输出真实 target verification summary，Decision 优先消费 target failed / unsupported / conflict evidence；HITL 记录具体 target、字段、原因、expected/actual 或候选值。Runtime、task state 和前端补充 execution / conflict / verification summary 与最多 5 条 HITL evidence。新增 `test_p1_execution_closure.py`，真实 DOCX manifest 回归 10/10 PASS。P1 可正式结束，下一阶段仅进入 P2 方向规划。

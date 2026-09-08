@@ -22,6 +22,11 @@ class PlanStep:
     reason: str
     related_rule_ids: list[str] = field(default_factory=list)
     target_locator: dict[str, Any] = field(default_factory=dict)
+    original_step_id: str | None = None
+    normalization_status: str = "canonical"
+    conflict_reason: str | None = None
+    expected: Any = None
+    field: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -34,9 +39,66 @@ class ExecutionPlan:
     steps: list[PlanStep]
     warnings: list[str]
     requires_human_review: bool
+    conflict_summary: dict[str, Any] = field(default_factory=dict)
+    execution_order: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {**asdict(self), "steps": [step.to_dict() for step in self.steps]}
+
+
+def target_key(step: PlanStep) -> str:
+    """Stable target identity for the locators currently emitted by Planner."""
+    locator = step.target_locator or {}
+    return f"{step.target}|{locator.get('kind')}|{locator.get('semantic_role')}|{locator.get('target_type')}|{locator.get('indices')}|{locator.get('role')}"
+
+
+def normalize_execution_plan(plan: ExecutionPlan) -> tuple[ExecutionPlan, dict[str, Any]]:
+    """Deduplicate and audit conflicts without hiding original provenance."""
+    canonical: list[PlanStep] = []
+    by_field: dict[tuple[str, str], PlanStep] = {}
+    duplicates: list[dict[str, Any]] = []
+    conflicts: list[dict[str, Any]] = []
+    for step in plan.steps:
+        key = (target_key(step), _step_field(step))
+        existing = by_field.get(key)
+        if existing is None:
+            normalized = PlanStep(**{**step.to_dict(), "original_step_id": step.original_step_id or step.id})
+            by_field[key] = normalized
+            canonical.append(normalized)
+            continue
+        if _same_expected(existing, step):
+            duplicates.append({"duplicate_step_id": step.id, "canonical_step_id": existing.id, "target": target_key(step), "field": _step_field(step), "reason": "same target, field and expected value"})
+            continue
+        conflict = {"target": target_key(step), "field": _step_field(step), "step_ids": [existing.id, step.id], "candidate_values": [existing.expected, step.expected], "reason": "same target and field have different expected values"}
+        conflicts.append(conflict)
+        existing.normalization_status = "conflict"
+        existing.conflict_reason = conflict["reason"]
+        existing.auto_fixable = False
+        existing.status = "conflict"
+        canonical.append(PlanStep(**{**step.to_dict(), "original_step_id": step.original_step_id or step.id, "normalization_status": "conflict", "conflict_reason": conflict["reason"], "auto_fixable": False, "status": "conflict"}))
+    ordered = sorted(enumerate(canonical), key=lambda pair: (_order_rank(pair[1]), pair[0]))
+    steps = [step for _, step in ordered]
+    execution_order = [step.id for step in steps]
+    summary = {"total_steps": len(plan.steps), "canonical_steps": len(steps), "duplicates": len(duplicates), "conflicts": len(conflicts), "duplicate_items": duplicates, "conflict_items": conflicts}
+    normalized = ExecutionPlan(plan.plan_id, plan.document_id, steps, plan.warnings, plan.requires_human_review or bool(conflicts), summary, execution_order)
+    return normalized, summary
+
+
+def _step_field(step: PlanStep) -> str:
+    return step.field or (str(step.rule_id.rsplit("-", 1)[-1]) if step.rule_id else step.action)
+
+
+def _same_expected(left: PlanStep, right: PlanStep) -> bool:
+    return left.expected == right.expected and left.action == right.action
+
+
+def _order_rank(step: PlanStep) -> int:
+    if step.action == "apply_document_hygiene": return 0
+    if step.target == "page": return 1
+    if step.target == "body": return 2
+    if step.target.startswith("heading:") or step.target in {"heading", "caption:figure", "caption:table"}: return 3
+    if step.action == "human_review" or step.normalization_status == "conflict": return 4
+    return 5
 
 
 ANALYSIS_KEY_BY_TARGET = {
@@ -90,7 +152,7 @@ def build_execution_plan(document: DocumentModel, rules: list[Rule], analysis: d
             id=f"step-{len(steps) + 1}-{rule.id}", action="apply_page_margin", target="page", rule_id=rule.id,
             evidence=rule.evidence, risk_level="low", auto_fixable=True, dependencies=["document_analysis"], status="planned",
             reason=f"Analyzer 的 page_margin 评分为 {item.get('score')}，低于 90；仅修改文档节页边距。", related_rule_ids=[rule.id],
-            target_locator={"kind": "section_indices", "indices": list(range(document.section_count)), "semantic_role": "page"},
+            target_locator={"kind": "section_indices", "indices": list(range(document.section_count)), "semantic_role": "page"}, expected=rule.expected, field=rule.property,
         ))
     for rule in rules:
         if not (rule.target == "body" and rule.auto_fixable):
@@ -104,7 +166,7 @@ def build_execution_plan(document: DocumentModel, rules: list[Rule], analysis: d
             id=f"step-{len(steps) + 1}-{rule.id}", action=action, target="body", rule_id=rule.id,
             evidence=rule.evidence, risk_level="low", auto_fixable=True, dependencies=["document_analysis"],
             status="planned", reason=f"Analyzer 的 {analysis_key} 评分为 {item.get('score')}，低于 90；仅修改可靠定位的正文段落。",
-            related_rule_ids=[rule.id], target_locator={"kind": "paragraph_indices", "indices": document.body_paragraph_indices, "semantic_role": "body", "target_type": "body_paragraph"},
+            related_rule_ids=[rule.id], target_locator={"kind": "paragraph_indices", "indices": document.body_paragraph_indices, "semantic_role": "body", "target_type": "body_paragraph"}, expected=rule.expected, field=rule.property,
         ))
     # The established formatter has a safe baseline body-normalization pass.
     # Keep it explicit in the plan even when the score already looks healthy:
@@ -125,7 +187,7 @@ def build_execution_plan(document: DocumentModel, rules: list[Rule], analysis: d
                     dependencies=["document_analysis"],
                     status="planned",
                     reason="保留既有稳定 formatter 的低风险正文规范化基线，并作为显式 PlanStep 执行。",
-                    related_rule_ids=[rule.id for rule in rules if rule.target == "body" and rule.auto_fixable],
+                    related_rule_ids=[rule.id for rule in rules if rule.target == "body" and rule.auto_fixable], expected=body_rule.expected, field=body_rule.property,
                     target_locator={"kind": "paragraph_indices", "indices": document.body_paragraph_indices, "semantic_role": "body", "target_type": "body_paragraph"},
                 )
             )
@@ -136,7 +198,7 @@ def build_execution_plan(document: DocumentModel, rules: list[Rule], analysis: d
         rule_id="legacy-document-hygiene", evidence="docx_formatter.clean_document_text/split_mixed_heading_paragraphs",
         risk_level="low", auto_fixable=True, dependencies=["document_analysis"], status="planned",
         reason="保留既有 C-51 模板残留清理和标题正文混排拆分，内容文本不做语义改写。", related_rule_ids=[],
-        target_locator={"kind": "document", "semantic_role": "template_hygiene"},
+        target_locator={"kind": "document", "semantic_role": "template_hygiene"}, expected=None,
     ))
     steps.extend(review_steps)
     requires_human_review = any(not step.auto_fixable for step in steps)
@@ -154,7 +216,7 @@ def local_format_step(sequence: int, rule: Rule, action: str, target: str, locat
     return PlanStep(
         id=f"step-{sequence + 1}-{rule.id}", action=action, target=target, rule_id=rule.id,
         evidence=rule.evidence, risk_level="low", auto_fixable=True, dependencies=["document_analysis"],
-        status="planned", reason=reason, related_rule_ids=[rule.id], target_locator=locator,
+        status="planned", reason=reason, related_rule_ids=[rule.id], target_locator=locator, expected=rule.expected, field=rule.property,
     )
 
 

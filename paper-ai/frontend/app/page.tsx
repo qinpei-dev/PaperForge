@@ -107,6 +107,8 @@ type Verification = {
   structural_integrity?: { status?: string; unsafe_reasons?: unknown[] };
   score?: number;
   verification_score?: number;
+  verification_summary?: { total?: number; verified?: number; failed?: number; unsupported?: number };
+  conflict_summary?: { conflicts?: number };
 };
 type Decision = { action?: string; reason?: string; risk?: string; evidence?: unknown[] };
 type HumanReview = {
@@ -114,10 +116,11 @@ type HumanReview = {
   affected_targets?: string[];
   related_rule_ids?: string[];
   suggested_action?: string;
+  items?: unknown[];
 };
 type ReplanHistory = { plan?: { plan_id?: string }; decision?: Decision };
-type ProvenanceChange = { action?: string; target?: { semantic_role?: string; paragraph_index?: number }; before?: unknown; after?: unknown; verification_scope?: string; verification_status?: string };
-type Provenance = { changes?: ProvenanceChange[]; summary?: { planned_steps?: number; executed_steps?: number; unsupported_steps?: number; change_count?: number } };
+type ProvenanceChange = { action?: string; rule_type?: string; target?: { semantic_role?: string; paragraph_index?: number }; before?: unknown; expected?: unknown; after?: unknown; verification_scope?: string; verification_status?: string; verification_evidence?: { reason?: string; actual?: unknown } };
+type Provenance = { changes?: ProvenanceChange[]; summary?: { planned_steps?: number; executed_steps?: number; unsupported_steps?: number; change_count?: number; conflicts?: number; verification?: { total?: number; verified?: number; failed?: number; unsupported?: number } } };
 type AgentResult = {
   status: "ok" | "requires_confirmation";
   mode?: string;
@@ -671,6 +674,8 @@ function RuntimeSummary({ result }: { result: AgentResult }) {
   const changes = provenance?.changes ?? [];
   const summary = provenance?.summary;
   const targetVerified = changes.filter((change) => change.verification_scope === "target" && change.verification_status === "verified");
+  const verificationSummary = verification?.verification_summary ?? summary?.verification;
+  const conflictCount = verification?.conflict_summary?.conflicts ?? summary?.conflicts ?? 0;
 
   if (!workflow && !verification && !decision && !review && !history.length && !provenance) return null;
 
@@ -693,7 +698,7 @@ function RuntimeSummary({ result }: { result: AgentResult }) {
       {verification ? (
         <div className="runtime-card">
           <div className="section-title"><span>验证结果摘要</span><strong className={integrity && integrity !== "SAFE" ? "runtime-warning" : ""}>{integrity === "UNSAFE" ? "发现结构风险" : integrity === "WARNING" ? "存在结构提示" : "结构检查通过"}</strong></div>
-          <p>通过规则 {passedRules.length} 项；未通过规则 {failedRules.length} 项。{typeof score === "number" ? `验证评分 ${score}。` : ""}</p>
+          <p>目标验证：共 {verificationSummary?.total ?? "—"} 项，通过 {verificationSummary?.verified ?? "—"}，失败 {verificationSummary?.failed ?? "—"}，unsupported {verificationSummary?.unsupported ?? "—"}；冲突 {conflictCount} 项。{typeof score === "number" ? `验证评分 ${score}。` : ""}</p>
           <details className="runtime-details"><summary>开发者/高级详情</summary><pre>{formatRuntimeDetail(verification)}</pre></details>
         </div>
       ) : null}
@@ -701,14 +706,14 @@ function RuntimeSummary({ result }: { result: AgentResult }) {
       {provenance ? (
         <div className="runtime-card">
           <div className="section-title"><span>实际修改</span><strong>{summary?.change_count ?? changes.length} 项</strong></div>
-          <p>已执行 PlanStep {summary?.executed_steps ?? "—"} 项；目标级验证通过 {targetVerified.length} 项；HITL / unsupported {summary?.unsupported_steps ?? "—"} 项。</p>
+          <p>已执行 PlanStep {summary?.executed_steps ?? "—"} 项；目标级验证通过 {targetVerified.length} 项；HITL / unsupported {summary?.unsupported_steps ?? "—"} 项；计划冲突 {conflictCount} 项。</p>
           {targetVerified.length ? <ul className="runtime-change-list">{targetVerified.slice(0, 5).map((change, index) => <li key={`${change.action}-${change.target?.paragraph_index}-${index}`}>{change.target?.semantic_role === "figure_caption" ? "图题" : change.target?.semantic_role === "table_caption" ? "表题" : "标题"}：{String(change.before ?? "未设置")} → {String(change.after ?? "未设置")}（已验证）</li>)}</ul> : null}
         </div>
       ) : null}
 
       {decision ? <div className={`runtime-card decision-card ${decisionTone(decision.action)}`}><div className="section-title"><span>最终决策</span><strong>{decisionLabel(decision.action)}</strong></div><p>{decision.reason || "决策引擎未返回补充说明。"}</p></div> : null}
 
-      {review ? <div className="human-review-panel"><div className="section-title"><span>需要人工复核</span><strong>自动流程已安全停止</strong></div><p><b>原因：</b>{review.reason || "检测到需要人工确认的风险。"}</p><p><b>涉及规则/步骤：</b>{[...(review.related_rule_ids ?? []), ...(review.affected_targets ?? [])].join("、") || "未提供"}</p><p><b>为何停止：</b>该修改不适合在当前自动化范围内继续执行，以避免影响文档结构或高风险内容。</p><p><b>建议操作：</b>{review.suggested_action || "请人工确认后再决定后续处理。"}</p></div> : null}
+      {review ? <div className="human-review-panel"><div className="section-title"><span>需要人工复核</span><strong>自动流程已安全停止</strong></div><p><b>原因：</b>{review.reason || "检测到需要人工确认的风险。"}</p><p><b>涉及规则/步骤：</b>{[...(review.related_rule_ids ?? []), ...(review.affected_targets ?? [])].join("、") || "未提供"}</p>{review.items?.length ? <ul className="runtime-change-list">{review.items.slice(0, 5).map((item, index) => <li key={index}>{formatRuntimeDetail(item)}</li>)}</ul> : null}<p><b>建议操作：</b>{review.suggested_action || "请人工确认后再决定后续处理。"}</p></div> : null}
 
       {history.length ? <details className="runtime-card replan-card"><summary>系统已自动重新规划 {history.length} 次</summary><ol>{history.map((item, index) => <li key={`${item.plan?.plan_id ?? "plan"}-${index}`}>旧 Plan ID：{item.plan?.plan_id ?? "未记录"}；新 Plan ID：{history[index + 1]?.plan?.plan_id ?? result.execution_plan?.plan_id ?? "未记录"}；原因：{item.decision?.reason ?? "未记录"}</li>)}</ol></details> : null}
     </section>

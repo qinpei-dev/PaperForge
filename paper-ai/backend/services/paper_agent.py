@@ -265,6 +265,7 @@ def run_paper_agent(
             "provenance": runtime_result["provenance"] if runtime_result else [],
             "runtime_metrics": runtime_result["runtime_metrics"] if runtime_result else None,
             "runtime_trace": runtime_result["runtime_trace"] if runtime_result else [],
+            "execution": runtime_result["execution"] if runtime_result else None,
             "agent_trace": trace.build(
                 classification=classification,
                 template_profile=template_profile,

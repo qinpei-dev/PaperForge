@@ -13,6 +13,7 @@ class HumanReviewRequest:
     related_rule_ids: list[str]
     suggested_action: str
     can_resume: bool
+    items: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -41,10 +42,16 @@ def compare_structure(before: dict[str, Any], after: dict[str, Any]) -> dict[str
 
 def decide(verification: dict[str, Any], *, replan_count: int, max_replans: int, plan_requires_review: bool) -> dict[str, Any]:
     integrity = (verification.get("structural_integrity") or {}).get("status")
+    summary = verification.get("verification_summary") or {}
+    if summary.get("failed", 0):
+        return {"action": "HUMAN_REVIEW", "reason": "存在目标级验证失败；规则评分不能覆盖实际输出证据。", "risk": "high_risk", "evidence": verification.get("provenance_changes", [])}
+    if verification.get("conflict_summary", {}).get("conflicts", 0):
+        return {"action": "HUMAN_REVIEW", "reason": "计划存在同一目标字段的冲突候选值，未自动执行冲突字段。", "risk": "high_risk", "evidence": verification.get("conflict_summary", {}).get("conflict_items", [])}
     if integrity == "UNSAFE":
         return {"action": "HUMAN_REVIEW", "reason": "结构保护检测到不安全变化。", "risk": "high_risk", "evidence": verification.get("new_issues", [])}
     if plan_requires_review or verification.get("unsupported_step_ids"):
-        return {"action": "HUMAN_REVIEW", "reason": "计划包含高风险或当前不支持的步骤。", "risk": "high_risk", "evidence": verification.get("failed_rules", [])}
+        evidence = [item for item in (verification.get("unsupported_evidence") or verification.get("provenance_changes", [])) if isinstance(item, dict) and item.get("verification_status") == "unsupported"]
+        return {"action": "HUMAN_REVIEW", "reason": "计划包含高风险或当前不支持的步骤。", "risk": "high_risk", "evidence": evidence or verification.get("failed_rules", [])}
     if verification.get("passed"):
         return {"action": "COMPLETE", "reason": "独立验证通过。", "risk": verification.get("risk_level", "low"), "evidence": verification.get("verified_rules", [])}
     if verification.get("fixable") and replan_count < max_replans:
@@ -55,11 +62,20 @@ def decide(verification: dict[str, Any], *, replan_count: int, max_replans: int,
 
 
 def human_review_from_decision(decision: dict[str, Any], plan: Any) -> HumanReviewRequest:
+    evidence = [item for item in (decision.get("evidence") or []) if isinstance(item, dict)]
+    targets = []
+    for item in evidence:
+        target = item.get("target") or {}
+        label = target.get("semantic_role") or target.get("target_type")
+        index = target.get("paragraph_index", target.get("section_index"))
+        if label:
+            targets.append(f"{label}#{index}" if index is not None else str(label))
     return HumanReviewRequest(
         reason=decision["reason"], severity=decision["risk"],
-        affected_targets=[step.target for step in plan.steps if not step.auto_fixable],
+        affected_targets=list(dict.fromkeys(targets or [step.target for step in plan.steps if not step.auto_fixable])),
         evidence=[str(item) for item in decision.get("evidence") or []],
-        related_rule_ids=[step.rule_id for step in plan.steps if not step.auto_fixable],
-        suggested_action="由人工确认高风险结构、引用或不支持的格式修改后再恢复运行。",
+        related_rule_ids=list(dict.fromkeys([item.get("rule_id") for item in evidence if item.get("rule_id")] + [step.rule_id for step in plan.steps if not step.auto_fixable])),
+        suggested_action="由人工确认具体目标、字段与候选值后再恢复运行。",
         can_resume=True,
+        items=evidence[:5],
     )

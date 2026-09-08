@@ -4,7 +4,9 @@
 
 项目名称：AI论文格式修改Agent
 
-当前阶段：PaperOps Agent v2.0 P1.2 Body Paragraph Target-level Verification 已完成
+当前阶段：PaperOps Agent v2.0 P1 执行可信闭环已完成
+
+P1 Closure 状态：已完成 Analyze → Plan → Conflict Check → 稳定执行 → 输出 DOCX 重读 → target-level verification → evidence aggregation → Decision → HITL → Runtime / Frontend evidence。PlanStep 支持轻量规范化、重复去重、同 target 同 field 冲突阻断与稳定排序；target failed 优先进入人工复核，unsupported 保留原因并进入精确 HITL，验证摘要来自 provenance。
 
 P0.3 Runtime UI / Task State 状态：已完成最小接入。保留 P0.2 真实闭环与 `/agent/run` 旧字段；task state 新增 runtime_state、current_phase、current_step、decision、replan_count、human_review_required 摘要。前端在既有结果与 Trace 区域旁展示 Runtime Workflow、Verification、Decision、HumanReviewRequest 与 Replan 摘要，并对旧任务字段缺失安全降级；不包含审批继续、checkpoint 恢复或自动 resume。
 

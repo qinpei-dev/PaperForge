@@ -10,7 +10,7 @@ from uuid import uuid4
 from docx import Document
 
 from .docx_formatter import apply_low_risk_body_rule, apply_low_risk_page_rule, clean_document_text, describe_low_risk_page_rule, describe_low_risk_paragraph_property, split_mixed_heading_paragraphs
-from .planner import ExecutionPlan, PlanStep
+from .planner import ExecutionPlan, PlanStep, normalize_execution_plan
 from .rule_engine import Rule
 
 
@@ -25,6 +25,9 @@ class ExecutionResult:
     format_log: list[str]
     changes: list[dict[str, Any]] = field(default_factory=list)
     step_statuses: dict[str, str] = field(default_factory=dict)
+    conflict_step_ids: list[str] = field(default_factory=list)
+    conflict_summary: dict[str, Any] = field(default_factory=dict)
+    unsupported_evidence: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -33,16 +36,30 @@ class ExecutionResult:
 def execute_plan(plan: ExecutionPlan, source: Path, output: Path, template_path: Path | None, rules: list[Rule] | None = None) -> ExecutionResult:
     """Execute only local body-format rules; never invoke structural formatter work."""
     rule_by_id = {rule.id: rule for rule in rules or []}
+    for step in plan.steps:
+        rule = rule_by_id.get(step.rule_id)
+        if rule:
+            step.field = step.field or rule.property
+            if step.expected is None:
+                step.expected = rule.expected
+    normalized_plan, conflict_summary = normalize_execution_plan(plan)
     document = Document(source)
     executed: list[str] = []
     unsupported: list[str] = []
     changes: list[dict[str, Any]] = []
     statuses: dict[str, str] = {}
     format_log: list[str] = []
-    for step in plan.steps:
+    conflict_step_ids: list[str] = []
+    unsupported_evidence: list[dict[str, Any]] = []
+    for step in normalized_plan.steps:
         rule = rule_by_id.get(step.rule_id)
         locator = step.target_locator or {}
         indices = locator.get("indices")
+        if step.normalization_status == "conflict":
+            conflict_step_ids.append(step.id)
+            statuses[step.id] = "conflict"
+            changes.append(conflict_change_record(normalized_plan, step, rule, conflict_summary))
+            continue
         if step.action == "apply_document_hygiene" and step.auto_fixable:
             started = perf_counter()
             before_text = "\n".join(paragraph.text for paragraph in document.paragraphs)
@@ -59,7 +76,9 @@ def execute_plan(plan: ExecutionPlan, source: Path, output: Path, template_path:
             unsupported.append(step.id)
             statuses[step.id] = "unsupported"
             if rule and rule.target == "body":
-                changes.append(unsupported_body_change_record(plan, step, rule, locator, "missing or invalid paragraph locator"))
+                changes.append(unsupported_body_change_record(normalized_plan, step, rule, locator, "missing or invalid paragraph locator"))
+            else:
+                unsupported_evidence.append(unsupported_change_record(normalized_plan, step, rule, "step is outside the safe automatic execution boundary"))
             continue
         started = perf_counter()
         if rule.target in {"body", "heading", "caption:figure", "caption:table"} or rule.target.startswith("heading:"):
@@ -81,21 +100,33 @@ def execute_plan(plan: ExecutionPlan, source: Path, output: Path, template_path:
             statuses[step.id] = "skipped"
             format_log.append(f"{step.id} 未找到可安全修改的目标。")
             if rule.target == "body":
-                changes.append(unsupported_body_change_record(plan, step, rule, locator, "no in-range non-empty paragraph target"))
+                changes.append(unsupported_body_change_record(normalized_plan, step, rule, locator, "no in-range non-empty paragraph target"))
             continue
         executed.append(step.id)
         statuses[step.id] = "executed"
         for index in changed_indices:
-            changes.append(change_record(plan, step, rule, index, target_key, locator, before.get(index), after_value(index), duration_ms))
+            changes.append(change_record(normalized_plan, step, rule, index, target_key, locator, before.get(index), after_value(index), duration_ms))
         format_log.append(f"{step.id} 已对 {len(changed_indices)} 个 {locator.get('semantic_role', rule.target)} 目标应用 {rule.property}。")
     document.save(output)
-    return ExecutionResult(str(output), executed, unsupported, format_log, changes, statuses)
+    return ExecutionResult(str(output), executed, unsupported, format_log, changes, statuses, conflict_step_ids, conflict_summary, unsupported_evidence)
 
 
 def change_record(plan: ExecutionPlan, step: PlanStep, rule: Rule, index: int, target_key: str, locator: dict[str, Any], before: Any, after: Any, duration_ms: int) -> dict[str, Any]:
     target = {target_key: index, "semantic_role": locator.get("semantic_role", rule.target), "target_type": locator.get("target_type", "body_paragraph" if rule.target == "body" else None), "locator": locator}
     scope = "target" if locator.get("semantic_role") in {"body", "heading", "figure_caption", "table_caption"} else "rule"
-    return {"change_id": f"chg-{uuid4().hex[:12]}", "document_id": plan.document_id, "rule_id": rule.id, "rule_type": rule.property, "plan_id": plan.plan_id, "plan_step_id": step.id, "action": step.action, "target": target, "before": before, "expected": after, "after": after, "executor": "executor_adapter.low_risk_format_rule", "status": "executed", "verification_status": "pending", "verification_scope": scope, "timestamp": datetime.now(timezone.utc).isoformat(), "duration_ms": duration_ms}
+    expected = step.expected if step.expected is not None else rule.expected
+    if rule.property == "alignment" and expected is None:
+        expected = "JUSTIFY"
+    return {"change_id": f"chg-{uuid4().hex[:12]}", "document_id": plan.document_id, "rule_id": rule.id, "rule_type": rule.property, "plan_id": plan.plan_id, "plan_step_id": step.id, "action": step.action, "target": target, "before": before, "expected": expected, "after": after, "executor": "executor_adapter.low_risk_format_rule", "status": "executed", "verification_status": "pending", "verification_scope": scope, "timestamp": datetime.now(timezone.utc).isoformat(), "duration_ms": duration_ms}
+
+
+def conflict_change_record(plan: ExecutionPlan, step: PlanStep, rule: Rule | None, summary: dict[str, Any]) -> dict[str, Any]:
+    item = next((item for item in summary.get("conflict_items", []) if step.id in item.get("step_ids", [])), {})
+    return {"change_id": f"chg-{uuid4().hex[:12]}", "document_id": plan.document_id, "rule_id": step.rule_id, "rule_type": rule.property if rule else "unknown", "plan_id": plan.plan_id, "plan_step_id": step.id, "action": step.action, "target": {"semantic_role": (step.target_locator or {}).get("semantic_role", step.target), "locator": step.target_locator}, "before": None, "expected": step.expected, "after": None, "executor": "executor_adapter.plan_normalizer", "status": "conflict", "verification_status": "unsupported", "verification_scope": "target", "verification_evidence": {"reason": step.conflict_reason, "conflict": item}, "timestamp": datetime.now(timezone.utc).isoformat(), "duration_ms": 0}
+
+
+def unsupported_change_record(plan: ExecutionPlan, step: PlanStep, rule: Rule | None, reason: str) -> dict[str, Any]:
+    return {"change_id": f"chg-{uuid4().hex[:12]}", "document_id": plan.document_id, "rule_id": step.rule_id, "rule_type": rule.property if rule else step.action, "plan_id": plan.plan_id, "plan_step_id": step.id, "action": step.action, "target": {"semantic_role": (step.target_locator or {}).get("semantic_role", step.target), "locator": step.target_locator}, "before": None, "expected": step.expected, "after": None, "executor": "executor_adapter.boundary_guard", "status": "unsupported", "verification_status": "unsupported", "verification_scope": "target", "verification_evidence": {"reason": reason}, "timestamp": datetime.now(timezone.utc).isoformat(), "duration_ms": 0}
 
 
 def unsupported_body_change_record(plan: ExecutionPlan, step: PlanStep, rule: Rule, locator: dict[str, Any], reason: str) -> dict[str, Any]:

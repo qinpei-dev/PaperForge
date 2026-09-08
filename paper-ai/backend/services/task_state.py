@@ -79,6 +79,10 @@ def init_task_state(
         "decision": None,
         "replan_count": 0,
         "human_review_required": False,
+        "execution_summary": None,
+        "conflict_summary": None,
+        "verification_summary": None,
+        "hitl_targets": [],
         "error": None,
         "agent_trace_steps_count": 0,
     }
@@ -150,6 +154,16 @@ def apply_result_fields(state: dict[str, Any], result: dict[str, Any], *, output
     if isinstance(decision, dict):
         state["decision"] = decision.get("action")
     state["human_review_required"] = bool(result.get("human_review")) or state.get("decision") == "HUMAN_REVIEW"
+    execution = result.get("execution") or {}
+    if isinstance(execution, dict):
+        state["execution_summary"] = {key: execution.get(key) for key in ("executed_step_ids", "unsupported_step_ids", "conflict_step_ids") if key in execution}
+        state["conflict_summary"] = execution.get("conflict_summary")
+    verification = result.get("verification") or {}
+    if isinstance(verification, dict):
+        state["verification_summary"] = verification.get("verification_summary")
+    review = result.get("human_review")
+    if isinstance(review, dict):
+        state["hitl_targets"] = review.get("affected_targets") or review.get("items") or []
 
     filename = result.get("filename")
     if filename and output_dir:

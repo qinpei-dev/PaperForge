@@ -30,6 +30,7 @@ class VerificationResult:
     after_document_model: dict[str, Any]
     after_analysis: dict[str, Any]
     provenance_changes: list[dict[str, Any]]
+    verification_summary: dict[str, int]
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -87,13 +88,27 @@ def verify_output(before_model: DocumentModel, before_analysis: dict[str, Any], 
             entry["verification_scope"] = "rule"
             entry["verification_evidence"] = {"rule_id": entry.get("rule_id"), "after_score": breakdown.get("body_font" if entry.get("rule_type") in {"font_name", "font_size"} else "spacing_indent", {}).get("score")}
         provenance_changes.append(entry)
-    return VerificationResult(passed, before_score, after_score, verified, failed, integrity, risks, failed, risk, "通过" if passed else "需要决策引擎处理未满足规则或风险。", fixable, unsupported_step_ids, after_model.to_dict(), after_analysis, provenance_changes)
+    summary = {"total": 0, "verified": 0, "failed": 0, "unsupported": 0}
+    for entry in provenance_changes:
+        if entry.get("verification_scope") != "target":
+            continue
+        summary["total"] += 1
+        status = entry.get("verification_status")
+        if status == "verified": summary["verified"] += 1
+        elif status in {"failed", "verification_failed"}: summary["failed"] += 1
+        elif status in {"unsupported", "skipped"}: summary["unsupported"] += 1
+    summary["unsupported"] = max(summary["unsupported"], len(unsupported_step_ids))
+    if summary["failed"]:
+        passed = False
+    return VerificationResult(passed, before_score, after_score, verified, failed, integrity, risks, failed, risk, "通过" if passed else "需要决策引擎处理未满足规则或风险。", fixable, unsupported_step_ids, after_model.to_dict(), after_analysis, provenance_changes, summary)
 
 
 def values_match(actual: Any, expected: Any, property_name: str) -> bool:
     if property_name == "alignment":
         # python-docx renders enum values as strings; expected values can come
         # from either a template enum or the serialized rule integer.
+        if expected is None:
+            return "JUSTIFY" in str(actual)
         return str(actual) == str(expected) or str(expected) in str(actual)
     if isinstance(actual, (int, float)) and isinstance(expected, (int, float)):
         return abs(float(actual) - float(expected)) <= 0.02
