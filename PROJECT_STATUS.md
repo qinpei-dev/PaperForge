@@ -4,7 +4,13 @@
 
 项目名称：AI论文格式修改Agent
 
-当前阶段：GitHub 公开前最小清理
+当前阶段：PaperOps Agent v2.0 P1.1 Target-level Formatting Verification 已完成
+
+P0.3 Runtime UI / Task State 状态：已完成最小接入。保留 P0.2 真实闭环与 `/agent/run` 旧字段；task state 新增 runtime_state、current_phase、current_step、decision、replan_count、human_review_required 摘要。前端在既有结果与 Trace 区域旁展示 Runtime Workflow、Verification、Decision、HumanReviewRequest 与 Replan 摘要，并对旧任务字段缺失安全降级；不包含审批继续、checkpoint 恢复或自动 resume。
+
+P1 Executor Expansion + Provenance Foundation：已将低风险正文格式动作拆分为字体/字号、对齐、行距、首行缩进、段前段后，并保留低风险页边距动作；PlanStep 使用段落/节 locator。Executor 记录逐实际修改的 before/after、rule、plan、step、target 与执行状态，Verifier 以 rule 或 document scope 回填验证结论。引用、图表编号与无定位步骤仍为 unsupported / HITL；未实现内容语义改写、引用重编号或复杂表格修改。
+
+P1.1 Target-level Formatting Verification：已为 Word 标题样式和可解析编号的图题/表题建立保守 paragraph locator；标题、图题、表题仅对 locator 指定段落执行字体、字号、加粗、对齐、行距与段落间距等低风险格式动作。Verifier 会重新读取输出 DOCX 并记录 target-level expected/actual evidence；无 locator、低置信或越界目标不会伪造成功。前端 Runtime 区新增兼容降级的“实际修改”摘要。
 
 当前稳定展示基线：tag `v1.0-showcase`，指向 commit `10904db`
 
@@ -419,3 +425,12 @@ Current Bottleneck：
 - 范围限制：这是 UI 展示增强阶段，不是核心格式化算法重构，不修改后端核心 pipeline，不改变 `/agent/run` 同步语义。
 - 兼容要求：保持现有上传、预览、下载功能不变，保持 local/ai 模式兼容。
 - 版本治理：不得改动 tag，不得移动、删除或重建 `v0.9.4-demo-screenshot-package` tag。
+
+## PaperOps Agent v2.0 P0.1 Planning Foundation
+
+- 已新增 `DocumentModel`：从真实 DOCX 与现有分类/分析逻辑构建段落、章节、表格、图片、标题、摘要、关键词、参考文献、样式摘要和结构指纹；不确定信息保留 warning 与 confidence。
+- 已新增 Rule normalization：在不改写 `template_extractor` 的前提下，将 template profile 或默认 profile 规范化为带 source、evidence、confidence、risk 和 auto-fix 标记的规则；模板 extraction fallback 不会伪装为模板证据。
+- 已新增 Planner：根据 DocumentModel、规则和现有 analyzer breakdown 生成 ExecutionPlan；已满足规则不生成修改步骤，引用/图表风险和低置信标题只进入人工复核步骤。
+- `/agent/run` 主链路已真实构建并返回 `document_model`、`rules`、`execution_plan`，但本阶段不让 ExecutionPlan 驱动 formatter。
+- 新增 `test_p0_1_planning_foundation.py`；静态检查、既有后端测试、smoke、单例 manifest 回归和前端 build 均 PASS。
+- 未改动 formatter 核心行为、前端、既有 Trace、`/agent/run` 旧字段、依赖或 v1.0-showcase tag。下一步为 P0.2：状态机与 Verifier 接入。

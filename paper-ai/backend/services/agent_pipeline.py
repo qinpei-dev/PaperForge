@@ -102,7 +102,8 @@ def normalize_pipeline_result(result: dict[str, Any], total_duration_ms: int) ->
     if isinstance(legacy_trace, dict):
         normalized.setdefault("agent_trace_detail", legacy_trace)
 
-    normalized["agent_trace"] = build_agent_trace(normalized, total_duration_ms, legacy_trace)
+    runtime_trace = normalized.get("runtime_trace")
+    normalized["agent_trace"] = runtime_trace if isinstance(runtime_trace, list) and runtime_trace else build_agent_trace(normalized, total_duration_ms, legacy_trace)
     return normalized
 
 

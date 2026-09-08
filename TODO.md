@@ -2,6 +2,22 @@
 
 ## 当前路线图 / Roadmap
 
+### [DONE] PaperOps Agent v2.0 P1.1-target-level-formatting-verification
+
+目标：在既有 P1 Rule → PlanStep → Locator → Executor → Provenance 链路上，为可靠标题、图题和表题提供局部格式执行与真实 target-level verification。
+
+已完成：
+- Word 标题样式匹配且置信度足够时生成标题 paragraph locator。
+- 使用既有确定性编号解析识别 figure/table caption paragraph locator。
+- 标题、图题和表题只修改 PlanStep 指定段落的低风险格式属性，不修改文本、编号或交叉引用。
+- Verifier 重新读取输出 DOCX，以 target-level expected/actual evidence 回填 provenance；缺 locator、低置信或越界不伪造成功。
+- 前端 Runtime 区增加“实际修改”轻量摘要，并对旧 API 数据安全降级。
+- `test_p1_1_target_verification.py`、P0.1/P0.2/P1、smoke、Python 编译与前端 build 均通过。
+
+状态：已完成。引用/参考文献重编号、图表编号重排、交叉引用、复杂表格与内容语义改写仍保持 HITL / unsupported。
+
+---
+
 ### [DONE] v0.6.3-real-demo-files
 
 目标：补充人工构造的脱敏模拟 demo DOCX 和一次真实 local 模式运行输出，让面试演示从“路径和案例说明”升级为“可直接复现的固定样本”。
@@ -596,3 +612,35 @@
 - 如后续需要完整 task state 可视化，应新增安全读取接口，而不是让前端直接读本地路径。
 
 状态：已完成最小展示版本（v0.8.1-trace-ui-minimal）和展示打磨版本（v0.8.2-trace-ui-polish）。后续可进入 `v0.8.3-demo-ui-check` 或 `v0.9-resume-draft`。
+
+---
+
+### [DONE] PaperOps Agent v2.0 P0.1 — Document / Rule / Plan Foundation
+
+目标：在不改变现有 DOCX formatter 和 `/agent/run` 兼容字段的前提下，建立真实的 `DOCX → DocumentModel → Rule[] → ExecutionPlan` 数据链。
+
+状态：已完成。新增 `document_model.py`、`rule_engine.py`、`planner.py` 与 `test_p0_1_planning_foundation.py`；真实 Agent 调用会返回 planning artifacts。P0.1 仍不执行 Plan，也没有 Verifier/Replan/HITL workflow；这些属于 P0.2。
+
+---
+
+### [DONE] PaperOps Agent v2.0 P0.2 — Plan / Execute / Verify / Govern Runtime
+
+目标：让 P0.1 的 ExecutionPlan 真实驱动已稳定的格式修改，并建立独立验证、结构保护、重规划与人工复核闭环。
+
+状态：已完成最小真实运行时。新增 `agent_runtime.py`、`executor_adapter.py`、`verifier.py`、`governance.py` 和 `test_p0_2_agent_runtime.py`。安全 PlanStep 通过既有 formatter 执行；Verifier 会重新读取输出 DOCX；结构保护会比较段落、标题、表格、图片、参考文献与 fingerprint。Decision Engine 统一输出 COMPLETE / REPLAN / HUMAN_REVIEW / FAIL，默认最多一次 Replan。高风险引用/图表/不支持步骤不伪造执行，形成 HumanReviewRequest。API 保持兼容并新增 runtime 工件和内部回归指标。P0.2 仍不包含复杂审批 UI、段落级完美 provenance、内容语义自动重写或异步恢复。
+
+---
+
+### [DONE] PaperOps Agent v2.0 P0.3 — Runtime UI / Task State
+
+目标：以最小改动将 P0.2 workflow、verification、decision、replan 与 HumanReviewRequest 接入现有结果页和 task state。
+
+状态：已完成。task state 保留旧字段并新增 runtime_state、current_phase、current_step、decision、replan_count、human_review_required；结果页新增中文 Runtime Workflow、验证摘要、Decision 解释、独立人工复核卡片和可展开 Replan 历史。旧结果缺少 runtime 字段时不渲染新面板，保持上传、预览、下载和 Agent Trace 兼容。未实现审批继续、checkpoint 恢复或自动 resume。
+
+---
+
+### [DONE] PaperOps Agent v2.0 P1 — Executor Expansion + Provenance Foundation
+
+目标：扩展真实低风险格式执行，并建立 Rule → PlanStep → Executor → Verification provenance 链路。
+
+状态：已完成最小实现。正文格式 PlanStep 现在带 paragraph index locator，支持字体/字号、对齐、行距、首行缩进及段前段后；页边距使用 section locator。每个实际修改会记录 change_id、document/rule/plan/step、target、before/after、executor、状态、时间和验证范围；Verifier 重读输出后以 rule 或 document scope 补充验证证据。C-51 模板残留和可靠标题正文混排保留为显式 hygiene PlanStep。引用关系、参考文献重编号、图表编号、复杂表格和无可靠 locator 的动作仍不自动执行并交由 HITL。新增 `test_p1_executor_provenance.py`。

@@ -71,6 +71,14 @@ def init_task_state(
         "ai_used": None,
         "ai_score": None,
         "fallback_used": False,
+        # P0.3 runtime summary fields.  They intentionally coexist with the
+        # original task-state schema so older task files remain readable.
+        "runtime_state": None,
+        "current_phase": None,
+        "current_step": None,
+        "decision": None,
+        "replan_count": 0,
+        "human_review_required": False,
         "error": None,
         "agent_trace_steps_count": 0,
     }
@@ -124,6 +132,24 @@ def apply_result_fields(state: dict[str, Any], result: dict[str, Any], *, output
     if isinstance(trace, list):
         state["agent_trace_steps_count"] = len(trace)
         state["fallback_used"] = any(bool(item.get("fallback_used")) for item in trace if isinstance(item, dict))
+
+    workflow = result.get("workflow")
+    if isinstance(workflow, dict):
+        runtime_state = workflow.get("current_state")
+        state["runtime_state"] = runtime_state
+        state["current_phase"] = runtime_state
+        state["replan_count"] = workflow.get("replan_count", 0)
+
+    runtime_trace = result.get("runtime_trace")
+    if isinstance(runtime_trace, list) and runtime_trace:
+        last_event = runtime_trace[-1]
+        if isinstance(last_event, dict):
+            state["current_step"] = last_event.get("step") or last_event.get("action")
+
+    decision = result.get("decision")
+    if isinstance(decision, dict):
+        state["decision"] = decision.get("action")
+    state["human_review_required"] = bool(result.get("human_review")) or state.get("decision") == "HUMAN_REVIEW"
 
     filename = result.get("filename")
     if filename and output_dir:

@@ -10,6 +10,7 @@ type AgentTraceItem = {
   fallback_used?: boolean;
   message?: string;
 };
+type RuntimeTraceItem = AgentTraceItem & { state?: string };
 type ScoreDimension = { key: string; label: string; score: number; group: "local" | "ai"; status: string; issues: string[] };
 type Classification = {
   document_type: string;
@@ -97,6 +98,26 @@ type ModificationReport = {
   score_explanation?: string;
   template_used: string | null;
 };
+type Workflow = { current_state?: string; replan_count?: number; trace?: AgentTraceItem[] };
+type Verification = {
+  passed?: boolean;
+  verified_rules?: string[];
+  passed_rules?: string[];
+  failed_rules?: string[];
+  structural_integrity?: { status?: string; unsafe_reasons?: unknown[] };
+  score?: number;
+  verification_score?: number;
+};
+type Decision = { action?: string; reason?: string; risk?: string; evidence?: unknown[] };
+type HumanReview = {
+  reason?: string;
+  affected_targets?: string[];
+  related_rule_ids?: string[];
+  suggested_action?: string;
+};
+type ReplanHistory = { plan?: { plan_id?: string }; decision?: Decision };
+type ProvenanceChange = { action?: string; target?: { semantic_role?: string; paragraph_index?: number }; before?: unknown; after?: unknown; verification_scope?: string; verification_status?: string };
+type Provenance = { changes?: ProvenanceChange[]; summary?: { planned_steps?: number; executed_steps?: number; unsupported_steps?: number; change_count?: number } };
 type AgentResult = {
   status: "ok" | "requires_confirmation";
   mode?: string;
@@ -115,6 +136,14 @@ type AgentResult = {
   agent_trace_detail?: Record<string, unknown>;
   task_id?: string;
   task_state_path?: string;
+  workflow?: Workflow | null;
+  verification?: Verification | null;
+  decision?: Decision | null;
+  human_review?: HumanReview | null;
+  replan_history?: ReplanHistory[];
+  execution_plan?: { plan_id?: string };
+  runtime_trace?: RuntimeTraceItem[];
+  provenance?: Provenance | null;
 };
 type PreviewResult = { title: string; html: string };
 
@@ -423,6 +452,8 @@ export default function Home() {
 
             <ScoreOverview result={result} />
 
+            <RuntimeSummary result={result} />
+
             <section className="report-panel">
               <div className="section-title">
                 <span>Agent修改报告</span>
@@ -611,6 +642,101 @@ function TracePanel({ result }: { result: AgentResult }) {
       ) : null}
     </details>
   );
+}
+
+const runtimeWorkflow = [
+  ["ANALYZING", "分析文档"],
+  ["PLANNING", "生成执行计划"],
+  ["EXECUTING", "执行安全修改"],
+  ["VERIFYING", "验证修改结果"],
+  ["REPLANNING", "重新规划"],
+  ["COMPLETED", "执行完成"],
+  ["HUMAN_REVIEW_REQUIRED", "需要人工复核"],
+  ["FAILED", "执行失败"],
+] as const;
+
+function RuntimeSummary({ result }: { result: AgentResult }) {
+  const workflow = result.workflow;
+  const verification = result.verification;
+  const decision = result.decision;
+  const review = result.human_review;
+  const history = Array.isArray(result.replan_history) ? result.replan_history : [];
+  const traceStates = new Set((result.runtime_trace ?? []).map((item) => item.state));
+  const currentState = workflow?.current_state;
+  const passedRules = verification?.verified_rules ?? verification?.passed_rules ?? [];
+  const failedRules = verification?.failed_rules ?? [];
+  const integrity = verification?.structural_integrity?.status;
+  const score = verification?.verification_score ?? verification?.score;
+  const provenance = result.provenance && !Array.isArray(result.provenance) ? result.provenance : null;
+  const changes = provenance?.changes ?? [];
+  const summary = provenance?.summary;
+  const targetVerified = changes.filter((change) => change.verification_scope === "target" && change.verification_status === "verified");
+
+  if (!workflow && !verification && !decision && !review && !history.length && !provenance) return null;
+
+  return (
+    <section className="runtime-panel" aria-label="Runtime Workflow">
+      {workflow ? (
+        <div>
+          <div className="section-title"><span>Runtime Workflow</span><strong>{runtimeStateLabel(currentState)}</strong></div>
+          <ol className="runtime-workflow">
+            {runtimeWorkflow.map(([state, label]) => {
+              const active = currentState === state;
+              const completed = traceStates.has(state) || (currentState === "COMPLETED" && !["HUMAN_REVIEW_REQUIRED", "FAILED"].includes(state));
+              const tone = active ? runtimeStateTone(state) : completed ? "success" : "pending";
+              return <li className={tone} key={state}><span>{active ? "•" : completed ? "✓" : "○"}</span><strong>{label}</strong></li>;
+            })}
+          </ol>
+        </div>
+      ) : null}
+
+      {verification ? (
+        <div className="runtime-card">
+          <div className="section-title"><span>验证结果摘要</span><strong className={integrity && integrity !== "SAFE" ? "runtime-warning" : ""}>{integrity === "UNSAFE" ? "发现结构风险" : integrity === "WARNING" ? "存在结构提示" : "结构检查通过"}</strong></div>
+          <p>通过规则 {passedRules.length} 项；未通过规则 {failedRules.length} 项。{typeof score === "number" ? `验证评分 ${score}。` : ""}</p>
+          <details className="runtime-details"><summary>开发者/高级详情</summary><pre>{formatRuntimeDetail(verification)}</pre></details>
+        </div>
+      ) : null}
+
+      {provenance ? (
+        <div className="runtime-card">
+          <div className="section-title"><span>实际修改</span><strong>{summary?.change_count ?? changes.length} 项</strong></div>
+          <p>已执行 PlanStep {summary?.executed_steps ?? "—"} 项；目标级验证通过 {targetVerified.length} 项；HITL / unsupported {summary?.unsupported_steps ?? "—"} 项。</p>
+          {targetVerified.length ? <ul className="runtime-change-list">{targetVerified.slice(0, 5).map((change, index) => <li key={`${change.action}-${change.target?.paragraph_index}-${index}`}>{change.target?.semantic_role === "figure_caption" ? "图题" : change.target?.semantic_role === "table_caption" ? "表题" : "标题"}：{String(change.before ?? "未设置")} → {String(change.after ?? "未设置")}（已验证）</li>)}</ul> : null}
+        </div>
+      ) : null}
+
+      {decision ? <div className={`runtime-card decision-card ${decisionTone(decision.action)}`}><div className="section-title"><span>最终决策</span><strong>{decisionLabel(decision.action)}</strong></div><p>{decision.reason || "决策引擎未返回补充说明。"}</p></div> : null}
+
+      {review ? <div className="human-review-panel"><div className="section-title"><span>需要人工复核</span><strong>自动流程已安全停止</strong></div><p><b>原因：</b>{review.reason || "检测到需要人工确认的风险。"}</p><p><b>涉及规则/步骤：</b>{[...(review.related_rule_ids ?? []), ...(review.affected_targets ?? [])].join("、") || "未提供"}</p><p><b>为何停止：</b>该修改不适合在当前自动化范围内继续执行，以避免影响文档结构或高风险内容。</p><p><b>建议操作：</b>{review.suggested_action || "请人工确认后再决定后续处理。"}</p></div> : null}
+
+      {history.length ? <details className="runtime-card replan-card"><summary>系统已自动重新规划 {history.length} 次</summary><ol>{history.map((item, index) => <li key={`${item.plan?.plan_id ?? "plan"}-${index}`}>旧 Plan ID：{item.plan?.plan_id ?? "未记录"}；新 Plan ID：{history[index + 1]?.plan?.plan_id ?? result.execution_plan?.plan_id ?? "未记录"}；原因：{item.decision?.reason ?? "未记录"}</li>)}</ol></details> : null}
+    </section>
+  );
+}
+
+function runtimeStateLabel(state?: string) {
+  return runtimeWorkflow.find(([value]) => value === state)?.[1] ?? "运行状态未返回";
+}
+
+function runtimeStateTone(state: string) {
+  if (state === "HUMAN_REVIEW_REQUIRED") return "review";
+  if (state === "FAILED") return "failed";
+  return "running";
+}
+
+function decisionLabel(action?: string) {
+  return ({ COMPLETE: "完成：验证通过", REPLAN: "重新规划：尝试安全修复", HUMAN_REVIEW: "人工复核：需人工确认", FAIL: "失败：无法安全继续" } as Record<string, string>)[action ?? ""] ?? "决策未返回";
+}
+
+function decisionTone(action?: string) {
+  if (action === "HUMAN_REVIEW" || action === "REPLAN") return "warning";
+  if (action === "FAIL") return "failed";
+  return "success";
+}
+
+function formatRuntimeDetail(detail: unknown) {
+  try { return JSON.stringify(detail, null, 2); } catch { return "运行时详情无法格式化展示。"; }
 }
 
 function formatTraceStepName(step: string | undefined, index: number) {

@@ -39,6 +39,97 @@ def apply_paper_format(source: Path, output: Path, template: Path | None = None)
     return applied
 
 
+LOW_RISK_BODY_PROPERTIES = {"font_name", "font_size", "bold", "alignment", "line_spacing", "first_line_indent_cm", "left_indent_cm", "right_indent_cm", "space_before_pt", "space_after_pt"}
+
+
+def apply_low_risk_body_rule(document, paragraph_indices: list[int], property_name: str, expected: Any) -> list[int]:
+    """Apply one planned body rule without invoking text or structural edits."""
+    if property_name not in LOW_RISK_BODY_PROPERTIES:
+        return []
+    changed: list[int] = []
+    for index in sorted({value for value in paragraph_indices if isinstance(value, int) and 0 <= value < len(document.paragraphs)}):
+        paragraph = document.paragraphs[index]
+        if paragraph.text.strip() and apply_low_risk_paragraph_property(paragraph, property_name, expected):
+            changed.append(index)
+    return changed
+
+
+def apply_low_risk_paragraph_property(paragraph, property_name: str, expected: Any) -> bool:
+    fmt = paragraph.paragraph_format
+    if property_name == "font_name":
+        for run in paragraph.runs:
+            set_run_font(run, str(expected or "宋体"))
+        return True
+    if property_name == "font_size":
+        for run in paragraph.runs:
+            run.font.size = Pt(safe_size(expected, 12) or 12)
+        return True
+    if property_name == "bold":
+        for run in paragraph.runs:
+            run.font.bold = bool(expected)
+        return True
+    if property_name == "alignment":
+        paragraph.alignment = expected if expected is not None else WD_ALIGN_PARAGRAPH.JUSTIFY
+        return True
+    if property_name == "line_spacing":
+        fmt.line_spacing = safe_spacing(expected, 1.5)
+        return True
+    if property_name == "first_line_indent_cm":
+        fmt.first_line_indent = Cm(safe_margin(expected, 0.74))
+        return True
+    if property_name == "left_indent_cm":
+        fmt.left_indent = Cm(safe_margin(expected, 0))
+        return True
+    if property_name == "right_indent_cm":
+        fmt.right_indent = Cm(safe_margin(expected, 0))
+        return True
+    if property_name == "space_before_pt":
+        fmt.space_before = Pt(safe_size(expected, 0) or 0)
+        return True
+    if property_name == "space_after_pt":
+        fmt.space_after = Pt(safe_size(expected, 0) or 0)
+        return True
+    return False
+
+
+def describe_low_risk_paragraph_property(paragraph, property_name: str) -> Any:
+    fmt = paragraph.paragraph_format
+    if property_name == "font_name":
+        return next((run.font.name for run in paragraph.runs if run.font.name), None)
+    if property_name == "font_size":
+        value = next((run.font.size for run in paragraph.runs if run.font.size), None)
+        return round(value.pt, 2) if value else None
+    if property_name == "bold":
+        return next((bool(run.font.bold) for run in paragraph.runs if run.font.bold is not None), None)
+    if property_name == "alignment":
+        return str(paragraph.alignment)
+    if property_name == "line_spacing":
+        return fmt.line_spacing
+    if property_name in {"space_before_pt", "space_after_pt"}:
+        value = getattr(fmt, property_name.removesuffix("_pt"))
+        return round(value.pt, 2) if value else None
+    attr = {"first_line_indent_cm": "first_line_indent", "left_indent_cm": "left_indent", "right_indent_cm": "right_indent"}.get(property_name)
+    value = getattr(fmt, attr) if attr else None
+    return round(value.cm, 3) if value else None
+
+
+def apply_low_risk_page_rule(document, section_indices: list[int], property_name: str, expected: Any) -> list[int]:
+    side = property_name.removeprefix("margin_").removesuffix("_cm")
+    if side not in {"top", "bottom", "left", "right"}:
+        return []
+    changed = []
+    for index in sorted({value for value in section_indices if isinstance(value, int) and 0 <= value < len(document.sections)}):
+        setattr(document.sections[index], f"{side}_margin", Cm(safe_margin(expected, 2.54)))
+        changed.append(index)
+    return changed
+
+
+def describe_low_risk_page_rule(section, property_name: str) -> Any:
+    side = property_name.removeprefix("margin_").removesuffix("_cm")
+    value = getattr(section, f"{side}_margin", None)
+    return round(value.cm, 3) if value else None
+
+
 def clean_document_text(document, protected_until: int | None = None) -> list[str]:
     changes: list[str] = []
     removed_placeholders = 0

@@ -664,10 +664,14 @@ def count_styled_headings(document) -> int:
 
 
 def get_body_paragraphs(document) -> list[Any]:
+    return [document.paragraphs[index] for index in get_body_paragraph_indices(document)]
+
+
+def get_body_paragraph_indices(document) -> list[int]:
     body = []
     title_seen = False
     in_references = False
-    for paragraph in document.paragraphs:
+    for index, paragraph in enumerate(document.paragraphs):
         text = paragraph.text.strip()
         if not text:
             continue
@@ -679,7 +683,7 @@ def get_body_paragraphs(document) -> list[Any]:
             continue
         if in_references or is_section_heading(text) or text.startswith(("摘要", "关键词", "关键字", "Abstract", "Keywords")):
             continue
-        body.append(paragraph)
+        body.append(index)
     return body
 
 

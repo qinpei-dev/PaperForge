@@ -120,6 +120,17 @@ def main() -> None:
     local_task_state = assert_task_state(local)
     assert_ok("task_state_local_ai_score_null", local_task_state.get("ai_score") is None, local_task_state)
     assert_ok("task_state_local_ai_used_false", local_task_state.get("ai_used") is False, local_task_state)
+    assert_ok(
+        "task_state_runtime_summary",
+        all(key in local_task_state for key in ("runtime_state", "current_phase", "current_step", "decision", "replan_count", "human_review_required")),
+        local_task_state,
+    )
+    assert_ok(
+        "task_state_runtime_decision_consistent",
+        local_task_state.get("runtime_state") in {"COMPLETED", "HUMAN_REVIEW_REQUIRED", "FAILED"}
+        and local_task_state.get("decision") in {"COMPLETE", "HUMAN_REVIEW", "FAIL"},
+        {"runtime_state": local_task_state.get("runtime_state"), "decision": local_task_state.get("decision")},
+    )
     local_preview = client.get(f"/preview/{local['filename']}")
     assert_ok("local_preview_endpoint", local_preview.status_code == 200 and bool(local_preview.json().get("html")), local_preview.status_code)
     local_download = client.get(local["download_url"])

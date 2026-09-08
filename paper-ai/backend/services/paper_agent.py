@@ -7,11 +7,14 @@ from time import perf_counter
 from typing import Any
 
 from .agent_orchestrator import AgentTraceBuilder
+from .document_model import build_document_model
 from .document_classifier import classify_document
 from .docx_analyzer import analyze_docx
-from .docx_formatter import apply_paper_format
+from .agent_runtime import run_runtime
 from .language_reviewer import apply_language_suggestions, review_language_with_status
+from .planner import build_execution_plan
 from .plagiarism_checker import check_repeat_risk
+from .rule_engine import normalize_rules
 from .template_extractor import extract_template_profile
 
 
@@ -87,6 +90,10 @@ def run_paper_agent(
     language_review: dict[str, Any] | None = None
     after_analysis: dict[str, Any] | None = None
     modification_report: dict[str, Any] | None = None
+    document_model: dict[str, Any] | None = None
+    normalized_rules: list[dict[str, Any]] = []
+    execution_plan: dict[str, Any] | None = None
+    runtime_result: dict[str, Any] | None = None
 
     try:
         state.start("识别文档类型", "正在判断该文件是否为标准论文。")
@@ -139,9 +146,27 @@ def run_paper_agent(
         else:
             state.finish("未上传模板，按通用论文规范执行。", fallback_used=True)
 
+        # P0.1 artifacts now feed the P0.2 runtime; only safe, existing
+        # formatter capabilities are eligible for autonomous execution.
+        model = build_document_model(paper_path, classification=classification)
+        normalized_rule_objects = normalize_rules(template_profile, template_uploaded=template_path is not None)
+        plan = build_execution_plan(model, normalized_rule_objects, before_analysis)
+        document_model = model.to_dict()
+        normalized_rules = [rule.to_dict() for rule in normalized_rule_objects]
+        execution_plan = plan.to_dict()
+
         state.start("修复标题与正文格式", "正在统一标题层级、正文字体、段落缩进和页面基础格式。")
-        formatted_path = build_output_path(output_dir, paper_path, "formatted")
-        format_log = apply_paper_format(paper_path, formatted_path, template_path)
+        runtime_result = run_runtime(
+            source=paper_path,
+            output_factory=lambda suffix: build_output_path(output_dir, paper_path, suffix),
+            template_path=template_path,
+            model=model,
+            rules=normalized_rule_objects,
+            plan=plan,
+            before_analysis=before_analysis,
+        )
+        formatted_path = Path(runtime_result["formatted_path"])
+        format_log = runtime_result["execution"]["format_log"]
         trace.mark_task("format_document", "done", f"格式处理记录 {len(format_log)} 项")
         trace.record_tool("docx_formatter.apply_paper_format", summary=f"格式处理记录 {len(format_log)} 项")
         state.finish("标题、正文和页面基础格式已统一。")
@@ -229,6 +254,17 @@ def run_paper_agent(
             "modification_report": modification_report,
             "language_review": {"mode": language_review["mode"], "error": language_review["error"]},
             "language_suggestions": language_review["suggestions"],
+            "document_model": document_model,
+            "rules": normalized_rules,
+            "execution_plan": execution_plan,
+            "workflow": runtime_result["workflow"] if runtime_result else None,
+            "verification": runtime_result["verification"] if runtime_result else None,
+            "decision": runtime_result["decision"] if runtime_result else None,
+            "replan_history": runtime_result["replan_history"] if runtime_result else [],
+            "human_review": runtime_result["human_review"] if runtime_result else None,
+            "provenance": runtime_result["provenance"] if runtime_result else [],
+            "runtime_metrics": runtime_result["runtime_metrics"] if runtime_result else None,
+            "runtime_trace": runtime_result["runtime_trace"] if runtime_result else [],
             "agent_trace": trace.build(
                 classification=classification,
                 template_profile=template_profile,
