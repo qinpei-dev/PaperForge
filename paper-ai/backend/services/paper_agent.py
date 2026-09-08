@@ -11,6 +11,7 @@ from .document_model import build_document_model
 from .document_classifier import classify_document
 from .docx_analyzer import analyze_docx
 from .agent_runtime import run_runtime
+from .content_review import apply_content_review, review_content
 from .language_reviewer import apply_language_suggestions, review_language_with_status
 from .planner import build_execution_plan
 from .plagiarism_checker import check_repeat_risk
@@ -94,6 +95,7 @@ def run_paper_agent(
     normalized_rules: list[dict[str, Any]] = []
     execution_plan: dict[str, Any] | None = None
     runtime_result: dict[str, Any] | None = None
+    content_result: dict[str, Any] | None = None
 
     try:
         state.start("识别文档类型", "正在判断该文件是否为标准论文。")
@@ -186,7 +188,9 @@ def run_paper_agent(
             language_path = build_output_path(output_dir, paper_path, "language")
             language_review = review_language_with_status(formatted_path)
             suggestions = language_review["suggestions"]
-            language_log = apply_language_suggestions(formatted_path, language_path, suggestions)
+            content_result = review_content(formatted_path, suggestions, source=language_review["mode"])
+            content_result = apply_content_review(formatted_path, language_path, content_result)
+            language_log = [f"{item['issue_type']}：{item['before']} -> {item['after']}" for item in content_result["provenance"]["auto_fixes"]]
             trace.mark_task("language_review", "done", f"{language_review['mode']} 模式，建议 {len(suggestions)} 条")
             trace.record_tool("language_reviewer.review_language_with_status", summary=f"{language_review['mode']} 模式，建议 {len(suggestions)} 条")
             if language_review["mode"] != "ai":
@@ -203,6 +207,10 @@ def run_paper_agent(
             trace.mark_task("language_review", "skipped", "local 模式跳过 AI 审校")
             trace.add_fallback("local_mode_skip_ai")
             state.finish("本地规则模式不计算 AI 语言、流畅度、逻辑和学术表达评分。", fallback_used=True)
+            content_output = build_output_path(output_dir, paper_path, "content")
+            content_result = apply_content_review(formatted_path, content_output, review_content(formatted_path, source="local"))
+            final_path = content_output
+            language_log = [f"{item['issue_type']}：{item['before']} -> {item['after']}" for item in content_result["provenance"]["auto_fixes"]]
 
         state.start("重复风险预检", "正在检测相似段落、重复句子和重复风险等级。")
         repeat_risk = check_repeat_risk(final_path)
@@ -230,11 +238,19 @@ def run_paper_agent(
             repeat_risk,
             template_path,
             template_display_name=template_name,
+            content_review=content_result,
         )
         trace.mark_task("generate_report", "done", f"人工复查项 {len(modification_report.get('manual_review_items') or [])} 项")
         trace.record_tool("report_generator/build_modification_report", summary=f"人工复查项 {len(modification_report.get('manual_review_items') or [])} 项")
         state.finish(f"报告已生成，最终文件：{final_path.name}")
 
+        final_decision = runtime_result["decision"] if runtime_result else None
+        if content_result and content_result.get("decision") == "HUMAN_REVIEW":
+            final_decision = {"action": "HUMAN_REVIEW", "reason": content_result.get("decision_reason"), "risk": "high_risk", "evidence": content_result.get("provenance", {}).get("hitl", []) or content_result.get("provenance", {}).get("auto_fixes", [])}
+        content_review_payload = content_result or {"issues": [], "counts": {"AUTO_FIX": 0, "SUGGEST_ONLY": 0, "HITL_REQUIRED": 0}}
+        content_human_review = None
+        if content_result and content_result.get("decision") == "HUMAN_REVIEW":
+            content_human_review = {"reason": content_result.get("decision_reason"), "severity": "high_risk", "affected_targets": [f"body_paragraph#{item.get('paragraph_index')}" for item in content_result.get("provenance", {}).get("hitl", [])], "items": content_result.get("provenance", {}).get("hitl", []), "suggested_action": "请人工确认高风险内容后再决定是否修改。", "can_resume": True}
         return {
             "status": "ok",
             "mode": normalized_mode,
@@ -259,10 +275,11 @@ def run_paper_agent(
             "execution_plan": execution_plan,
             "workflow": runtime_result["workflow"] if runtime_result else None,
             "verification": runtime_result["verification"] if runtime_result else None,
-            "decision": runtime_result["decision"] if runtime_result else None,
+            "decision": final_decision,
             "replan_history": runtime_result["replan_history"] if runtime_result else [],
-            "human_review": runtime_result["human_review"] if runtime_result else None,
+            "human_review": content_human_review or (runtime_result["human_review"] if runtime_result else None),
             "provenance": runtime_result["provenance"] if runtime_result else [],
+            "content_review": content_review_payload,
             "runtime_metrics": runtime_result["runtime_metrics"] if runtime_result else None,
             "runtime_trace": runtime_result["runtime_trace"] if runtime_result else [],
             "execution": runtime_result["execution"] if runtime_result else None,
@@ -308,6 +325,7 @@ def build_modification_report(
     repeat_risk: dict[str, Any],
     template_path: Path | None,
     template_display_name: str | None = None,
+    content_review: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     before_items = {item["key"]: item for item in before_analysis["report"]["breakdown"]}
     comparisons = []
@@ -324,7 +342,9 @@ def build_modification_report(
             }
         )
 
-    language_changes = len([item for item in language_log if "->" in item])
+    content_review = content_review or {}
+    content_auto_fixes = content_review.get("provenance", {}).get("auto_fixes", [])
+    language_changes = len(content_auto_fixes)
     auto_fix_count = len(format_log) + language_changes
     changed_dimensions = [item for item in comparisons if item["delta"] != 0]
     score_delta_by_dimension = {item["key"]: item["delta"] for item in comparisons}
@@ -376,6 +396,10 @@ def build_modification_report(
         "info_items": info_items,
         "score_explanation": score_explanation,
         "template_used": template_display_name or (template_path.name if template_path else None),
+        "content_auto_fixes": content_auto_fixes,
+        "content_suggestions": content_review.get("provenance", {}).get("suggestions", []),
+        "content_manual_review": content_review.get("provenance", {}).get("hitl", []),
+        "content_counts": content_review.get("counts", {"AUTO_FIX": 0, "SUGGEST_ONLY": 0, "HITL_REQUIRED": 0}),
     }
 
 

@@ -52,23 +52,14 @@ def review_language_with_status(path: Path) -> dict[str, Any]:
 
 
 def apply_language_suggestions(source: Path, output: Path, suggestions: list[dict[str, Any]]) -> list[str]:
-    document = Document(source)
-    applied: list[str] = []
-    for suggestion in suggestions:
-        index = int(suggestion.get("paragraph_index", -1))
-        original = str(suggestion.get("original", ""))
-        replacement = str(suggestion.get("replacement", ""))
-        if index < 0 or index >= len(document.paragraphs) or not original or not replacement:
-            continue
-        paragraph = document.paragraphs[index]
-        if original not in paragraph.text:
-            continue
-        replace_paragraph_text(paragraph, paragraph.text.replace(original, replacement, 1))
-        applied.append(f"{suggestion.get('issue_type', '语言优化')}：{original} -> {replacement}")
-    document.save(output)
-    if not applied:
-        applied.append("未发现可安全自动替换的明显语言问题。")
-    return applied
+    # Compatibility wrapper: candidates must still pass the shared content
+    # policy. AI suggestions are never written back merely because they have
+    # an original/replacement pair.
+    from .content_review import apply_content_review, review_content
+
+    result = apply_content_review(source, output, review_content(source, suggestions, source="ai"))
+    applied = [f"{item['issue_type']}：{item['before']} -> {item['after']}" for item in result["provenance"]["auto_fixes"]]
+    return applied or ["未发现可安全自动替换的明显语言问题。"]
 
 
 def call_ai_language_review(path: Path) -> dict[str, Any]:

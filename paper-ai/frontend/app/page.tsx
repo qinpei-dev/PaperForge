@@ -121,6 +121,8 @@ type HumanReview = {
 type ReplanHistory = { plan?: { plan_id?: string }; decision?: Decision };
 type ProvenanceChange = { action?: string; rule_type?: string; target?: { semantic_role?: string; paragraph_index?: number }; before?: unknown; expected?: unknown; after?: unknown; verification_scope?: string; verification_status?: string; verification_evidence?: { reason?: string; actual?: unknown } };
 type Provenance = { changes?: ProvenanceChange[]; summary?: { planned_steps?: number; executed_steps?: number; unsupported_steps?: number; change_count?: number; conflicts?: number; verification?: { total?: number; verified?: number; failed?: number; unsupported?: number } } };
+type ContentIssue = { paragraph_index?: number; issue_type?: string; original_text?: string; suggested_text?: string; reason?: string; action_policy?: string; source?: string; verification_status?: string };
+type ContentReview = { issues?: ContentIssue[]; counts?: { AUTO_FIX?: number; SUGGEST_ONLY?: number; HITL_REQUIRED?: number }; provenance?: { auto_fixes?: ContentIssue[]; suggestions?: ContentIssue[]; hitl?: ContentIssue[] }; verification?: { total?: number; verified?: number; failed?: number } };
 type AgentResult = {
   status: "ok" | "requires_confirmation";
   mode?: string;
@@ -147,6 +149,7 @@ type AgentResult = {
   execution_plan?: { plan_id?: string };
   runtime_trace?: RuntimeTraceItem[];
   provenance?: Provenance | null;
+  content_review?: ContentReview | null;
 };
 type PreviewResult = { title: string; html: string };
 
@@ -457,6 +460,8 @@ export default function Home() {
 
             <RuntimeSummary result={result} />
 
+            <ContentReviewPanel review={result.content_review} />
+
             <section className="report-panel">
               <div className="section-title">
                 <span>Agent修改报告</span>
@@ -515,6 +520,27 @@ export default function Home() {
         ) : null}
       </section>
     </main>
+  );
+}
+
+function ContentReviewPanel({ review }: { review?: ContentReview | null }) {
+  if (!review) return null;
+  const counts = review.counts ?? {};
+  const items = review.issues ?? [];
+  return (
+    <section className="runtime-panel content-review-panel" aria-label="段落级内容审查">
+      <div className="section-title"><span>段落级内容审查</span><strong>安全策略已生效</strong></div>
+      <div className="content-review-counts">
+        <span>自动修正：{counts.AUTO_FIX ?? 0}</span>
+        <span>修改建议：{counts.SUGGEST_ONLY ?? 0}</span>
+        <span>需人工复核：{counts.HITL_REQUIRED ?? 0}</span>
+      </div>
+      {items.length ? <ul className="runtime-change-list">{items.slice(0, 8).map((item, index) => <li key={`${item.paragraph_index}-${item.issue_type}-${index}`}>
+        正文 #{item.paragraph_index ?? "—"} · {item.issue_type ?? "内容问题"} · {item.action_policy === "AUTO_FIX" ? "已自动修正" : item.action_policy === "HITL_REQUIRED" ? "需人工确认" : "建议修改"}
+        {item.reason ? <small>：{item.reason}</small> : null}
+        {item.action_policy !== "AUTO_FIX" && item.suggested_text ? <details><summary>查看原文与建议</summary><p>原文：{item.original_text}</p><p>建议：{item.suggested_text}</p></details> : null}
+      </li>)}</ul> : <p>未发现需要处理的段落级内容问题。</p>}
+    </section>
   );
 }
 

@@ -1,5 +1,21 @@
 # TODO
 
+### [DONE] PaperOps Agent v2.0 P2 第一阶段 — 段落级内容审查与安全修改闭环
+
+目标：建立 Paragraph Content Analysis → Issue Classification → Risk Level → Auto Fix / Suggestion / HITL → Content Provenance → Verification → Decision → Frontend / Report 的完整闭环。
+
+已完成：
+- 新增 paragraph-level 内容 issue model，绑定 `paragraph_index` / `body_paragraph` locator，并区分 local / ai source、confidence、risk、status。
+- 建立 `AUTO_FIX`、`SUGGEST_ONLY`、`HITL_REQUIRED` 三档策略；确定性连续空格、重复标点和模板编号残留可限定段落自动修正；语言润色和大范围/高风险内容不自动写回。
+- AI/fallback 候选统一经过本地 policy；旧 `apply_language_suggestions` wrapper 也不能绕过 policy。
+- AUTO_FIX 记录 before/after/reason/confidence/source，并重新读取输出 DOCX 验证；建议记录 original/suggested/reason 且确认原文未被修改；高风险证据进入最终 Decision/HITL。
+- 内容统计与明细接入 `modification_report`、API 结果和前端结果区；保持旧字段、local AI 字段、预览和下载兼容。
+- 新增 `test_p2_content_review_closure.py`。
+
+状态：已完成。下一阶段应作为新的 P2 收尾大包规划，不拆成本轮小点任务。
+
+---
+
 ## 当前路线图 / Roadmap
 
 ### [DONE] PaperOps Agent v2.0 P1.2-body-target-verification
