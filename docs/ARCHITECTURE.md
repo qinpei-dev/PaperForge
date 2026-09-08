@@ -1,10 +1,10 @@
 # 系统架构说明
 
-版本：`v0.7.3-task-state-cleanup`
+版本：`v2.0-paperforge`（当前 Release Freeze）
 
 本文档说明 PaperForge Verified Academic Document Agent 的现有架构。当前系统通过 FastAPI + Next.js 提供 DOCX 上传、预览和下载，并通过 Document Model、Rule Engine、Planner、Executor、Verification 和 Provenance 完成可追踪处理。
 
-本文档只描述已经实现的内容，不包含未接入的 RAG、LangGraph、Milvus、数据库、用户系统或云部署。
+本文档只描述当前已实现的内容，不包含未接入的 RAG、LangGraph、Milvus、数据库、用户系统或云部署。历史版本号只用于解释演进，不代表当前运行基线。
 
 ## 总体架构
 

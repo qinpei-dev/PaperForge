@@ -1,10 +1,10 @@
 # Demo Result
 
-版本：`v1.0-showcase / 暑期实习展示版`
+版本：`v2.0-paperforge / PaperForge V2`
 
 本文档记录本仓库当前内置的面试演示样本和一次真实 local 模式运行输出。样本内容为人工构造的脱敏模拟文本，不来自真实用户论文，不来自 CAJ 原文，也不用于论文代写。
 
-当前稳定展示基线为 tag `v1.0-showcase`，指向 commit `10904db`。`main` 分支包含该 tag 之后的公开前文档和面试材料补充，不代表 `v1.0-showcase` tag 已移动。早期 v0.9.2 final demo check 已确认真实页面点击 demo 可通过：`/document/classify`、`/agent/run`、`/preview/{filename}` 和下载接口均正常，TracePanel、评分、报告、参考文献检查和图表编号检查均可观察。
+当前公开运行基线为 tag `v2.0-paperforge`。`v1.0-showcase` 和 `v0.9.x` 仅作为历史展示阶段保留。本文档记录的 demo 输入为人工构造的脱敏样本；接口与页面能力应以当前 `main` / V2 代码为准。
 
 ## Demo 输入文件
 

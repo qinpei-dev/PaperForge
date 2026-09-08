@@ -1,8 +1,10 @@
-# v1.0-showcase 封版摘要
+# v1.0-showcase 封版摘要（历史归档）
 
-版本定位：`v1.0-showcase / 暑期实习展示版`
+版本定位：`v1.0-showcase / 暑期实习展示版`（历史版本）
 
-当前稳定展示基线：tag `v1.0-showcase`，指向 commit `10904db`
+> 当前公开版本为 `v2.0-paperforge`。本文档保留用于说明上一阶段展示版，不是当前产品规格。
+
+历史展示基线：tag `v1.0-showcase`，指向 commit `10904db`
 
 说明：`v0.9.4-demo-screenshot-package` 是上一阶段截图包 tag；`v1.0-showcase` 是稳定展示版本，包含 v0.9.5 trace UI 相关增强。`main` 分支包含 `v1.0-showcase` 之后的公开前文档和面试材料补充，不代表 `v1.0-showcase` tag 已移动。
 

@@ -40,13 +40,15 @@ P1.1 Target-level Formatting Verification：已为 Word 标题样式和可解析
 
 P1.2 Body Paragraph Target-level Verification：正文低风险格式修改现在将每个 paragraph index 记录为 `body_paragraph` target，并保留 before、expected、after 与 locator。Verifier 会重新读取输出 DOCX 并对字体、字号、对齐、行距、首行/左右缩进、段前段后逐 target 比较 actual；无法定位的正文 PlanStep 会写入 unsupported provenance 和原因，不再以 rule-level 分数伪装段落验证。
 
-当前稳定展示基线：tag `v1.0-showcase`，指向 commit `10904db`
+当前公开发布基线：tag `v2.0-paperforge`，指向当前 HEAD `966dc02`
 
 版本口径：
 
+- `v2.0-paperforge` 是当前公开发布与 Release Freeze 基线。
+
 - `v0.9.4-demo-screenshot-package` 是上一阶段截图包 tag。
 - `v1.0-showcase` 是稳定展示版本，指向 `10904db`。
-- `main` 分支包含 `v1.0-showcase` 之后的公开前文档和面试材料补充；截至本轮公开前清理开始时为 `afed51e docs: polish interview showcase materials`，后续提交可能继续前进。
+- `v1.0-showcase` 和 `v0.9.4-demo-screenshot-package` 仅作为历史展示 tag 保留。
 - 不移动、删除或重建 `v1.0-showcase` 和 `v0.9.4-demo-screenshot-package` tag。
 
 # 已完成功能

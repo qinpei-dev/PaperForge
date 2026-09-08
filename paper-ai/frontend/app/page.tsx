@@ -295,7 +295,7 @@ export default function Home() {
     setPreview(null);
     setPreviewError("");
     setResult(null);
-    setMessage("论文修改 Agent 正在自主处理文档...");
+    setMessage("PaperForge 正在按计划处理文档，并在输出后执行验证...");
     try {
       const requestUrl = apiUrl("/agent/run");
       const response = await fetch(requestUrl, { method: "POST", body: formData });
@@ -453,7 +453,7 @@ export default function Home() {
 
             <div className="action-row">
               <button className="agent-button" disabled={buttonDisabled} onClick={runAgent}>
-                {running ? "Agent 执行中..." : result ? "重新运行Agent" : "启动论文修改 Agent"}
+                {running ? "正在处理并验证..." : result ? "重新运行 PaperForge" : "开始处理文档"}
               </button>
               {result ? (
                 <button className="secondary-button" disabled={previewLoading} onClick={() => loadPreview(result.filename)}>
@@ -607,8 +607,8 @@ function ProgressPanel({ running, steps }: { running: boolean; steps: AgentStep[
   return (
     <section className="agent-panel" aria-label="Agent 执行进度">
       <div className="section-title">
-        <span>Agent执行过程</span>
-        {running ? <strong>自主处理中</strong> : <strong>已完成</strong>}
+        <span>处理进度</span>
+        {running ? <strong>正在处理</strong> : <strong>已完成</strong>}
       </div>
       <ol className="timeline">
         {steps.map((step) => (
@@ -643,8 +643,8 @@ function TracePanel({ result }: { result: AgentResult }) {
       </summary>
 
       <div className="trace-intro">
-        <p>agent_trace 是步骤级执行记录，用于查看格式检查过程、耗时、fallback 和需人工复核项。</p>
-        <p>当前仍是同步执行接口，不是异步队列，也不是完整断点续跑；前端不会读取 task_state 文件内容。</p>
+        <p>这里展示处理步骤、耗时、兜底策略和需要人工复核的事项。</p>
+        <p>PaperForge 当前采用同步处理；任务状态摘要用于解释本次结果，不代表异步队列或断点续跑。</p>
       </div>
 
       {hasTaskStateSummary ? (

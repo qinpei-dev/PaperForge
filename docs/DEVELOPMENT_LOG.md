@@ -1,4 +1,6 @@
-# Development Log
+# Development Log (Historical)
+
+> This is a chronological development record. Version labels and “current baseline” statements below describe their historical moment; the current public release is `v2.0-paperforge`. Use the README, architecture reference, and current code as the product specification.
 
 ## 2026-07-01 v1.0-showcase docs sync
 

@@ -19,6 +19,8 @@
 
 ## [CURRENT] PaperForge Release Freeze
 
+当前公开版本：`v2.0-paperforge`。本轮仅进行公开包装、文档治理和低风险展示文案调整，不改变主链路。
+
 仅允许：
 
 - 品牌统一

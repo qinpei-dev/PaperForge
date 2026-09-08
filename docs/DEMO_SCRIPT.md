@@ -1,10 +1,10 @@
 # 面试演示脚本
 
-版本：`v1.0-showcase / 暑期实习展示版`
+版本：`v2.0-paperforge / PaperForge V2`
 
 本文档用于演示 PaperForge Verified Academic Document Agent。演示重点是“一个可运行、可解释、有 fallback、有测试覆盖，并具备验证、溯源和人工确认闭环的 DOCX Agent”。不要把它讲成论文代写、正式查重或深度内容生成系统。
 
-当前推荐演示基线：tag `v1.0-showcase`，对应 commit `10904db`。`v0.9.4-demo-screenshot-package` 是上一阶段截图包 tag；`main` 分支包含 `v1.0-showcase` 之后的公开前文档和面试材料补充，不代表 `v1.0-showcase` tag 已移动。
+当前推荐演示基线：tag `v2.0-paperforge`。`v1.0-showcase` 与 `v0.9.4-demo-screenshot-package` 是历史展示阶段 tag；文中保留的旧版本号只用于说明演示素材来源。
 
 ## 0. 演示准备
 
@@ -134,7 +134,7 @@
 8. TracePanel 展开：停顿 8-10 秒，强调这是步骤级 `agent_trace`，用于展示 Agent 可观测，不要讲成完整工业级调度平台。
 9. 在线预览和下载入口：停顿 5 秒，展示最终 DOCX 可预览、可下载。
 10. 390px 窄屏适配：如做作品集素材，可补一张移动端截图，说明页面没有横向溢出。
-11. 封版口径：说明当前推荐演示基线是 tag `v1.0-showcase`，旧 tag `v0.9.4-demo-screenshot-package` 只是上一阶段截图包。
+11. 封版口径：说明当前推荐演示基线是 tag `v2.0-paperforge`，旧 tag `v1.0-showcase` 和 `v0.9.4-demo-screenshot-package` 只是历史展示包。
 12. 公开复现口径：默认建议运行 smoke test 和 agent trace test；完整 manifest / heavy DOCX 回归依赖本地脱敏样本，不是公开 clone 后默认必跑流程。
 
 ## 5. 演示 agent_trace，约 2 分钟
