@@ -68,4 +68,4 @@ V2 验收矩阵共 26 项，全部 PASS：
 
 PaperForge V2 核心开发已经完成。当前进入 Release Freeze，不继续扩展 P3。后续仅允许封版文档、品牌包装、部署稳定性和 blocking regression 修复。
 
-`PaperOps Agent v2.0` 作为历史开发阶段代号保留；`v1.0-showcase` 作为历史展示版本保留，不移动、删除或重建旧 tag。
+早期内部开发代号和历史展示 tag 均保留在 Git 历史中，但不作为当前产品名称、版本身份或公开入口；现有 tag 不移动、不删除、不重建。

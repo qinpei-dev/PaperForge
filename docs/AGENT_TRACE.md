@@ -78,7 +78,7 @@ Agent 的工程决策摘要。
 
 布尔值，表示是否需要人工复查。
 
-v0.5.1 之后，只有 blocking 或 high_risk 风险会触发 `manual_review_required=true`。warning 和 info 只作为提示，不强制触发人工复查。
+当前策略下，只有 blocking 或 high_risk 风险会触发 `manual_review_required=true`。warning 和 info 只作为提示，不强制触发人工复查。
 
 ### confidence
 

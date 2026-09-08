@@ -90,14 +90,14 @@ API 层不承载复杂业务规则，主要负责文件保存、路由和响应�
 
 位置：`paper-ai/backend/services/task_state.py`
 
-`task_state.py` 是 v0.7.0 新增的最小状态持久化工具。它不参与 DOCX 格式修复，不替代核心 Agent，也不把 `/agent/run` 改成异步队列。
+`task_state.py` 是用于记录任务生命周期的轻量状态持久化工具。它不参与 DOCX 格式修复，不替代核心 Agent，也不把 `/agent/run` 改成异步队列。
 
 当前行为：
 
 - `agent_pipeline.py` 在每次运行开始时生成 `task_id`。
 - task state 默认写入 `paper-ai/backend/task_states/{task_id}.json`。
 - `paper-ai/backend/task_states/` 属于运行产物目录，已通过 `.gitignore` 忽略，不应提交到 Git。
-- `demo_outputs/task_state_sample.json` 属于固定演示样例，用于面试展示字段结构；它不是运行时 task state 目录。
+- 固定任务状态样例用于说明字段结构；它不是运行时 task state 目录。
 - pipeline 开始时写入 `running`，成功时写入 `succeeded`，异常或内部错误时写入 `failed`。
 - `/agent/run` 仍同步返回，旧字段保持兼容，只额外透出 `task_id` 和 `task_state_path`。
 
@@ -121,7 +121,7 @@ task state 重点字段包括：
 
 - `task_state` 记录任务生命周期。
 - `agent_trace` 记录处理步骤。
-- `task_states/{task_id}.json` 是运行时产物，`demo_outputs/task_state_sample.json` 是固定 demo 样例，两者不能混淆。
+- `task_states/{task_id}.json` 是运行时产物，固定任务状态样例用于文档说明，两者不能混淆。
 - `modification_report` 记录格式修复、评分变化和人工复查建议。
 - `reference_check` / `figure_table_check` 记录专项检查结果。
 

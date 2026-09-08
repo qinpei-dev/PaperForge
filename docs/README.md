@@ -8,14 +8,11 @@ PaperForge is currently a **V2 Release Freeze** project. The public product name
 - [Risk level system](RISK_LEVEL_SYSTEM.md) — how low-risk, warning, and human-review work is handled.
 - [Agent Trace](AGENT_TRACE.md) — the explainability fields exposed by the runtime.
 - [Docker deployment](DOCKER_DEPLOYMENT.md) — local container startup and environment configuration.
-- [Demo result](DEMO_RESULT.md) — reproducible demo inputs, outputs, and evidence samples.
+- [V2 release notes](PAPERFORGE_V2_RELEASE_NOTES.md) — current release scope, evidence, and boundaries.
 
 ## Reference material
 
-- [Demo case](DEMO_CASE.md) — the fixed de-identified DOCX walkthrough.
-- [Demo script](DEMO_SCRIPT.md) — a short presentation script for showing the product and its boundaries.
 - [Deployment plan](DEPLOYMENT_PLAN.md) — implementation and deployment notes.
-- [V2 release notes](PAPERFORGE_V2_RELEASE_NOTES.md) — the current release summary.
 
 ## Historical material
 

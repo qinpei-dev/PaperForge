@@ -1,6 +1,6 @@
 # PaperForge — Verified Academic Document Agent
 
-PaperForge is a DOCX-focused academic document agent that turns document cleanup into a verifiable workflow: **Plan → Execute → Verify → Human Review → Evidence**. It detects document structure, plans safe changes, applies low-risk formatting and content actions, re-reads the output DOCX, and explains what was changed, verified, deferred, or left for human review.
+PaperForge is an AI academic document agent for DOCX formatting and content review. It turns document cleanup into a verifiable workflow: **Plan → Execute → Verify → Human Review → Evidence**. It detects document structure, plans safe changes, applies low-risk formatting and content actions, re-reads the output DOCX, and explains what was changed, verified, deferred, or left for human review.
 
 It is built for academic document formatting and review—not automatic paper writing, deep rewriting, formal plagiarism checking, or arbitrary Word automation.
 
@@ -26,6 +26,7 @@ DOCX input
 - Classify DOCX documents and request confirmation for non-standard inputs.
 - Use an optional DOCX template as a formatting reference, with safe fallback behavior.
 - Repair common title, body, font, spacing, indentation, margin, and basic caption formatting.
+- Review selected content issues with safe automatic fixes, explicit suggestions, and human-confirmation paths.
 - Check references, citations, figure/table numbering, and **重复风险检测 / 相似度预检**.
 - Separate safe automatic fixes, suggestions, and high-risk actions requiring human review.
 - Verify changes at target level where a reliable paragraph or section locator exists.
@@ -128,8 +129,6 @@ The full DOCX regression entry point is `paper-ai/backend/run_real_doc_regressio
 ```text
 paper-ai/backend/     FastAPI app, document model, rules, runtime, tests
 paper-ai/frontend/    Next.js user interface
-demo_inputs/          Small de-identified demo DOCX inputs
-demo_outputs/         Reviewed demo outputs and evidence samples
 docs/                 Public docs, architecture, deployment, and archived history
 qa/                   Additional quality checks and acceptance material
 ```
