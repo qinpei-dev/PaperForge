@@ -1,5 +1,20 @@
 # TODO
 
+### [DONE] PaperOps Agent v2.0 P2 收尾 — 统一证据与确认采纳闭环
+
+已完成：
+
+- 新增轻量 evidence aggregation 层，统一格式/内容的 issue_id、locator、before/proposed/actual_after、reason、evidence、risk、action、status、verification 与确认要求。
+- 内容 AUTO_FIX 严格按段落原文写入并重读验证；suggestion/HITL 默认保持正文不变，suggestion 带稳定 issue_id/locator 并明确“尚未写入文档”。
+- 新增单条 `/agent/apply-suggestion` 确认接口：仅允许指定 issue_id/段落 locator，重新校验原文，stale 时返回 conflict，生成确认版 DOCX 并记录 accepted_by_user/provenance/verification。
+- 新增 deterministic content score summary，评分改善只来自 verified auto fix 或 verified user acceptance，未采纳建议、HITL 和失败验证不产生虚假改善。
+- API、修改报告、Runtime 结果和前端接入 `review_summary`、`change_evidence`、`pending_actions`；保留旧字段兼容。
+- 新增 P2 closure tests，现有 P0/P1/P2、smoke、score consistency、真实 DOCX 10/10 回归和前端 build 通过。
+
+状态：已完成。高风险数字、实验结果、结论、引用、方法、定义、公式等仍由本地 policy 阻断自动采纳。
+
+---
+
 ### [DONE] PaperOps Agent v2.0 P2 第一阶段 — 段落级内容审查与安全修改闭环
 
 目标：建立 Paragraph Content Analysis → Issue Classification → Risk Level → Auto Fix / Suggestion / HITL → Content Provenance → Verification → Decision → Frontend / Report 的完整闭环。

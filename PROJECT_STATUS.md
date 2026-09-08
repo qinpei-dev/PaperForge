@@ -4,7 +4,9 @@
 
 项目名称：AI论文格式修改Agent
 
-当前阶段：PaperOps Agent v2.0 P1 执行可信闭环已完成
+当前阶段：PaperOps Agent v2.0 P2 收尾闭环已完成
+
+P2 收尾状态：统一格式/内容 evidence summary、内容 Before/After、单条 suggestion 确认采纳、stale conflict、确认版 DOCX 重读验证和 verified-change 内容评分均已完成。Runtime/API/report 暴露 `review_summary`、`change_evidence`、`pending_actions`；前端明确区分自动修改、未写入建议、已采纳验证和 HITL。保留旧字段与老任务安全降级。
 
 P2 第一阶段状态：段落级内容审查与安全修改闭环已完成（safe content review loop）。新增 paragraph issue model、AUTO_FIX / SUGGEST_ONLY / HITL_REQUIRED policy、内容 provenance、输出重读验证，并接入既有 Decision/HITL、报告和前端结果区。AI 候选不得绕过本地 policy；local 与 AI fallback 均保留主流程兼容。
 

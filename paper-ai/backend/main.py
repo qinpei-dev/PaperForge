@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -14,6 +15,8 @@ from fastapi.responses import FileResponse
 from services.document_classifier import classify_document
 from services.agent_pipeline import run_agent_pipeline
 from services.preview_service import build_docx_preview
+from services.content_review import apply_content_suggestion
+from services.review_evidence import aggregate_review_evidence, content_score_summary
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -100,6 +103,35 @@ def download_file(filename: str) -> FileResponse:
         filename=target.name,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
+
+
+@app.post("/agent/apply-suggestion")
+async def apply_suggestion(
+    filename: str = Form(...),
+    issue_id: str = Form(...),
+    paragraph_index: int = Form(...),
+    original: str = Form(...),
+    suggested: str = Form(...),
+    issue_type: str = Form("content"),
+    reason: str = Form("用户确认采纳该建议"),
+    confidence: float = Form(0.85),
+) -> dict[str, object]:
+    source = OUTPUT_DIR / Path(filename).name
+    if not source.exists():
+        raise HTTPException(status_code=404, detail="没有找到可确认修改的 DOCX。")
+    output = OUTPUT_DIR / f"{source.stem}_confirmed_{datetime.now().strftime('%Y%m%d%H%M%S%f')}.docx"
+    result = apply_content_suggestion(source, output, {"issue_id": issue_id, "paragraph_index": paragraph_index, "original_text": original, "suggested_text": suggested, "issue_type": issue_type, "reason": reason, "confidence": confidence})
+    if result.get("status") == "conflict":
+        raise HTTPException(status_code=409, detail=result)
+    if result.get("status") != "ok":
+        raise HTTPException(status_code=422, detail=result)
+    accepted_review = {"issues": [{"issue_id": issue_id, "paragraph_index": paragraph_index, "issue_type": issue_type, "original_text": original, "suggested_text": suggested, "reason": reason, "confidence": confidence, "action_policy": "SUGGEST_ONLY", "source": "user_confirmed", "status": "accepted"}], "provenance": {"auto_fixes": [], "suggestions": [], "accepted": [result["change"]], "hitl": []}}
+    evidence = aggregate_review_evidence(content_review=accepted_review)
+    result["review_summary"] = evidence["review_summary"]
+    result["change_evidence"] = evidence["change_evidence"]
+    result["pending_actions"] = evidence["pending_actions"]
+    result["content_score"] = content_score_summary(accepted_review)
+    return result
 
 
 @app.get("/preview/{filename}")

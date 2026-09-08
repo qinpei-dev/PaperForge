@@ -17,6 +17,7 @@ from .planner import build_execution_plan
 from .plagiarism_checker import check_repeat_risk
 from .rule_engine import normalize_rules
 from .template_extractor import extract_template_profile
+from .review_evidence import aggregate_review_evidence, content_score_summary
 
 
 RISK_LEVELS = ("blocking", "high_risk", "warning", "info")
@@ -230,6 +231,11 @@ def run_paper_agent(
         state.finish(f"最终评分 {after_score}，AI使用状态：{'已启用' if score_breakdown['ai_used'] else '未启用'}。")
 
         state.start("生成最终报告", "正在整理修复记录、前后对比和人工复查建议。")
+        evidence_summary = aggregate_review_evidence(
+            formatting_changes=(runtime_result or {}).get("provenance", {}).get("changes", []),
+            content_review=content_result,
+        )
+        content_score = content_score_summary(content_result)
         modification_report = build_modification_report(
             before_analysis,
             after_analysis,
@@ -239,6 +245,8 @@ def run_paper_agent(
             template_path,
             template_display_name=template_name,
             content_review=content_result,
+            evidence_summary=evidence_summary,
+            content_score=content_score,
         )
         trace.mark_task("generate_report", "done", f"人工复查项 {len(modification_report.get('manual_review_items') or [])} 项")
         trace.record_tool("report_generator/build_modification_report", summary=f"人工复查项 {len(modification_report.get('manual_review_items') or [])} 项")
@@ -280,6 +288,10 @@ def run_paper_agent(
             "human_review": content_human_review or (runtime_result["human_review"] if runtime_result else None),
             "provenance": runtime_result["provenance"] if runtime_result else [],
             "content_review": content_review_payload,
+            "review_summary": evidence_summary["review_summary"],
+            "change_evidence": evidence_summary["change_evidence"],
+            "pending_actions": evidence_summary["pending_actions"],
+            "content_score": content_score,
             "runtime_metrics": runtime_result["runtime_metrics"] if runtime_result else None,
             "runtime_trace": runtime_result["runtime_trace"] if runtime_result else [],
             "execution": runtime_result["execution"] if runtime_result else None,
@@ -326,6 +338,8 @@ def build_modification_report(
     template_path: Path | None,
     template_display_name: str | None = None,
     content_review: dict[str, Any] | None = None,
+    evidence_summary: dict[str, Any] | None = None,
+    content_score: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     before_items = {item["key"]: item for item in before_analysis["report"]["breakdown"]}
     comparisons = []
@@ -400,6 +414,10 @@ def build_modification_report(
         "content_suggestions": content_review.get("provenance", {}).get("suggestions", []),
         "content_manual_review": content_review.get("provenance", {}).get("hitl", []),
         "content_counts": content_review.get("counts", {"AUTO_FIX": 0, "SUGGEST_ONLY": 0, "HITL_REQUIRED": 0}),
+        "review_summary": (evidence_summary or {}).get("review_summary", {}),
+        "change_evidence": (evidence_summary or {}).get("change_evidence", []),
+        "pending_actions": (evidence_summary or {}).get("pending_actions", []),
+        "content_score": content_score or content_score_summary(content_review),
     }
 
 

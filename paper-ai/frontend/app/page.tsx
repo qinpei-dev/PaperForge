@@ -121,8 +121,9 @@ type HumanReview = {
 type ReplanHistory = { plan?: { plan_id?: string }; decision?: Decision };
 type ProvenanceChange = { action?: string; rule_type?: string; target?: { semantic_role?: string; paragraph_index?: number }; before?: unknown; expected?: unknown; after?: unknown; verification_scope?: string; verification_status?: string; verification_evidence?: { reason?: string; actual?: unknown } };
 type Provenance = { changes?: ProvenanceChange[]; summary?: { planned_steps?: number; executed_steps?: number; unsupported_steps?: number; change_count?: number; conflicts?: number; verification?: { total?: number; verified?: number; failed?: number; unsupported?: number } } };
-type ContentIssue = { paragraph_index?: number; issue_type?: string; original_text?: string; suggested_text?: string; reason?: string; action_policy?: string; source?: string; verification_status?: string };
-type ContentReview = { issues?: ContentIssue[]; counts?: { AUTO_FIX?: number; SUGGEST_ONLY?: number; HITL_REQUIRED?: number }; provenance?: { auto_fixes?: ContentIssue[]; suggestions?: ContentIssue[]; hitl?: ContentIssue[] }; verification?: { total?: number; verified?: number; failed?: number } };
+type ContentIssue = { issue_id?: string; paragraph_index?: number; issue_type?: string; original_text?: string; suggested_text?: string; reason?: string; action_policy?: string; source?: string; verification_status?: string; status?: string };
+type ContentReview = { issues?: ContentIssue[]; counts?: { AUTO_FIX?: number; SUGGEST_ONLY?: number; HITL_REQUIRED?: number }; provenance?: { auto_fixes?: ContentIssue[]; suggestions?: ContentIssue[]; accepted?: ContentIssue[]; hitl?: ContentIssue[] }; verification?: { total?: number; verified?: number; failed?: number } };
+type ReviewSummary = { formatting?: Record<string, number>; content?: Record<string, number>; overall?: Record<string, number> };
 type AgentResult = {
   status: "ok" | "requires_confirmation";
   mode?: string;
@@ -150,6 +151,10 @@ type AgentResult = {
   runtime_trace?: RuntimeTraceItem[];
   provenance?: Provenance | null;
   content_review?: ContentReview | null;
+  review_summary?: ReviewSummary;
+  change_evidence?: unknown[];
+  pending_actions?: ContentIssue[];
+  content_score?: { before_content_score?: number; after_content_score?: number; delta?: number; verified_changes_count?: number; unresolved_issue_count?: number; score_delta_reasons?: string[] };
 };
 type PreviewResult = { title: string; html: string };
 
@@ -343,6 +348,34 @@ export default function Home() {
     }
   }
 
+  async function applySuggestion(issue: ContentIssue) {
+    if (!result || !issue.issue_id || typeof issue.paragraph_index !== "number" || !issue.original_text || !issue.suggested_text) return;
+    const formData = new FormData();
+    formData.append("filename", result.filename);
+    formData.append("issue_id", issue.issue_id);
+    formData.append("paragraph_index", String(issue.paragraph_index));
+    formData.append("original", issue.original_text);
+    formData.append("suggested", issue.suggested_text);
+    formData.append("issue_type", issue.issue_type ?? "content");
+    formData.append("reason", issue.reason ?? "用户确认采纳该建议");
+    try {
+      const response = await fetch(apiUrl("/agent/apply-suggestion"), { method: "POST", body: formData });
+      const data = await readResponseData(response);
+      if (!response.ok) {
+        setMessage(apiErrorMessage(data, "建议采纳失败，正文未覆盖。"));
+        return;
+      }
+      const change = data.change as ContentIssue;
+      const nextReview = result.content_review ? { ...result.content_review, provenance: { ...result.content_review.provenance, accepted: [...(result.content_review.provenance?.accepted ?? []), change] }, issues: (result.content_review.issues ?? []).map((item) => item.issue_id === issue.issue_id ? { ...item, status: "accepted", verification_status: "verified" } : item) } : result.content_review;
+      setResult({ ...result, filename: String(data.output), download_url: String(data.download_url), content_review: nextReview, review_summary: data.review_summary as ReviewSummary, change_evidence: data.change_evidence as unknown[], pending_actions: data.pending_actions as ContentIssue[], content_score: data.content_score as AgentResult["content_score"] });
+      setPreview(null);
+      await loadPreview(String(data.output));
+      setMessage("建议已采纳、写入新的确认版 DOCX，并完成重读验证。");
+    } catch (error) {
+      setMessage(networkErrorMessage(error, "建议采纳失败，正文未覆盖。", apiUrl("/agent/apply-suggestion")));
+    }
+  }
+
   return (
     <main className="page">
       <section className="workspace">
@@ -460,7 +493,7 @@ export default function Home() {
 
             <RuntimeSummary result={result} />
 
-            <ContentReviewPanel review={result.content_review} />
+              <ContentReviewPanel review={result.content_review} summary={result.review_summary} onApply={applySuggestion} />
 
             <section className="report-panel">
               <div className="section-title">
@@ -523,7 +556,7 @@ export default function Home() {
   );
 }
 
-function ContentReviewPanel({ review }: { review?: ContentReview | null }) {
+function ContentReviewPanel({ review, summary, onApply }: { review?: ContentReview | null; summary?: ReviewSummary; onApply?: (issue: ContentIssue) => void }) {
   if (!review) return null;
   const counts = review.counts ?? {};
   const items = review.issues ?? [];
@@ -531,14 +564,17 @@ function ContentReviewPanel({ review }: { review?: ContentReview | null }) {
     <section className="runtime-panel content-review-panel" aria-label="段落级内容审查">
       <div className="section-title"><span>段落级内容审查</span><strong>安全策略已生效</strong></div>
       <div className="content-review-counts">
+        <span>统一摘要：格式已验证 {summary?.formatting?.verified ?? 0} / 内容已验证 {summary?.content?.verified ?? 0}</span>
         <span>自动修正：{counts.AUTO_FIX ?? 0}</span>
         <span>修改建议：{counts.SUGGEST_ONLY ?? 0}</span>
         <span>需人工复核：{counts.HITL_REQUIRED ?? 0}</span>
       </div>
       {items.length ? <ul className="runtime-change-list">{items.slice(0, 8).map((item, index) => <li key={`${item.paragraph_index}-${item.issue_type}-${index}`}>
-        正文 #{item.paragraph_index ?? "—"} · {item.issue_type ?? "内容问题"} · {item.action_policy === "AUTO_FIX" ? "已自动修正" : item.action_policy === "HITL_REQUIRED" ? "需人工确认" : "建议修改"}
+        正文 #{item.paragraph_index ?? "—"} · {item.issue_type ?? "内容问题"} · {item.action_policy === "AUTO_FIX" ? "已自动修正" : item.status === "accepted" ? "已采纳、已应用、已验证" : item.action_policy === "HITL_REQUIRED" ? "需人工确认" : "建议修改（尚未写入文档）"}
         {item.reason ? <small>：{item.reason}</small> : null}
         {item.action_policy !== "AUTO_FIX" && item.suggested_text ? <details><summary>查看原文与建议</summary><p>原文：{item.original_text}</p><p>建议：{item.suggested_text}</p></details> : null}
+        {item.action_policy === "SUGGEST_ONLY" && item.status !== "accepted" && item.issue_id ? <button className="secondary-button compact" type="button" onClick={() => onApply?.(item)}>采纳此建议</button> : null}
+        {item.action_policy === "HITL_REQUIRED" ? <small>该项涉及高风险内容，不能通过此按钮自动写回。</small> : null}
       </li>)}</ul> : <p>未发现需要处理的段落级内容问题。</p>}
     </section>
   );
