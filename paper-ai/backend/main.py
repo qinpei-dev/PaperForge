@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import shutil
 from datetime import datetime
 from dataclasses import dataclass
@@ -8,7 +9,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -17,6 +18,13 @@ from services.agent_pipeline import run_agent_pipeline
 from services.preview_service import build_docx_preview
 from services.content_review import apply_content_suggestion
 from services.review_evidence import aggregate_review_evidence, content_score_summary
+from auth import auth_is_required, create_access_token, get_current_user, get_optional_current_user, hash_password, validate_email, verify_password
+from db.models import Artifact, Project, Task, User, Workspace
+from db.session import get_db, init_db
+from schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -62,13 +70,137 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+def startup_database() -> None:
+    if os.getenv("AUTO_CREATE_DB", "true").strip().lower() == "true":
+        init_db()
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.post("/auth/register", response_model=AuthResponse, status_code=201)
+def register_user(payload: RegisterRequest, db: Session = Depends(get_db)) -> AuthResponse:
+    email = validate_email(payload.email)
+    if db.scalar(select(User).where(User.email == email)) is not None:
+        raise HTTPException(status_code=409, detail="该邮箱已经注册。")
+    user = User(email=email, password_hash=hash_password(payload.password))
+    workspace_name = f"{email.split('@', 1)[0]}的 PaperForge Space"
+    user.workspaces.append(Workspace(name=workspace_name))
+    db.add(user)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="该邮箱已经注册。")
+    db.refresh(user)
+    workspace = user.workspaces[0]
+    return AuthResponse(access_token=create_access_token(user.id), user=UserResponse(id=user.id, email=user.email), workspace_id=workspace.id, workspace_name=workspace.name)
+
+
+@app.post("/auth/login", response_model=AuthResponse)
+def login_user(payload: LoginRequest, db: Session = Depends(get_db)) -> AuthResponse:
+    email = validate_email(payload.email)
+    user = db.scalar(select(User).where(User.email == email))
+    if user is None or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="邮箱或密码错误。", headers={"WWW-Authenticate": "Bearer"})
+    workspace = db.scalar(select(Workspace).where(Workspace.owner_id == user.id).order_by(Workspace.created_at).limit(1))
+    if workspace is None:
+        workspace = Workspace(owner_id=user.id, name=f"{email.split('@', 1)[0]}的 PaperForge Space")
+        db.add(workspace)
+        db.commit()
+        db.refresh(workspace)
+    return AuthResponse(access_token=create_access_token(user.id), user=UserResponse(id=user.id, email=user.email), workspace_id=workspace.id, workspace_name=workspace.name)
+
+
+@app.get("/auth/me", response_model=UserResponse)
+def current_user(user: User = Depends(get_current_user)) -> UserResponse:
+    return UserResponse(id=user.id, email=user.email)
+
+
+def require_user_if_enabled(user: User | None = Depends(get_optional_current_user)) -> User | None:
+    if auth_is_required() and user is None:
+        raise HTTPException(status_code=401, detail="需要登录后访问。", headers={"WWW-Authenticate": "Bearer"})
+    return user
+
+
+def get_or_create_default_project(db: Session, user: User) -> Project:
+    workspace = db.scalar(select(Workspace).where(Workspace.owner_id == user.id).order_by(Workspace.created_at).limit(1))
+    if workspace is None:
+        workspace = Workspace(owner_id=user.id, name=f"{user.email.split('@', 1)[0]}的 PaperForge Space")
+        db.add(workspace)
+        db.flush()
+    project = db.scalar(select(Project).where(Project.workspace_id == workspace.id).order_by(Project.created_at).limit(1))
+    if project is None:
+        project = Project(workspace_id=workspace.id, title="PaperForge Documents", status="active")
+        db.add(project)
+        db.flush()
+    return project
+
+
+@app.get("/workspaces")
+def list_workspaces(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[dict[str, object]]:
+    workspaces = db.scalars(select(Workspace).where(Workspace.owner_id == user.id).order_by(Workspace.created_at)).all()
+    return [{"id": item.id, "name": item.name, "created_at": item.created_at} for item in workspaces]
+
+
+@app.get("/tasks")
+def list_tasks(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[dict[str, object]]:
+    statement = (
+        select(Task)
+        .join(Task.project)
+        .join(Project.workspace)
+        .where(Workspace.owner_id == user.id)
+        .order_by(Task.created_at.desc())
+    )
+    tasks = db.scalars(statement).all()
+    return [{"id": item.id, "project_id": item.project_id, "status": item.status, "score": item.score, "created_at": item.created_at, "title": item.project.title} for item in tasks]
+
+
+@app.get("/tasks/{task_id}")
+def get_task(task_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
+    statement = select(Task).join(Task.project).join(Project.workspace).where(Task.id == task_id, Workspace.owner_id == user.id)
+    task = db.scalar(statement)
+    if task is None:
+        raise HTTPException(status_code=404, detail="没有找到该任务。")
+    return {"id": task.id, "task_id": task.id, "project_id": task.project_id, "status": task.status, "uploaded_file": task.uploaded_file, "trace": task.agent_trace, "agent_trace": task.agent_trace, "score": task.score, "created_at": task.created_at, "artifacts": [{"id": item.id, "file_path": item.file_path, "file_type": item.file_type} for item in task.artifacts]}
+
+
+@app.post("/tasks", status_code=201)
+async def create_task(
+    paper: UploadFile = File(...),
+    template: UploadFile | None = File(None),
+    allow_non_paper: bool = Form(False),
+    mode: str = Form("ai"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Create and synchronously execute a SaaS task through the existing pipeline."""
+    if mode not in {"local", "ai"}:
+        raise HTTPException(status_code=422, detail="mode 必须是 local 或 ai。")
+    request_id = uuid4()
+    paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
+    template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
+    project = get_or_create_default_project(db, user)
+    task = Task(project_id=project.id, status="pending", uploaded_file=str(paper_upload.path))
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    result = execute_persisted_task(
+        task=task,
+        db=db,
+        paper_upload=paper_upload,
+        template_upload=template_upload,
+        allow_non_paper=allow_non_paper,
+        mode=mode,
+    )
+    return {"task_id": task.id, "status": task.status, "result_status": result.get("status"), "result": result}
+
+
 @app.post("/document/classify")
-async def classify_uploaded_document(paper: UploadFile = File(...)) -> dict[str, object]:
+async def classify_uploaded_document(paper: UploadFile = File(...), user: User | None = Depends(require_user_if_enabled)) -> dict[str, object]:
     upload = save_docx(paper, UPLOAD_DIR, uuid4())
     result = classify_document(upload.path)
     result["filename"] = upload.original_filename
@@ -81,19 +213,31 @@ async def run_agent(
     template: UploadFile | None = File(None),
     allow_non_paper: bool = Form(False),
     mode: str = Form("ai"),
+    user: User | None = Depends(require_user_if_enabled),
+    db: Session = Depends(get_db),
 ) -> dict[str, object]:
     request_id = uuid4()
     paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
     template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
-    result = run_agent_pipeline(
-        paper_path=paper_upload.path,
-        template_path=template_upload.path if template_upload else None,
-        output_dir=OUTPUT_DIR,
-        allow_non_paper=allow_non_paper,
-        mode=mode,
-        paper_display_name=paper_upload.original_filename,
-        template_display_name=template_upload.original_filename if template_upload else None,
-    )
+    task = None
+    if user is not None:
+        project = get_or_create_default_project(db, user)
+        task = Task(project_id=project.id, status="pending", uploaded_file=str(paper_upload.path))
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+    if task is not None:
+        result = execute_persisted_task(task, db, paper_upload, template_upload, allow_non_paper, mode)
+    else:
+        result = run_agent_pipeline(
+            paper_path=paper_upload.path,
+            template_path=template_upload.path if template_upload else None,
+            output_dir=OUTPUT_DIR,
+            allow_non_paper=allow_non_paper,
+            mode=mode,
+            paper_display_name=paper_upload.original_filename,
+            template_display_name=template_upload.original_filename if template_upload else None,
+        )
     result.setdefault("original_filename", paper_upload.original_filename)
     result.setdefault(
         "original_template_filename",
@@ -101,14 +245,61 @@ async def run_agent(
     )
     if result["status"] == "error":
         raise HTTPException(status_code=500, detail=result)
+    if task is not None:
+        result["task_id"] = task.id
+    return result
+
+
+def execute_persisted_task(
+    task: Task,
+    db: Session,
+    paper_upload: StoredUpload,
+    template_upload: StoredUpload | None,
+    allow_non_paper: bool,
+    mode: str,
+) -> dict[str, object]:
+    """Run the existing Agent and persist only orchestration metadata and artifacts."""
+    task.status = "running"
+    db.commit()
+    try:
+        result = run_agent_pipeline(
+            paper_path=paper_upload.path,
+            template_path=template_upload.path if template_upload else None,
+            output_dir=OUTPUT_DIR,
+            allow_non_paper=allow_non_paper,
+            mode=mode,
+            paper_display_name=paper_upload.original_filename,
+            template_display_name=template_upload.original_filename if template_upload else None,
+        )
+    except Exception as exc:
+        task.status = "failed"
+        task.agent_trace = [{"step": "task_orchestrator", "status": "error", "message": str(exc)}]
+        db.commit()
+        return {"status": "error", "error": str(exc), "agent_trace": task.agent_trace}
+
+    task.agent_trace = result.get("agent_trace")
+    task.score = result.get("after_score") if isinstance(result.get("after_score"), (int, float)) else None
+    result_status = str(result.get("status") or "error")
+    task.status = "completed" if result_status == "ok" else ("pending" if result_status == "requires_confirmation" else "failed")
+    filename = result.get("filename")
+    if isinstance(filename, str):
+        task.artifacts.append(Artifact(file_path=str(OUTPUT_DIR / Path(filename).name), file_type="docx"))
+    report = result.get("modification_report")
+    if isinstance(report, dict):
+        report_path = OUTPUT_DIR / f"{task.id}_report.json"
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        task.artifacts.append(Artifact(file_path=str(report_path), file_type="report"))
+    db.commit()
+    db.refresh(task)
     return result
 
 
 @app.get("/download/{filename}")
-def download_file(filename: str) -> FileResponse:
+def download_file(filename: str, user: User | None = Depends(require_user_if_enabled), db: Session = Depends(get_db)) -> FileResponse:
     target = OUTPUT_DIR / Path(filename).name
     if not target.exists():
         raise HTTPException(status_code=404, detail="没有找到生成后的 Word 文件。")
+    ensure_artifact_access(filename, user, db)
     return FileResponse(
         path=target,
         filename=target.name,
@@ -126,10 +317,13 @@ async def apply_suggestion(
     issue_type: str = Form("content"),
     reason: str = Form("用户确认采纳该建议"),
     confidence: float = Form(0.85),
+    user: User | None = Depends(require_user_if_enabled),
+    db: Session = Depends(get_db),
 ) -> dict[str, object]:
     source = OUTPUT_DIR / Path(filename).name
     if not source.exists():
         raise HTTPException(status_code=404, detail="没有找到可确认修改的 DOCX。")
+    ensure_artifact_access(filename, user, db)
     output = OUTPUT_DIR / f"{source.stem}_confirmed_{datetime.now().strftime('%Y%m%d%H%M%S%f')}.docx"
     result = apply_content_suggestion(source, output, {"issue_id": issue_id, "paragraph_index": paragraph_index, "original_text": original, "suggested_text": suggested, "issue_type": issue_type, "reason": reason, "confidence": confidence})
     if result.get("status") == "conflict":
@@ -146,11 +340,26 @@ async def apply_suggestion(
 
 
 @app.get("/preview/{filename}")
-def preview_file(filename: str) -> dict[str, str]:
+def preview_file(filename: str, user: User | None = Depends(require_user_if_enabled), db: Session = Depends(get_db)) -> dict[str, str]:
     target = OUTPUT_DIR / Path(filename).name
     if not target.exists():
         raise HTTPException(status_code=404, detail="没有找到可预览的 Word 文件。")
+    ensure_artifact_access(filename, user, db)
     return build_docx_preview(target)
+
+
+def ensure_artifact_access(filename: str, user: User | None, db: Session) -> None:
+    if user is None:
+        return
+    artifact = db.scalar(
+        select(Artifact)
+        .join(Artifact.task)
+        .join(Task.project)
+        .join(Project.workspace)
+        .where(Artifact.file_path == str(OUTPUT_DIR / Path(filename).name), Workspace.owner_id == user.id)
+    )
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="没有找到属于当前用户的文件。")
 
 
 def save_docx(file: UploadFile, directory: Path, request_id: UUID) -> StoredUpload:

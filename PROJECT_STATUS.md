@@ -6,7 +6,7 @@
 
 中文定位：**学术文档可信智能处理 Agent**
 
-当前阶段：**V2 第二次大升级正式验收完成 / Release Freeze**
+当前阶段：**Day 2 SaaS Task 生命周期接入完成**
 
 验收日期：**2026-09-08**
 
@@ -14,7 +14,11 @@
 
 正式结论：**READY**
 
-PaperForge V2 核心开发已经完成。当前进入 Release Freeze，不继续扩展 P3。后续仅允许封版文档、品牌包装、部署稳定性和 blocking regression 修复。
+PaperForge V2 核心开发已经完成；Day 1 SaaS 基础升级已在保持 Agent Pipeline 兼容的前提下完成。当前已具备 PostgreSQL/SQLAlchemy/Alembic 元数据层、JWT 认证、Workspace/Task 基础隔离和最小 SaaS 前端入口。
+
+Day 1 SaaS 验收结果：后端 pytest 9 passed，前端 build PASS，SaaS 专项测试 4 passed，docker compose config PASS。Docker 镜像实际构建待 Docker Desktop daemon 启动后复验。
+
+Day 2 Task 生命周期验收结果：新增认证 `POST /tasks` 编排入口，现有 Agent Pipeline 保持不变；Task 状态支持 pending → running → completed / failed，trace、score、输出 DOCX、JSON report 自动持久化为 Task/Artifact；Dashboard 已接入真实任务列表和详情页。SaaS 测试 6 passed，全量 pytest 11 passed，前端 build PASS。
 
 V2 第二次大升级正式验收结果：26 项核心能力 PASS；A～F 端到端场景 PASS；Safety Audit、Provenance / Verification、Score Credibility、Frontend build、Real DOCX Regression 10/10、AI failure fallback 和 Legacy compatibility 均 PASS；0 warning，0 blocking FAIL。
 

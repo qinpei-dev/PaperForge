@@ -17,6 +17,46 @@
 - frontend integration
 - real DOCX regression 10/10 PASS
 
+## [DONE] PaperForge Day 1 SaaS 基础升级
+
+状态：**PASS**
+
+完成：
+
+- SQLAlchemy ORM 与 Alembic 初始迁移
+- PostgreSQL Docker service
+- User / Workspace / Project / Task / Artifact 数据模型
+- scrypt 密码 hash 与 JWT Authentication
+- 默认 Workspace 自动创建
+- Workspace / Task / Artifact 用户隔离
+- 登录页、注册页和 Dashboard
+- SaaS 专项测试 4 passed，后端 pytest 9 passed，前端 build PASS
+
+边界：
+
+- 保留本地文件系统上传/输出逻辑
+- `AUTH_REQUIRED=false` 保留单机兼容模式
+- Docker 镜像构建需 Docker Desktop daemon 可用后复验
+
+## [DONE] PaperForge Day 2 Task 生命周期接入
+
+状态：**PASS**
+
+完成：
+
+- 新增认证的 `POST /tasks`，创建 pending 任务并同步接入现有 Agent Pipeline
+- Task 生命周期持久化为 pending → running → completed / failed
+- 自动保存 Agent trace、score、输出 DOCX Artifact 和 JSON report Artifact
+- `GET /tasks` / `GET /tasks/{task_id}` 补充任务中心字段与 trace 详情
+- 首页工作台切换为 Task API，Dashboard 展示最近任务并支持进入任务详情
+- 新增 Task 成功执行、Artifact 持久化和跨用户访问隔离测试
+- SaaS 测试 6 passed，全量 pytest 11 passed，前端 build PASS
+
+边界：
+
+- 当前仍为同步任务编排，不是异步队列或断点续跑
+- 保留 `/agent/run` 旧接口和 `AUTH_REQUIRED=false` 本地兼容模式
+
 ## [CURRENT] PaperForge Release Freeze
 
 当前公开版本：`v2.0-paperforge`。本轮仅进行公开包装、文档治理和低风险展示文案调整，不改变主链路。

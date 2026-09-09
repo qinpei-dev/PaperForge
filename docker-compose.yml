@@ -1,14 +1,42 @@
 name: paperforge
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-paperforge}
+      POSTGRES_USER: ${POSTGRES_USER:-paperforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-paperforge}
+    ports:
+      - "5432:5432"
+    volumes:
+      - paperforge-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-paperforge} -d ${POSTGRES_DB:-paperforge}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   backend:
     build:
       context: ./paper-ai/backend
       dockerfile: Dockerfile
     env_file:
       - ./paper-ai/backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-paperforge}:${POSTGRES_PASSWORD:-paperforge}@postgres:5432/${POSTGRES_DB:-paperforge}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-paperforge-secret-in-production}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
+      AUTH_REQUIRED: ${AUTH_REQUIRED:-true}
+      AUTO_CREATE_DB: "false"
     ports:
       - "8000:8000"
+    command: ["sh", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -35,3 +63,6 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  paperforge-postgres-data:

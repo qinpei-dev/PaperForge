@@ -297,10 +297,10 @@ export default function Home() {
     setResult(null);
     setMessage("PaperForge 正在按计划处理文档，并在输出后执行验证...");
     try {
-      const requestUrl = apiUrl("/agent/run");
+      const requestUrl = apiUrl("/tasks");
       const response = await fetch(requestUrl, { method: "POST", body: formData });
       const data = await readResponseData(response);
-      const status = typeof data.status === "string" ? data.status : "";
+      const status = typeof data.result_status === "string" ? data.result_status : typeof data.status === "string" ? data.status : "";
       if (status === "requires_confirmation") {
         setClassification(data.classification as Classification);
         setMessage(typeof data.message === "string" ? data.message : "该文档可能不适合直接套用论文格式，请确认后继续。");
@@ -310,7 +310,8 @@ export default function Home() {
         setMessage(apiErrorMessage(data, "Agent 执行失败。"));
         return;
       }
-      const nextResult = data as unknown as AgentResult;
+      const nextResult = (data.result || data) as AgentResult;
+      if (typeof data.task_id === "string") nextResult.task_id = data.task_id;
       setResult(nextResult);
       setClassification(nextResult.classification);
       setMessage("Agent 修改完成，正在生成在线预览。");
