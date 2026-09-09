@@ -33,6 +33,7 @@ from services.template_registry import (
     resolve_template_request,
     template_registry,
 )
+from services.template_persistence import bootstrap_template_registry
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -90,6 +91,11 @@ def startup_database() -> None:
         raise RuntimeError("JWT_SECRET_KEY must be configured in production.")
     if os.getenv("AUTO_CREATE_DB", "true").strip().lower() == "true":
         init_db()
+    db = SessionLocal()
+    try:
+        bootstrap_template_registry(db)
+    finally:
+        db.close()
 
 
 @app.get("/health")
@@ -102,13 +108,16 @@ def list_templates(
     school: str | None = Query(None),
     document_type: str | None = Query(None),
     status: str | None = Query("active"),
+    db: Session = Depends(get_db),
 ) -> dict[str, object]:
     if status is not None and status not in TEMPLATE_STATUSES:
         raise HTTPException(status_code=422, detail="status 必须是 active、deprecated 或 disabled。")
-    templates = template_registry.list(school=school, document_type=document_type, status=status)
-    default_template = template_registry.resolve()
+    bootstrap_template_registry(db)
+    persisted_registry = template_registry
+    templates = persisted_registry.list(school=school, document_type=document_type, status=status)
+    default_template = persisted_registry.resolve()
     return {
-        "default_template_id": template_registry.default_template_id,
+        "default_template_id": persisted_registry.default_template_id,
         "default_template_version": default_template.definition.version,
         "templates": [item.public_dict() for item in templates],
     }
@@ -252,7 +261,7 @@ async def create_task(
     request_id = uuid4()
     paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
     template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
-    selected_template = resolve_template_or_422(template_upload, template_id, template_version)
+    selected_template = resolve_template_or_422(db, template_upload, template_id, template_version)
     project = get_or_create_default_project(db, user)
     task = Task(project_id=project.id, status="pending", paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path), agent_trace=[template_trace_item(selected_template)])
     db.add(task)
@@ -294,7 +303,7 @@ async def run_agent(
     request_id = uuid4()
     paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
     template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
-    selected_template = resolve_template_or_422(template_upload, template_id, template_version)
+    selected_template = resolve_template_or_422(db, template_upload, template_id, template_version)
     task = None
     if user is not None:
         project = get_or_create_default_project(db, user)
@@ -336,11 +345,13 @@ def publish_task_event(task_id: str, event_type: str, **payload: object) -> None
 
 
 def resolve_template_or_422(
+    db: Session,
     template_upload: StoredUpload | None,
     template_id: str | None,
     template_version: str | None,
 ) -> ResolvedTemplate:
     try:
+        bootstrap_template_registry(db)
         return resolve_template_request(
             template_path=template_upload.path if template_upload else None,
             template_id=template_id.strip() if template_id and template_id.strip() else None,

@@ -6,7 +6,9 @@
 
 中文定位：**学术文档可信智能处理 Agent**
 
-当前阶段：**Day9-P0 Multi-template Template Registry 完成，等待用户验收**
+当前阶段：**Day9-P1 Template Persistence 完成，等待用户验收**
+
+Day9-P1 最新增量：**Template Persistence 已完成**。新增 SQLAlchemy `Template` 模型与 `(template_id, version)` 数据库级唯一约束、Alembic `0004` migration、Template Repository 和 Persistence Service。内置模板以幂等 bootstrap 写入数据库且不覆盖已有 status；Registry 在 startup 和 API 解析前从持久化数据刷新。`GET /templates`、`POST /tasks`、`POST /agent/run` 已使用 DB Registry；运行时新增模板无需改 Python 静态定义即可解析，legacy upload 仍保持 ephemeral。未引入 tenant、RBAC、用户模板管理或对象存储。验收结果：后端 pytest 52 passed，Python compileall、Alembic upgrade 至 0004、frontend build、git diff check PASS。
 
 Day9-P0 最新增量：**Multi-template Template Registry 已完成**。新增统一内存 Registry、稳定 template identity、版本/status/source/locator/metadata、精确与元数据解析、禁用与歧义保护；内置通用默认规则和版本化 bundled DOCX。`GET /templates`、`POST /tasks`、`POST /agent/run` 已最小接入，result、task state、Agent Trace、报告和任务详情可追踪实际模板 ID/version。旧请求不传 `template_id` 继续走兼容默认，旧模板上传继续可用；未修改数据库结构、Executor 或 SSE 协议。验收结果：后端 pytest 47 passed，Python compileall、frontend build、git diff check PASS。
 

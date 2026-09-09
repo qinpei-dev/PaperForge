@@ -1,5 +1,23 @@
 # TODO
 
+## [DONE] PaperForge Day9-P1 — Template Persistence
+
+状态：**PASS（等待用户验收）**
+
+完成：
+
+- 新增正式 `Template` SQLAlchemy 模型，使用 `(template_id, version)` 数据库唯一约束、JSON metadata、状态和时间戳。
+- 新增 Alembic `0004_day9_template_persistence` migration。
+- 新增最小 `TemplateRepository`，支持 create、get、versions、list/filter、status 更新、exists 与 resolve candidates。
+- 新增 Persistence Service：内置模板首次 bootstrap 写入，后续启动不重复插入且绝不覆盖已存在模板的 status。
+- P0 Registry 保持 register/get/list/resolve 语义；startup 与 API 请求从 DB 刷新 Registry。
+- `GET /templates`、`POST /tasks`、`POST /agent/run` 现由持久化 Registry 解析。
+- 验证动态插入 `test-university-thesis / 2030.1` 后可 list/resolve，无需修改静态 Python 模板定义。
+- legacy uploaded template 继续是 ephemeral compatibility path，不写入正式表。
+- 新增 `test_template_persistence.py`；后端 pytest 52 passed，Python compileall、Alembic upgrade 到 `0004`、frontend build、git diff check PASS。
+
+下一步：等待 Day9-P1 用户验收；本轮暂不 commit、不 push、不创建 tag。
+
 ## [DONE] PaperForge Day9-P0 — Multi-template Template Registry
 
 状态：**PASS（等待用户验收）**

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Float, ForeignKey, JSON, String, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -80,3 +80,21 @@ class Artifact(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     task: Mapped[Task] = relationship(back_populates="artifacts")
+
+
+class Template(Base):
+    __tablename__ = "templates"
+    __table_args__ = (UniqueConstraint("template_id", "version", name="uq_templates_template_id_version"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    template_id: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    version: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(300), nullable=False)
+    school: Mapped[str] = mapped_column(String(200), nullable=False)
+    document_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active", index=True)
+    source: Mapped[str] = mapped_column(String(100), nullable=False)
+    template_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    template_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

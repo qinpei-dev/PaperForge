@@ -113,6 +113,17 @@ class TemplateRegistry:
             self._definitions[key] = stored
             return stored.clone()
 
+    def replace(self, definitions: Iterable[TemplateDefinition]) -> None:
+        """Atomically replace runtime entries with definitions loaded from persistence."""
+        replacement: dict[tuple[str, str], TemplateDefinition] = {}
+        for definition in definitions:
+            key = (definition.template_id, definition.version)
+            if key in replacement:
+                raise TemplateRegistryError(f"duplicate template in replacement: {definition.template_id}@{definition.version}")
+            replacement[key] = definition.clone()
+        with self._lock:
+            self._definitions = replacement
+
     def get(self, template_id: str, version: str | None = None) -> TemplateDefinition:
         with self._lock:
             candidates = [item for (item_id, _), item in self._definitions.items() if item_id == template_id]
@@ -197,8 +208,7 @@ def _matches_metadata(definition: TemplateDefinition, requested: dict[str, Any])
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_TEMPLATE_ID = "paperforge-general-academic"
 
-template_registry = TemplateRegistry(
-    (
+BUILTIN_TEMPLATE_DEFINITIONS = (
         TemplateDefinition(
             template_id=DEFAULT_TEMPLATE_ID,
             name="PaperForge 通用学术论文规范",
@@ -231,7 +241,9 @@ template_registry = TemplateRegistry(
             template_path=_BACKEND_DIR / "templates" / "template_sample.docx",
             metadata={"family": "paperforge-standard-thesis"},
         ),
-    ),
+    )
+template_registry = TemplateRegistry(
+    BUILTIN_TEMPLATE_DEFINITIONS,
     default_template_id=DEFAULT_TEMPLATE_ID,
 )
 
