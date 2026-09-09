@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Generator
 
 import pytest
@@ -88,7 +89,12 @@ def test_task_workflow_stage_api_and_isolation(client, monkeypatch: pytest.Monke
     response = test_client.post("/tasks", headers=headers(owner), files={"paper": ("paper.docx", b"fake", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}, data={"mode": "local", "allow_non_paper": "true"})
     assert response.status_code == 201
     task_id = response.json()["task_id"]
-    detail = test_client.get(f"/tasks/{task_id}", headers=headers(owner))
+    detail = None
+    for _ in range(20):
+        detail = test_client.get(f"/tasks/{task_id}", headers=headers(owner))
+        if detail.json().get("status") == "completed":
+            break
+        time.sleep(0.05)
     assert detail.status_code == 200
     assert detail.json()["status"] == "completed"
     assert detail.json()["workflow_stage"] == "completed"
@@ -129,7 +135,12 @@ def test_failed_task_persists_failed_workflow_stage(client, monkeypatch: pytest.
     response = test_client.post("/tasks", headers=headers(owner), files={"paper": ("paper.docx", b"fake", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}, data={"mode": "local", "allow_non_paper": "true"})
     assert response.status_code == 201
     task_id = response.json()["task_id"]
-    detail = test_client.get(f"/tasks/{task_id}", headers=headers(owner)).json()
+    detail = None
+    for _ in range(20):
+        detail = test_client.get(f"/tasks/{task_id}", headers=headers(owner)).json()
+        if detail.get("status") == "failed":
+            break
+        time.sleep(0.05)
     assert detail["status"] == "failed"
     assert detail["workflow_stage"] == "failed"
     db = sessions(); saved = db.get(Task, task_id)

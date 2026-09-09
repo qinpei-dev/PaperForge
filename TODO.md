@@ -87,6 +87,24 @@
 
 验收结果：Day 4 新增测试通过，全量 `pytest` 16 passed，frontend `npm run build` PASS，`compileall` PASS，Alembic migration PASS，Compose config PASS，`git diff --check` PASS。
 
+## [DONE] PaperForge Day 5 轻量异步任务执行
+
+状态：**PASS**
+
+完成：
+
+- `POST /tasks` 创建任务后立即返回 `task_id`、`pending` 状态，不再占用同步 HTTP 生命周期执行 Agent。
+- 新增进程内 `TaskWorker`，无 Redis/Celery/Kubernetes；worker 使用独立数据库 session 执行现有 Agent Pipeline。
+- 保留 Planner / Executor / Verifier 核心逻辑；阶段回调继续持久化 analyzing → planning → executing → verifying → completed / failed。
+- 后台保存 Agent trace、评分、DOCX/report Artifact，并捕获异常写入 failed 状态。
+- Task Detail 增加 2 秒轮询，展示 status、workflow_stage、progress，完成或失败后自动停止轮询。
+- 首页工作台创建任务后跳转 Task Detail；`/agent/run` 继续保持同步兼容。
+- 新增异步创建、后台执行、状态变化、失败处理和用户隔离测试。
+
+验收结果：全量 `pytest` 19 passed，frontend `npm run build` PASS，`compileall` PASS，`git diff --check` PASS。
+
+当前限制：worker 仅为单进程内存线程池；进程重启不会恢复运行中的任务，不提供跨实例调度、checkpoint/resume 或重试队列。生产多副本部署仍需后续引入持久化队列方案。
+
 ## [CURRENT] PaperForge Release Freeze
 
 当前公开版本：`v2.0-paperforge`。本轮仅进行公开包装、文档治理和低风险展示文案调整，不改变主链路。

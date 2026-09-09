@@ -6,7 +6,7 @@
 
 中文定位：**学术文档可信智能处理 Agent**
 
-当前阶段：**Day 4 Agent Runtime 增强完成**
+当前阶段：**Day 5 轻量异步任务执行与进度刷新完成**
 
 Day 3 已在不改变 Planner / Executor / Verifier 核心逻辑的前提下完成 Agent Trace 驱动的工作流状态展示、Task Detail/Dashboard 产品化、Storage 抽象、Compose 健康检查与部署文档整理。
 
@@ -25,6 +25,8 @@ Day 2 Task 生命周期验收结果：新增认证 `POST /tasks` 编排入口，
 Day 3 验收结果：状态展示升级为 pending → analyzing → planning → executing → verifying → completed / failed；已补齐论文名、前后评分、Trace workflow、DOCX/report Artifact 下载、Dashboard 统计、LocalStorage/S3Storage 接口和生产配置说明。pytest 11 passed，前端 build PASS，compileall PASS，Alembic head PASS，Compose config PASS，diff check PASS。
 
 Day 4 验收结果：新增可空 `Task.workflow_stage` 与 Alembic 0003 迁移；`run_agent_pipeline(progress_callback=...)` 保持旧调用兼容并提供 analyzing → planning → executing → verifying → completed / failed 回调；SaaS Task 实时持久化阶段，API 返回 workflow_stage/progress，Task Detail/Dashboard 展示当前阶段；生产模式缺失 JWT_SECRET_KEY 时禁止启动，本地模式保留兼容 fallback。Day 4 测试 5 项新增、全量 pytest 16 passed，frontend build PASS，compileall PASS，migration PASS，Compose config PASS，diff check PASS。
+
+Day 5 验收结果：`POST /tasks` 创建任务后立即返回 `task_id` 和 pending 状态；新增进程内轻量 `TaskWorker`，使用独立 SQLAlchemy session 后台执行现有 Agent Pipeline，持续写入 status/workflow_stage，并保存 Artifact、捕获异常；Task Detail 以 2 秒轮询自动刷新，终态自动停止；`/agent/run` 保持同步旧语义。Day 5 测试新增 3 项、全量 pytest 19 passed，frontend build PASS，compileall PASS，git diff check PASS。
 
 V2 第二次大升级正式验收结果：26 项核心能力 PASS；A～F 端到端场景 PASS；Safety Audit、Provenance / Verification、Score Credibility、Frontend build、Real DOCX Regression 10/10、AI failure fallback 和 Legacy compatibility 均 PASS；0 warning，0 blocking FAIL。
 

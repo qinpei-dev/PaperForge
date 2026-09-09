@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type AgentStep = { name: string; status: "running" | "done" | "error"; message: string };
 type AgentTraceItem = {
@@ -203,6 +204,7 @@ function networkErrorMessage(error: unknown, fallback: string, requestUrl?: stri
 }
 
 export default function Home() {
+  const router = useRouter();
   const [paperFile, setPaperFile] = useState<File | null>(null);
   const [paperFilename, setPaperFilename] = useState("");
   const [templateFile, setTemplateFile] = useState<File | null>(null);
@@ -308,6 +310,11 @@ export default function Home() {
       }
       if (!response.ok || status === "error") {
         setMessage(apiErrorMessage(data, "Agent 执行失败。"));
+        return;
+      }
+      if (status === "pending" && typeof data.task_id === "string") {
+        setMessage("任务已创建，正在后台处理，即将进入任务详情。");
+        router.push(`/tasks/${encodeURIComponent(data.task_id)}`);
         return;
       }
       const nextResult = (data.result || data) as AgentResult;

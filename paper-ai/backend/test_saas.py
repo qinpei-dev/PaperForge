@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from collections.abc import Generator
 
 import pytest
@@ -133,9 +135,14 @@ def test_create_task_runs_pipeline_and_persists_artifacts(
     )
     assert response.status_code == 201, response.text
     payload = response.json()
-    assert payload["status"] == "completed"
+    assert payload["status"] == "pending"
 
-    detail = client.get(f"/tasks/{payload['task_id']}", headers=auth_header(owner))
+    detail = None
+    for _ in range(20):
+        detail = client.get(f"/tasks/{payload['task_id']}", headers=auth_header(owner))
+        if detail.json().get("status") == "completed":
+            break
+        time.sleep(0.05)
     assert detail.status_code == 200
     task = detail.json()
     assert task["status"] == "completed"

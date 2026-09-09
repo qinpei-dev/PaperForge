@@ -21,6 +21,8 @@ paper-ai/backend/templates/*.docx
 paper-ai/backend/task_states/
 paper-ai/backend/regression_results/*
 !paper-ai/backend/regression_results/.gitkeep
+paperforge.db
+paper-ai/backend/paperforge.db
 
 tools/
 sites-demo/

@@ -21,11 +21,12 @@ from services.content_review import apply_content_suggestion
 from services.review_evidence import aggregate_review_evidence, content_score_summary
 from auth import auth_is_required, create_access_token, get_current_user, get_optional_current_user, hash_password, validate_email, verify_password
 from db.models import Artifact, Project, Task, User, Workspace
-from db.session import get_db, init_db
+from db.session import SessionLocal, get_db, init_db
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
+from services.task_worker import task_worker
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -182,7 +183,7 @@ async def create_task(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
-    """Create and synchronously execute a SaaS task through the existing pipeline."""
+    """Create a task and hand execution to the lightweight in-process worker."""
     if mode not in {"local", "ai"}:
         raise HTTPException(status_code=422, detail="mode 必须是 local 或 ai。")
     request_id = uuid4()
@@ -193,15 +194,16 @@ async def create_task(
     db.add(task)
     db.commit()
     db.refresh(task)
-    result = execute_persisted_task(
-        task=task,
-        db=db,
-        paper_upload=paper_upload,
-        template_upload=template_upload,
-        allow_non_paper=allow_non_paper,
-        mode=mode,
+    task_worker.submit(
+        run_task_in_worker,
+        task.id,
+        paper_upload,
+        template_upload,
+        allow_non_paper,
+        mode,
+        sessionmaker(bind=db.get_bind(), autoflush=False, expire_on_commit=False),
     )
-    return {"task_id": task.id, "status": task.status, "result_status": result.get("status"), "result": result}
+    return {"task_id": task.id, "status": "pending", "result_status": "pending"}
 
 
 @app.post("/document/classify")
@@ -309,6 +311,39 @@ def execute_persisted_task(
     db.commit()
     db.refresh(task)
     return result
+
+
+def run_task_in_worker(
+    task_id: str,
+    paper_upload: StoredUpload,
+    template_upload: StoredUpload | None,
+    allow_non_paper: bool,
+    mode: str,
+    session_factory: sessionmaker[Session] = SessionLocal,
+) -> None:
+    """Run one queued task with a session owned by the worker thread."""
+    db = session_factory()
+    try:
+        task = db.get(Task, task_id)
+        if task is None:
+            return
+        execute_persisted_task(
+            task=task,
+            db=db,
+            paper_upload=paper_upload,
+            template_upload=template_upload,
+            allow_non_paper=allow_non_paper,
+            mode=mode,
+        )
+    except Exception as exc:
+        task = db.get(Task, task_id)
+        if task is not None:
+            task.status = "failed"
+            task.workflow_stage = "failed"
+            task.agent_trace = [{"step": "task_worker", "status": "error", "message": str(exc)}]
+            db.commit()
+    finally:
+        db.close()
 
 
 def workflow_progress(workflow_stage: str | None, status: str) -> int:
