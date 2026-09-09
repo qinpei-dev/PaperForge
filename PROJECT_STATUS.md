@@ -6,7 +6,7 @@
 
 中文定位：**学术文档可信智能处理 Agent**
 
-当前阶段：**Day 5 轻量异步任务执行与进度刷新完成**
+当前阶段：**Day 6 Agent Event Stream 与 SSE 实时工作流完成**
 
 Day 3 已在不改变 Planner / Executor / Verifier 核心逻辑的前提下完成 Agent Trace 驱动的工作流状态展示、Task Detail/Dashboard 产品化、Storage 抽象、Compose 健康检查与部署文档整理。
 
@@ -28,11 +28,13 @@ Day 4 验收结果：新增可空 `Task.workflow_stage` 与 Alembic 0003 迁移�
 
 Day 5 验收结果：`POST /tasks` 创建任务后立即返回 `task_id` 和 pending 状态；新增进程内轻量 `TaskWorker`，使用独立 SQLAlchemy session 后台执行现有 Agent Pipeline，持续写入 status/workflow_stage，并保存 Artifact、捕获异常；Task Detail 以 2 秒轮询自动刷新，终态自动停止；`/agent/run` 保持同步旧语义。Day 5 测试新增 3 项、全量 pytest 19 passed，frontend build PASS，compileall PASS，git diff check PASS。
 
+Day 6 验收结果：新增进程内 `TaskEventStore`，按 `task_id` 保存有界事件历史并支持并发订阅；`GET /tasks/{task_id}/events` 在完成用户归属校验后返回 SSE，回放事件并在 completed/failed 后自动关闭；TaskWorker 先持久化 DOCX/report Artifact、发布 artifact_created，再提交 completed 并发布 task_completed；失败 SSE 使用安全文案，完整异常仅保留在服务端日志和内部任务记录；Task Detail 优先使用认证 fetch-stream SSE，仅在连接失败或非终态断流时回退 2 秒轮询。终态事件历史有 TTL 和最大保留数量限制。测试为每个异步用例隔离 Worker 和 SQLite 文件数据库，并在 teardown 前等待任务结束；Day 6 全量 pytest 连续两次均为 24 passed，frontend build PASS，compileall PASS，docker compose config PASS（临时注入必需校验变量），git diff check PASS。
+
 V2 第二次大升级正式验收结果：26 项核心能力 PASS；A～F 端到端场景 PASS；Safety Audit、Provenance / Verification、Score Credibility、Frontend build、Real DOCX Regression 10/10、AI failure fallback 和 Legacy compatibility 均 PASS；0 warning，0 blocking FAIL。
 
 ## 当前边界
 
-深度语义润色仍有限；复杂目录、脚注、公式、复杂表格、交叉引用、异步恢复、checkpoint/resume 和审批后继续执行尚未完成。
+深度语义润色仍有限；复杂目录、脚注、公式、复杂表格、交叉引用、异步恢复、checkpoint/resume 和审批后继续执行尚未完成。事件流仅保存在单进程内存，进程重启或跨实例不会保留历史；终态事件历史按 TTL / 上限清理；轮询仅作为 SSE fallback。
 
 ## 历史开发状态
 

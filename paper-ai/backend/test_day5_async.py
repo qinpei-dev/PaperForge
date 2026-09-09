@@ -7,17 +7,17 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from db.base import Base
 from db.models import Task
 from db.session import get_db
 from main import app
+from services.task_worker import TaskWorker
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> Generator[tuple[TestClient, sessionmaker[Session]], None, None]:
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Generator[tuple[TestClient, sessionmaker[Session]], None, None]:
+    engine = create_engine(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
     Base.metadata.create_all(engine)
     sessions = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
@@ -30,8 +30,13 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[tuple[TestClient, sessi
 
     app.dependency_overrides[get_db] = override_get_db
     monkeypatch.setattr("main.SessionLocal", sessions)
+    worker = TaskWorker()
+    monkeypatch.setattr("main.task_worker", worker)
     with TestClient(app) as test_client:
-        yield test_client, sessions
+        try:
+            yield test_client, sessions
+        finally:
+            worker.shutdown()
     app.dependency_overrides.clear()
     engine.dispose()
 

@@ -3,15 +3,16 @@ from __future__ import annotations
 import os
 import json
 import shutil
+import logging
 from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from services.document_classifier import classify_document
 from services.agent_pipeline import run_agent_pipeline
@@ -24,6 +25,7 @@ from db.models import Artifact, Project, Task, User, Workspace
 from db.session import SessionLocal, get_db, init_db
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
 from services.task_worker import task_worker
+from services.task_events import has_events, publish_event, subscribe_event
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -34,6 +36,7 @@ STORAGE = LocalStorage(BASE_DIR)
 UPLOAD_DIR = STORAGE.path_for("uploads")
 TEMPLATE_DIR = BASE_DIR / "templates"
 OUTPUT_DIR = STORAGE.path_for("outputs")
+LOGGER = logging.getLogger(__name__)
 
 for directory in (UPLOAD_DIR, TEMPLATE_DIR, OUTPUT_DIR):
     directory.mkdir(exist_ok=True)
@@ -174,6 +177,40 @@ def get_task(task_id: str, user: User = Depends(get_current_user), db: Session =
     return {"id": task.id, "task_id": task.id, "project_id": task.project_id, "status": task.status, "workflow_stage": task.workflow_stage, "progress": workflow_progress(task.workflow_stage, task.status), "paper_name": task.paper_name or task.project.title, "uploaded_file": task.uploaded_file, "trace": task.agent_trace, "agent_trace": task.agent_trace, "workflow_steps": build_workflow_steps(task.agent_trace, task.workflow_stage, task.status), "score_history": {"before": task.before_score, "after": task.score}, "score": task.score, "created_at": task.created_at, "artifacts": [{"id": item.id, "file_path": item.file_path, "file_type": item.file_type, "download_url": f"/artifacts/{item.id}/download"} for item in task.artifacts]}
 
 
+@app.get("/tasks/{task_id}/events")
+def task_events(
+    task_id: str,
+    after: int = Query(0, ge=0),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    statement = select(Task).join(Task.project).join(Project.workspace).where(Task.id == task_id, Workspace.owner_id == user.id)
+    task = db.scalar(statement)
+    if task is None:
+        raise HTTPException(status_code=404, detail="没有找到该任务。")
+
+    def stream():
+        if task.status in {"completed", "failed"} and not has_events(task_id):
+            event_type = "task_completed" if task.status == "completed" else "task_failed"
+            payload = {"status": task.status, "workflow_stage": task.workflow_stage, "progress": workflow_progress(task.workflow_stage, task.status), "message": "任务已完成。" if task.status == "completed" else "任务处理失败，请稍后重试。", "timestamp": datetime.now().astimezone().isoformat(), "event_type": event_type}
+            yield "event: workflow_update\n"
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+            return
+        for event in subscribe_event(task_id, after_sequence=after):
+            if event is None:
+                yield ": keep-alive\n\n"
+                continue
+            yield f"id: {event.sequence}\n"
+            yield "event: workflow_update\n"
+            yield f"data: {json.dumps(event.payload, ensure_ascii=False, default=str)}\n\n"
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.post("/tasks", status_code=201)
 async def create_task(
     paper: UploadFile = File(...),
@@ -194,6 +231,7 @@ async def create_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    publish_task_event(task.id, "task_created", status="pending", progress=0, message="任务已创建，等待 Agent 启动。")
     task_worker.submit(
         run_task_in_worker,
         task.id,
@@ -257,6 +295,14 @@ async def run_agent(
     return result
 
 
+def publish_task_event(task_id: str, event_type: str, **payload: object) -> None:
+    """Event delivery is observational and must not interrupt task execution."""
+    try:
+        publish_event(task_id, event_type, **payload)
+    except Exception:
+        LOGGER.exception("Unable to publish task event %s for %s", event_type, task_id)
+
+
 def execute_persisted_task(
     task: Task,
     db: Session,
@@ -268,13 +314,18 @@ def execute_persisted_task(
     """Run the existing Agent and persist only orchestration metadata and artifacts."""
     task.status = "running"
     db.commit()
+    publish_task_event(task.id, "task_started", status="running", progress=0, message="Agent 已启动。")
 
     def on_progress(stage: str) -> None:
-        if stage not in {"analyzing", "planning", "executing", "verifying", "completed", "failed"}:
+        if stage not in {"analyzing", "planning", "executing", "verifying"}:
             return
         task.workflow_stage = stage
-        task.status = "completed" if stage == "completed" else ("failed" if stage == "failed" else "running")
+        task.status = "running"
         db.commit()
+        messages = {"analyzing": "文档解析完成", "planning": "模板分析与格式规划完成", "executing": "正在执行修改", "verifying": "正在进行质量验证"}
+        progress = workflow_progress(stage, task.status)
+        publish_task_event(task.id, "workflow_stage_changed", status=task.status, workflow_stage=stage, progress=progress, message=messages.get(stage, stage))
+        publish_task_event(task.id, "progress_updated", status=task.status, workflow_stage=stage, progress=progress, message=f"当前进度 {progress}%")
 
     try:
         result = run_agent_pipeline(
@@ -288,28 +339,44 @@ def execute_persisted_task(
             progress_callback=on_progress,
         )
     except Exception as exc:
+        LOGGER.exception("Persisted task %s failed during orchestration", task.id)
         task.status = "failed"
         task.workflow_stage = "failed"
         task.agent_trace = [{"step": "task_orchestrator", "status": "error", "message": str(exc)}]
         db.commit()
+        publish_task_event(task.id, "task_failed", status="failed", workflow_stage="failed", progress=0, message="任务处理失败，请稍后重试。")
         return {"status": "error", "error": str(exc), "agent_trace": task.agent_trace}
 
     task.agent_trace = result.get("agent_trace")
     task.before_score = result.get("before_score") if isinstance(result.get("before_score"), (int, float)) else None
     task.score = result.get("after_score") if isinstance(result.get("after_score"), (int, float)) else None
     result_status = str(result.get("status") or "error")
-    task.status = "completed" if result_status == "ok" else ("pending" if result_status == "requires_confirmation" else "failed")
-    task.workflow_stage = "completed" if result_status == "ok" else ("analyzing" if result_status == "requires_confirmation" else "failed")
+    if result_status == "error":
+        LOGGER.error("Persisted task %s failed: %s", task.id, result.get("error") or "unknown error")
+    task.status = "running" if result_status == "ok" else ("pending" if result_status == "requires_confirmation" else "failed")
+    task.workflow_stage = "verifying" if result_status == "ok" else ("analyzing" if result_status == "requires_confirmation" else "failed")
+    artifact_count = 0
     filename = result.get("filename")
     if isinstance(filename, str):
         task.artifacts.append(Artifact(file_path=str(OUTPUT_DIR / Path(filename).name), file_type="docx"))
+        artifact_count += 1
     report = result.get("modification_report")
     if isinstance(report, dict):
         report_path = OUTPUT_DIR / f"{task.id}_report.json"
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         task.artifacts.append(Artifact(file_path=str(report_path), file_type="report"))
+        artifact_count += 1
     db.commit()
     db.refresh(task)
+    if artifact_count:
+        publish_task_event(task.id, "artifact_created", status=task.status, workflow_stage=task.workflow_stage, progress=workflow_progress(task.workflow_stage, task.status), message="处理产物已生成。", artifact_count=artifact_count)
+    if result_status == "ok":
+        task.status = "completed"
+        task.workflow_stage = "completed"
+        db.commit()
+        publish_task_event(task.id, "task_completed", status="completed", workflow_stage="completed", progress=100, message="任务已完成。")
+    elif task.status == "failed":
+        publish_task_event(task.id, "task_failed", status="failed", workflow_stage="failed", progress=0, message="任务处理失败，请稍后重试。")
     return result
 
 
@@ -336,12 +403,14 @@ def run_task_in_worker(
             mode=mode,
         )
     except Exception as exc:
+        LOGGER.exception("Task worker failed for task %s", task_id)
         task = db.get(Task, task_id)
         if task is not None:
             task.status = "failed"
             task.workflow_stage = "failed"
             task.agent_trace = [{"step": "task_worker", "status": "error", "message": str(exc)}]
             db.commit()
+            publish_task_event(task.id, "task_failed", status="failed", workflow_stage="failed", progress=0, message="任务处理失败，请稍后重试。")
     finally:
         db.close()
 

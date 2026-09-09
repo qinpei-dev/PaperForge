@@ -16,5 +16,9 @@ class TaskWorker:
     def submit(self, function: Callable[..., T], *args: object, **kwargs: object) -> Future[T]:
         return self._executor.submit(function, *args, **kwargs)
 
+    def shutdown(self, wait: bool = True) -> None:
+        """Stop accepting work and optionally wait for submitted tasks to finish."""
+        self._executor.shutdown(wait=wait)
+
 
 task_worker = TaskWorker()

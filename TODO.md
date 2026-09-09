@@ -105,6 +105,24 @@
 
 当前限制：worker 仅为单进程内存线程池；进程重启不会恢复运行中的任务，不提供跨实例调度、checkpoint/resume 或重试队列。生产多副本部署仍需后续引入持久化队列方案。
 
+## [DONE] PaperForge Day 6 Agent Event Stream
+
+状态：**PASS**
+
+完成：
+
+- 新增轻量进程内 `TaskEventStore`，按 `task_id` 隔离事件，支持多任务订阅、有限历史回放和并发等待。
+- 新增 `GET /tasks/{task_id}/events` SSE 接口，复用现有用户归属查询，发送 workflow_update 数据并在 completed/failed 后关闭。
+- TaskWorker 在创建、启动、阶段变化、产物生成、完成和失败节点发布事件，不改变 Planner / Executor / Verifier 和既有数据库持久化链路。
+- Task Detail 优先使用带 JWT 的流式 SSE；仅在连接失败或非终态断流时自动回退到原 2 秒轮询，并展示当前阶段、进度和实时 Agent 日志。
+- Artifact 创建和持久化完成后才提交 Task completed 并发布 task_completed；failed SSE 使用安全消息，完整异常只保留服务端日志和内部任务记录。
+- 终态事件历史增加 TTL 与最大保留数量限制，保持单进程内存事件流定位。
+- 新增自有任务订阅、跨用户隔离、Artifact-before-completed、失败脱敏、事件清理和前端 fallback 合约测试。
+
+验收结果：异步测试为每个用例隔离 Worker 和 SQLite 文件数据库，并在 teardown 前等待后台任务完成；全量 `pytest -q` 连续两次均 24 passed，frontend `npm run build` PASS，`compileall` PASS，`docker compose config` PASS（使用临时环境变量满足 compose 必填校验），`git diff --check` PASS。
+
+当前限制：事件不落库，进程重启会丢失事件历史；跨实例部署未提供共享事件总线；终态历史会按 TTL / 上限删除；前端仅在 SSE 不可用时使用轮询 fallback。
+
 ## [CURRENT] PaperForge Release Freeze
 
 当前公开版本：`v2.0-paperforge`。本轮仅进行公开包装、文档治理和低风险展示文案调整，不改变主链路。

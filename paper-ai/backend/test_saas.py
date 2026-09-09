@@ -8,19 +8,19 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from db.base import Base
 from db.models import Artifact, Project, Task, User, Workspace
 from db.session import get_db
 from main import app
+from services.task_worker import TaskWorker
 
 
 @pytest.fixture
-def saas_client(monkeypatch: pytest.MonkeyPatch) -> Generator[tuple[TestClient, sessionmaker[Session]], None, None]:
+def saas_client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Generator[tuple[TestClient, sessionmaker[Session]], None, None]:
     monkeypatch.setenv("AUTH_REQUIRED", "true")
     monkeypatch.setenv("AUTO_CREATE_DB", "false")
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    engine = create_engine(f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
     Base.metadata.create_all(engine)
     testing_session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
@@ -32,8 +32,14 @@ def saas_client(monkeypatch: pytest.MonkeyPatch) -> Generator[tuple[TestClient, 
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    monkeypatch.setattr("main.SessionLocal", testing_session)
+    worker = TaskWorker()
+    monkeypatch.setattr("main.task_worker", worker)
     with TestClient(app) as client:
-        yield client, testing_session
+        try:
+            yield client, testing_session
+        finally:
+            worker.shutdown()
     app.dependency_overrides.clear()
     engine.dispose()
 
