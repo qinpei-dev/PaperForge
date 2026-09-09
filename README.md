@@ -1,67 +1,112 @@
-# PaperForge — Verified Academic Document Agent
+# PaperForge
 
-PaperForge is an AI academic document agent for DOCX formatting and content review. It turns document cleanup into a verifiable workflow: **Plan → Execute → Verify → Human Review → Evidence**. It detects document structure, plans safe changes, applies low-risk formatting and content actions, re-reads the output DOCX, and explains what was changed, verified, deferred, or left for human review.
+> **Verified Academic Document Agent**
 
-It is built for academic document formatting and review—not automatic paper writing, deep rewriting, formal plagiarism checking, or arbitrary Word automation.
+PaperForge is a verified AI agent that transforms academic DOCX documents through **planning, execution, verification, and evidence reporting**. AI can assist with analysis and suggestions, but it is not treated as proof that a document was changed correctly: deterministic rules execute supported low-risk changes, the result is re-read, and every outcome remains traceable for human review.
 
-## Why PaperForge is more than a formatter or API wrapper
+**Explore:** [30-second demo](docs/DEMO_GUIDE.md) · [Architecture](docs/ARCHITECTURE_OVERVIEW.md) · [Limitations](docs/LIMITATIONS.md)
 
-The system does not treat an LLM response as proof that a document was changed correctly. A DOCX Document Model feeds a Rule Engine and Planner; the Executor applies target-aware changes; the Verifier reads the generated DOCX again and compares expected versus actual results. Provenance, risk policy, stale-conflict protection, fallback behavior, and Human-in-the-Loop decisions are kept in the result so users can see the basis for each outcome.
+**Engineering focus:** Verified Agent Loop · Deterministic Execution · LLM Optional · Human-in-the-loop · Evidence & Trace
 
-```text
-DOCX input
-  → Document Model
-  → Rule Engine + Planner
-  → Conflict Check
-  → Executor
-  → Re-read output DOCX
-  → Target-level Verification
-  → Decision / Human Review
-  → Provenance + Evidence
-  → Confirmed DOCX / Preview / Download
+![PaperForge real application overview](docs/assets/screenshots/real-web-2026-06-27/01_home_overview_real.png)
+
+*Real local application screenshot. The included demo uses a constructed, de-identified sample document; it is not a paper-generation or formal plagiarism-checking service.*
+
+## The problem
+
+Academic document formatting is often repetitive, error-prone, and difficult to audit. A black-box text response cannot establish that a Word document was safely changed, that its structure survived, or that an unsupported change was not silently applied.
+
+PaperForge turns this into an inspectable document-processing workflow. It supports common formatting and constrained content-review actions while preserving clear boundaries for complex or high-risk changes.
+
+## The verified approach
+
+```mermaid
+flowchart LR
+    A[DOCX input] --> B[Document Model]
+    B --> C[Rule Engine]
+    C --> D[Planner]
+    D --> E[Executor]
+    E --> F[Verification]
+    F --> G[Evidence Report]
+    F --> H{Decision}
+    H -->|Verified| I[Preview and download]
+    H -->|Needs review| J[Human-in-the-loop]
 ```
 
-## What it can do today
+PaperForge separates responsibilities deliberately:
 
-- Classify DOCX documents and request confirmation for non-standard inputs.
-- Use an optional DOCX template as a formatting reference, with safe fallback behavior.
-- Repair common title, body, font, spacing, indentation, margin, and basic caption formatting.
-- Review selected content issues with safe automatic fixes, explicit suggestions, and human-confirmation paths.
-- Check references, citations, figure/table numbering, and **重复风险检测 / 相似度预检**.
-- Separate safe automatic fixes, suggestions, and high-risk actions requiring human review.
-- Verify changes at target level where a reliable paragraph or section locator exists.
-- Preserve before / expected / after evidence, provenance, change summaries, and pending actions.
-- Provide local deterministic processing, AI-assisted review, AI failure fallback, online preview, and confirmed DOCX download.
+- **AI analyzes and proposes.** It can assist with language review, but does not receive unrestricted authority to rewrite a document.
+- **Rules plan and execute.** Deterministic, target-aware rules apply supported low-risk changes.
+- **Verification checks the output.** The generated DOCX is re-read and compared against expected results where reliable locators exist.
+- **Evidence explains the outcome.** Provenance records connect rules, plan steps, before/after values, execution, and verification.
 
-## Verified execution and safety boundaries
+This makes the system more than a formatter or an API wrapper: a suggestion is not reported as successful merely because a model produced it.
 
-PaperForge treats a suggestion as a suggestion until it is explicitly accepted and written to a new confirmed DOCX. A failed or unsupported verification does not become a successful score. High-risk facts, numbers, experimental results, conclusions, citations, methods, definitions, formulas, and ambiguous targets are not silently rewritten; they remain visible as Human Review items.
+## Core capabilities
 
-The current product does not promise:
+| Capability | What it provides |
+| --- | --- |
+| Document understanding | DOCX classification, normalized document model, template extraction, and document analysis. |
+| Safe execution | Low-risk formatting for titles, body text, fonts, spacing, indentation, margins, and selected captions. |
+| Verified Agent Loop | Rule-driven planning, conflict checks, target-aware execution, output re-read, and verification. |
+| Human-in-the-loop | Automatic handling for safe actions; suggestions and high-risk or ambiguous actions remain reviewable. |
+| Observability | Agent Trace, task state, modification reports, before/after evidence, provenance, and pending actions. |
+| Reliable fallback | Deterministic local mode; AI mode falls back without interrupting the main workflow when an LLM is unavailable. |
+| Delivery loop | Online preview and download of the resulting DOCX. |
 
-- fully automatic paper writing or deep academic rewriting;
-- reliable automation for every complex Word feature, including complex tables, fields, footnotes, formulas, cross-references, or table-of-contents internals;
-- formal plagiarism-checking services such as CNKI, 维普, or 万方;
-- autonomous multi-tenant SaaS, asynchronous recovery, checkpoint/resume, or a general-purpose agent platform.
+## Trust and control
 
-## Architecture
+### LLM is optional
 
-The public architecture is intentionally small and inspectable:
+Local mode remains deterministic and runs without an LLM (`ai_score = null`, `ai_used = false`). In AI mode, an unavailable or failed LLM falls back to local rules rather than breaking document processing. AI is used where it is useful—analysis and review—not as an unchecked document-editing authority.
 
-- `paper-ai/backend/main.py` — FastAPI upload, classify, run, preview, and download endpoints.
-- `paper-ai/backend/services/document_model.py` — normalized DOCX document representation.
-- `paper-ai/backend/services/rule_engine.py` — rules, evidence, risk, and supported actions.
-- `paper-ai/backend/services/planner.py` — deterministic execution plan and conflict normalization.
-- `paper-ai/backend/services/executor_adapter.py` — safe target-aware execution and provenance records.
-- `paper-ai/backend/services/verifier.py` — output DOCX re-read and target-level verification.
-- `paper-ai/backend/services/governance.py` — COMPLETE / REPLAN / HUMAN_REVIEW / FAIL decisions.
-- `paper-ai/frontend/app/page.tsx` — upload, workflow, verification, evidence, review, preview, and download experience.
+### Human-in-the-loop by policy
 
-See [the architecture reference](docs/ARCHITECTURE.md) and [the documentation index](docs/README.md).
+Low-risk, supported actions can be applied automatically. High-risk facts, numbers, experimental results, conclusions, citations, methods, definitions, formulas, and ambiguous targets are surfaced for review instead of being silently overwritten.
 
-## Evidence from real execution
+### Observable execution
 
-The current V2 acceptance baseline records:
+The result includes an Agent Trace plus evidence of what was planned, modified, verified, deferred, or left unresolved. Failed or unsupported verification is not represented as a successful result.
+
+![Agent Trace from a real application run](docs/assets/screenshots/real-web-2026-06-27/08_trace_expanded_real.png)
+
+![Verified result dashboard from a real application run](docs/assets/screenshots/real-web-2026-06-27/06_result_dashboard_real.png)
+
+The screenshots record a real local run on 2026-06-27. The displayed score change (`81 → 87`) belongs to that sample run and is not a general performance guarantee.
+
+## System architecture
+
+PaperForge is a deliberately small, inspectable architecture:
+
+```text
+Next.js frontend
+        ↓ upload, results, review, preview, download
+FastAPI API
+        ↓
+Agent runtime
+        ↓
+Document Model → Rule Engine → Planner → Executor → Verifier → Governance
+        ↓                                                    ↓
+DOCX storage                                      Provenance / Evidence / Trace
+```
+
+The frontend does not modify DOCX files directly. The backend maintains the document-processing boundary and exposes classify, run, preview, and download endpoints. See [Architecture Overview](docs/ARCHITECTURE_OVERVIEW.md) for the GitHub-friendly system view and [detailed architecture](docs/ARCHITECTURE.md) for implementation-level boundaries.
+
+## Demo
+
+The repository includes constructed, de-identified demo inputs, a template, and outputs from a real local run:
+
+- `demo_inputs/messy_paper_sample.docx`
+- `demo_inputs/template_sample.docx`
+- `demo_outputs/formatted_result_sample.docx`
+- `demo_outputs/report_sample.json`
+- `demo_outputs/agent_trace_sample.json`
+
+In about 30 seconds, upload the paper, select local mode, run the Agent, inspect the Trace and verification result, preview the output, and download the DOCX. Follow the [Demo Guide](docs/DEMO_GUIDE.md) for the exact flow and presentation notes.
+
+## Verification results
+
+The V2 acceptance baseline records:
 
 - 26 core capability checks passed;
 - end-to-end scenarios A–F passed;
@@ -69,11 +114,19 @@ The current V2 acceptance baseline records:
 - real DOCX regression: **10/10 PASS, 0 warnings, 0 blocking failures**;
 - frontend production build passed.
 
-These are repository test and acceptance results, not a claim that every DOCX will receive the same outcome. The application still recommends human review before submission.
+These are repository acceptance results, not a claim that every DOCX will receive the same outcome. Human review is still recommended before submission.
 
-## Technology
+## Known limitations
 
-FastAPI · Python · `python-docx` · Next.js · React · TypeScript · Docker Compose
+PaperForge is not a general Word automation system, a paper-writing tool, or an authority for plagiarism results. Complex Word features and unsupported targets remain subject to review. See [Limitations](docs/LIMITATIONS.md) for supported boundaries and non-goals.
+
+## Roadmap
+
+- Improve robustness for complex templates, references, and advanced DOCX structures.
+- Expand safe, evidence-backed document checks before widening automated modifications.
+- Improve content-review quality while retaining policy gates, verification, and human confirmation.
+
+The project is currently in V2 Release Freeze; roadmap work does not imply that the listed capabilities are available today.
 
 ## Quick start
 
@@ -106,7 +159,7 @@ Copy-Item paper-ai/backend/.env.example paper-ai/backend/.env
 docker compose up --build
 ```
 
-Set `NEXT_PUBLIC_API_BASE_URL` for a non-local backend and configure `CORS_ORIGINS` on the backend when the frontend is hosted elsewhere. See [Docker deployment](docs/DOCKER_DEPLOYMENT.md).
+Set `NEXT_PUBLIC_API_BASE_URL` for a non-local backend and configure `CORS_ORIGINS` when the frontend is hosted elsewhere. See [Docker deployment](docs/DOCKER_DEPLOYMENT.md).
 
 ## Verification commands
 
@@ -122,20 +175,25 @@ cd ../frontend
 npm run build
 ```
 
-The full DOCX regression entry point is `paper-ai/backend/run_real_doc_regression.py`; it uses the repository's test assets and writes results under the ignored regression output directory.
+`paper-ai/backend/run_real_doc_regression.py` is the full DOCX regression entry point. It uses repository test assets and writes results to an ignored regression-output directory.
 
-## Repository map
+## Documentation
 
-```text
-paper-ai/backend/     FastAPI app, document model, rules, runtime, tests
-paper-ai/frontend/    Next.js user interface
-docs/                 Public docs, architecture, deployment, and archived history
-qa/                   Additional quality checks and acceptance material
-```
+- [Architecture Overview](docs/ARCHITECTURE_OVERVIEW.md)
+- [Detailed Architecture](docs/ARCHITECTURE.md)
+- [Demo Guide](docs/DEMO_GUIDE.md)
+- [Limitations](docs/LIMITATIONS.md)
+- [Risk Level System](docs/RISK_LEVEL_SYSTEM.md)
+- [Agent Trace](docs/AGENT_TRACE.md)
+- [Documentation index](docs/README.md)
 
 ## Release status
 
-The current public release is **PaperForge V2**, tagged `v2.0-paperforge`. The repository is in Release Freeze: future work should be limited to documentation, deployment stability, controlled user feedback, and blocking regression fixes.
+The current public release is **PaperForge V2**, tagged `v2.0-paperforge`.
+
+## Technology
+
+FastAPI · Python · `python-docx` · Next.js · React · TypeScript · Docker Compose
 
 ## License
 

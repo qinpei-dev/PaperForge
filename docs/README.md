@@ -4,11 +4,27 @@ PaperForge is currently a **V2 Release Freeze** project. The public product name
 
 ## Start here
 
-- [Project architecture](ARCHITECTURE.md) — current FastAPI, DOCX model, planning, execution, verification, governance, and UI boundaries.
+- [Architecture overview](ARCHITECTURE_OVERVIEW.md) — GitHub-friendly system view of the verified Agent loop and module boundaries.
+- [Project architecture](ARCHITECTURE.md) — detailed FastAPI, DOCX model, planning, execution, verification, governance, and UI boundaries.
+- [Demo guide](DEMO_GUIDE.md) — a 30-second, reproducible walkthrough using the included real-run assets and demo files.
+- [Limitations](LIMITATIONS.md) — supported boundaries, non-goals, and review expectations.
+- [GitHub presentation guide](GITHUB_PRESENTATION.md) — repository metadata, pinned-repository, and interview-entry recommendations.
+- [Release review checklist](RELEASE_REVIEW_CHECKLIST.md) — pre-release technical, documentation, demo, and interview checks.
 - [Risk level system](RISK_LEVEL_SYSTEM.md) — how low-risk, warning, and human-review work is handled.
 - [Agent Trace](AGENT_TRACE.md) — the explainability fields exposed by the runtime.
 - [Docker deployment](DOCKER_DEPLOYMENT.md) — local container startup and environment configuration.
 - [V2 release notes](PAPERFORGE_V2_RELEASE_NOTES.md) — current release scope, evidence, and boundaries.
+
+## New Visitor Guide
+
+For a first visit, use this reading order:
+
+1. [README.md](../README.md) — product scope, engineering value, demo entry, and quick start.
+2. [ARCHITECTURE_OVERVIEW.md](ARCHITECTURE_OVERVIEW.md) — verified Agent loop and system boundaries.
+3. [DEMO_GUIDE.md](DEMO_GUIDE.md) — 30-second workflow with included demo files and real-run screenshots.
+4. [RISK_LEVEL_SYSTEM.md](RISK_LEVEL_SYSTEM.md) — automatic actions versus warning and human-review policy.
+5. [INTERVIEW_DEMO_PACKAGE.md](INTERVIEW_DEMO_PACKAGE.md) — interview narrative, longer demo script, and likely questions.
+6. [LIMITATIONS.md](LIMITATIONS.md) — explicit constraints and non-goals.
 
 ## Reference material
 
