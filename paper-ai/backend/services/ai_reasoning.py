@@ -42,6 +42,7 @@ def generate_reasoning(
     document_analysis: dict[str, Any] | None,
     detected_issues: Iterable[dict[str, Any]] | None,
     template_rules: Iterable[dict[str, Any]] | None,
+    template_analysis: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Explain detected format issues without changing the document.
 
@@ -51,6 +52,7 @@ def generate_reasoning(
     """
     analysis = document_analysis or {}
     rules = list(template_rules or [])
+    template = template_analysis or {}
     results: list[dict[str, Any]] = []
     for index, raw_issue in enumerate(detected_issues or []):
         if not isinstance(raw_issue, dict):
@@ -61,12 +63,14 @@ def generate_reasoning(
         issue_id = str(raw_issue.get("issue_id") or f"{kind}-{index + 1}")
         score = _score(raw_issue)
         rule_matches = _matching_rules(kind, raw_issue, rules)
-        confidence = _confidence(analysis, raw_issue, rule_matches)
+        confidence = _confidence(analysis, raw_issue, rule_matches, template)
         context = {
             "issue_type": kind,
             "score": score,
             "evidence": raw_issue.get("evidence") or raw_issue.get("message") or raw_issue.get("issues") or [],
             "rule_ids": [str(rule.get("id")) for rule in rule_matches if rule.get("id")],
+            "template_sections": [item.get("type") for item in template.get("sections", []) if isinstance(item, dict)],
+            "protected_region_types": [item.get("type") for item in template.get("protected_regions", []) if isinstance(item, dict)],
         }
         reason, recommendation, default_risk = _explain(kind, raw_issue, score, rule_matches)
         result = ReasoningResult(
@@ -116,12 +120,14 @@ def _rule_matches_kind(kind: str, target: str) -> bool:
     return target in {"figures_tables", "caption:figure", "caption:table"}
 
 
-def _confidence(analysis: dict[str, Any], issue: dict[str, Any], rules: list[dict[str, Any]]) -> float:
+def _confidence(analysis: dict[str, Any], issue: dict[str, Any], rules: list[dict[str, Any]], template: dict[str, Any] | None = None) -> float:
     values = [float(analysis.get("confidence") or 0.0)]
     if issue.get("confidence") is not None:
         values.append(float(issue["confidence"]))
     if rules:
         values.append(max(float(rule.get("confidence") or 0.0) for rule in rules))
+    if template and template.get("confidence") is not None:
+        values.append(float(template.get("confidence") or 0.0))
     return round(max(0.0, min(1.0, sum(values) / len(values))), 4)
 
 

@@ -20,6 +20,7 @@ from .planner import build_execution_plan
 from .plagiarism_checker import check_repeat_risk
 from .rule_engine import normalize_rules
 from .template_extractor import extract_template_profile
+from .template_intelligence import analyze_template
 from .review_evidence import aggregate_review_evidence, content_score_summary
 
 
@@ -107,6 +108,7 @@ def run_paper_agent(
     modification_report: dict[str, Any] | None = None
     document_model: dict[str, Any] | None = None
     document_analysis: dict[str, Any] | None = None
+    template_analysis: dict[str, Any] = analyze_template(template_path).to_dict() if template_path else analyze_template(None).to_dict()
     reasoning_results: list[dict[str, Any]] = []
     quality_report: dict[str, Any] | None = None
     normalized_rules: list[dict[str, Any]] = []
@@ -166,6 +168,15 @@ def run_paper_agent(
         else:
             state.finish("未上传模板，按通用论文规范执行。", fallback_used=True)
 
+        state.start("模板智能分析", "正在识别模板区域、格式规则和受保护区域。")
+        state.finish(
+            f"已完成模板智能分析：区域 {len(template_analysis['sections'])} 个、规则 {len(template_analysis['rules'])} 条、保护区域 {len(template_analysis['protected_regions'])} 个。",
+            fallback_used=not bool(template_path),
+        )
+        trace.mark_task("template_intelligence", "done" if template_path else "skipped", f"规则 {len(template_analysis['rules'])}，保护区域 {len(template_analysis['protected_regions'])}")
+        if template_path:
+            trace.record_tool("template_intelligence.analyze_template", summary=f"模板区域 {len(template_analysis['sections'])}，规则 {len(template_analysis['rules'])}")
+
         # P0.1 artifacts now feed the P0.2 runtime; only safe, existing
         # formatter capabilities are eligible for autonomous execution.
         state.start("文档智能分析", "正在识别论文结构、段落语义、图表和参考文献。")
@@ -179,7 +190,7 @@ def run_paper_agent(
         document_model = model.to_dict()
         normalized_rules = [rule.to_dict() for rule in normalized_rule_objects]
         detected_issues = _detected_format_issues(before_analysis)
-        reasoning_results = generate_reasoning(document_analysis, detected_issues, normalized_rules)
+        reasoning_results = generate_reasoning(document_analysis, detected_issues, normalized_rules, template_analysis)
         plan = build_execution_plan(model, normalized_rule_objects, before_analysis, reasoning_results)
         execution_plan = plan.to_dict()
 
@@ -309,6 +320,7 @@ def run_paper_agent(
             "language_suggestions": language_review["suggestions"],
             "document_model": document_model,
             "document_analysis": document_analysis,
+            "template_analysis": template_analysis,
             "reasoning_results": reasoning_results,
             "quality_report": quality_report,
             "rules": normalized_rules,

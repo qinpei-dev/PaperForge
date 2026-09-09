@@ -1,5 +1,21 @@
 # TODO
 
+## [DONE] PaperForge Day8-P0 — Template Intelligence Layer
+
+状态：**PASS**
+
+完成：
+
+- 新增 `backend/services/template_intelligence.py`，生成可序列化 `TemplateAnalysis`。
+- 支持 cover、abstract、table_of_contents、body、references、appendix 区域识别。
+- 提取 font、size、bold、alignment、spacing、margins 格式规则。
+- 识别 cover fields、fixed headers、fixed tables 保护区域。
+- 接入 Document Intelligence → Template Intelligence → AI Reasoning；pipeline 结果和 task state 新增 `template_analysis`。
+- 未修改 Executor、SSE 协议或数据库结构；旧 reasoning 调用和旧 task state 保持兼容。
+- 新增 `test_template_intelligence.py`；专项测试 10 passed，全量后端 pytest 37 passed，Python 编译 PASS。
+
+下一步：进入 Day8-P1 Rule Extraction Enhancement，增强按区域/样式继承的规则提取。
+
 ## [DONE] PaperForge Day7-P2 Paper Quality Intelligence
 
 状态：**PASS**
