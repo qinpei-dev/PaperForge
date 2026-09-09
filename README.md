@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/paperforge-banner.png" alt="PaperForge — Verified Academic Document Agent: Plan, Execute, Verify, Evidence" width="100%">
+</p>
+
 # PaperForge
 
 > **Verified Academic Document Agent**
@@ -7,10 +11,6 @@ PaperForge is a verified AI agent that transforms academic DOCX documents throug
 **Explore:** [30-second demo](docs/DEMO_GUIDE.md) · [Architecture](docs/ARCHITECTURE_OVERVIEW.md) · [Limitations](docs/LIMITATIONS.md)
 
 **Engineering focus:** Verified Agent Loop · Deterministic Execution · LLM Optional · Human-in-the-loop · Evidence & Trace
-
-![PaperForge real application overview](docs/assets/screenshots/real-web-2026-06-27/01_home_overview_real.png)
-
-*Real local application screenshot. The included demo uses a constructed, de-identified sample document; it is not a paper-generation or formal plagiarism-checking service.*
 
 ## The problem
 
@@ -95,6 +95,10 @@ The frontend does not modify DOCX files directly. The backend maintains the docu
 ## Demo
 
 The repository includes constructed, de-identified demo inputs, a template, and outputs from a real local run:
+
+![PaperForge real application overview](docs/assets/screenshots/real-web-2026-06-27/01_home_overview_real.png)
+
+*Real local application screenshot. The included demo uses a constructed, de-identified sample document; it is not a paper-generation or formal plagiarism-checking service.*
 
 - `demo_inputs/messy_paper_sample.docx`
 - `demo_inputs/template_sample.docx`
