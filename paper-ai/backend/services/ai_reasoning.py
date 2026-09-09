@@ -53,6 +53,7 @@ def generate_reasoning(
     analysis = document_analysis or {}
     rules = list(template_rules or [])
     template = template_analysis or {}
+    effective_rules = template.get("effective_rules") if isinstance(template.get("effective_rules"), dict) else {}
     results: list[dict[str, Any]] = []
     for index, raw_issue in enumerate(detected_issues or []):
         if not isinstance(raw_issue, dict):
@@ -62,7 +63,7 @@ def generate_reasoning(
             continue
         issue_id = str(raw_issue.get("issue_id") or f"{kind}-{index + 1}")
         score = _score(raw_issue)
-        rule_matches = _matching_rules(kind, raw_issue, rules)
+        rule_matches = _matching_rules(kind, raw_issue, rules, effective_rules, float(template.get("confidence") or 0.0))
         confidence = _confidence(analysis, raw_issue, rule_matches, template)
         context = {
             "issue_type": kind,
@@ -71,6 +72,8 @@ def generate_reasoning(
             "rule_ids": [str(rule.get("id")) for rule in rule_matches if rule.get("id")],
             "template_sections": [item.get("type") for item in template.get("sections", []) if isinstance(item, dict)],
             "protected_region_types": [item.get("type") for item in template.get("protected_regions", []) if isinstance(item, dict)],
+            "effective_rule_scope": rule_matches[0].get("target") if rule_matches and rule_matches[0].get("id", "").startswith("effective-") else None,
+            "effective_rule": rule_matches[0].get("value") if rule_matches and rule_matches[0].get("id", "").startswith("effective-") else None,
         }
         reason, recommendation, default_risk = _explain(kind, raw_issue, score, rule_matches)
         result = ReasoningResult(
@@ -100,13 +103,40 @@ def _score(issue: dict[str, Any]) -> int | None:
         return None
 
 
-def _matching_rules(kind: str, issue: dict[str, Any], rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _matching_rules(
+    kind: str,
+    issue: dict[str, Any],
+    rules: list[dict[str, Any]],
+    effective_rules: dict[str, Any] | None = None,
+    template_confidence: float = 0.0,
+) -> list[dict[str, Any]]:
     target = str(issue.get("target") or "")
-    return [
+    legacy = [
         rule for rule in rules
         if isinstance(rule, dict)
         and (str(rule.get("id")) == str(issue.get("rule_id")) or _rule_matches_kind(kind, str(rule.get("target") or target)))
     ]
+    effective = _effective_rule_for_issue(kind, target, effective_rules or {}, template_confidence)
+    return ([effective] if effective else []) + legacy
+
+
+def _effective_rule_for_issue(kind: str, target: str, effective_rules: dict[str, Any], confidence: float) -> dict[str, Any] | None:
+    if not effective_rules:
+        return None
+    requested = target.lower()
+    keys = {str(key).lower(): str(key) for key in effective_rules}
+    scope: str | None = keys.get(requested)
+    if scope is None:
+        if kind == "paragraph_format_mismatch":
+            scope = keys.get("body")
+        elif kind == "reference_format_issue":
+            scope = keys.get("references")
+        elif kind == "heading_mismatch":
+            scope = next((original for normalized, original in keys.items() if normalized.startswith("heading:")), None)
+    value = effective_rules.get(scope) if scope else None
+    if not isinstance(value, dict):
+        return None
+    return {"id": f"effective-{scope}", "target": scope, "property": "effective", "value": value, "confidence": confidence, "source": "template_effective_rules"}
 
 
 def _rule_matches_kind(kind: str, target: str) -> bool:

@@ -1,5 +1,21 @@
 # TODO
 
+## [DONE] PaperForge Day8-P1 — Template Rule Extraction Enhancement
+
+状态：**PASS**
+
+完成：
+
+- `TemplateAnalysis` 新增 `inherited_rules`、`override_rules`、`rule_priority` 和 `effective_rules`。
+- 解析 Normal、Heading 和实际使用的段落样式的 `base_style` 继承链。
+- abstract、references、appendix、cover 可生成高优先级区域覆盖规则；cover 默认追加保护规则。
+- 按模板基础（10）→ 样式继承（20）→ 区域覆盖（30）确定性合并 `effective_rules`。
+- AI Reasoning 优先消费匹配 scope 的 effective rule，旧调用保持兼容。
+- 未修改 Executor、SSE 协议或数据库结构；新增 `test_template_rules.py`。
+- 专项测试 13 passed，全量后端 pytest 40 passed，Python 编译和 diff 检查 PASS。
+
+下一步：进入 Day9 Multi-template SaaS，设计模板知识的多模板存储、选择与隔离边界。
+
 ## [DONE] PaperForge Day8-P0 — Template Intelligence Layer
 
 状态：**PASS**

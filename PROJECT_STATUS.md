@@ -6,7 +6,9 @@
 
 中文定位：**学术文档可信智能处理 Agent**
 
-当前阶段：**Day8-P0 Template Intelligence Layer 完成，具备进入 Day8-P1 Rule Extraction Enhancement 条件**
+当前阶段：**Day8-P1 Template Rule Extraction Enhancement 完成，具备进入 Day9 Multi-template SaaS 条件**
+
+Day8-P1 最新增量：**Template Rule Extraction Enhancement 已完成**。模板知识新增样式继承、区域覆盖、规则优先级和最终 effective rules；AI Reasoning 优先消费 effective rules 判断格式问题。未修改 Executor、SSE 协议或数据库结构；旧 reasoning 调用、无模板输入和旧 task state 保持兼容。
 
 Day8-P0 最新增量：**Template Intelligence Layer 已完成**。新增模板区域识别、格式规则提取和保护区域识别；结果以 `template_analysis` 接入既有 Document Intelligence → AI Reasoning 链路，并保存到 task state。未修改 Executor、SSE 协议或数据库结构；无模板输入、旧 reasoning 调用和旧 task state 保持兼容。
 
