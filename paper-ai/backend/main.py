@@ -74,6 +74,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_database() -> None:
+    environment = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "local")).strip().lower()
+    if environment in {"production", "prod"} and not os.getenv("JWT_SECRET_KEY", "").strip():
+        raise RuntimeError("JWT_SECRET_KEY must be configured in production.")
     if os.getenv("AUTO_CREATE_DB", "true").strip().lower() == "true":
         init_db()
 
@@ -158,7 +161,7 @@ def list_tasks(user: User = Depends(get_current_user), db: Session = Depends(get
         .order_by(Task.created_at.desc())
     )
     tasks = db.scalars(statement).all()
-    return [{"id": item.id, "project_id": item.project_id, "status": item.status, "score": item.score, "created_at": item.created_at, "title": item.paper_name or item.project.title} for item in tasks]
+    return [{"id": item.id, "project_id": item.project_id, "status": item.status, "workflow_stage": item.workflow_stage, "progress": workflow_progress(item.workflow_stage, item.status), "score": item.score, "created_at": item.created_at, "title": item.paper_name or item.project.title} for item in tasks]
 
 
 @app.get("/tasks/{task_id}")
@@ -167,7 +170,7 @@ def get_task(task_id: str, user: User = Depends(get_current_user), db: Session =
     task = db.scalar(statement)
     if task is None:
         raise HTTPException(status_code=404, detail="没有找到该任务。")
-    return {"id": task.id, "task_id": task.id, "project_id": task.project_id, "status": task.status, "paper_name": task.paper_name or task.project.title, "uploaded_file": task.uploaded_file, "trace": task.agent_trace, "agent_trace": task.agent_trace, "workflow_steps": build_workflow_steps(task.agent_trace), "score_history": {"before": task.before_score, "after": task.score}, "score": task.score, "created_at": task.created_at, "artifacts": [{"id": item.id, "file_path": item.file_path, "file_type": item.file_type, "download_url": f"/artifacts/{item.id}/download"} for item in task.artifacts]}
+    return {"id": task.id, "task_id": task.id, "project_id": task.project_id, "status": task.status, "workflow_stage": task.workflow_stage, "progress": workflow_progress(task.workflow_stage, task.status), "paper_name": task.paper_name or task.project.title, "uploaded_file": task.uploaded_file, "trace": task.agent_trace, "agent_trace": task.agent_trace, "workflow_steps": build_workflow_steps(task.agent_trace, task.workflow_stage, task.status), "score_history": {"before": task.before_score, "after": task.score}, "score": task.score, "created_at": task.created_at, "artifacts": [{"id": item.id, "file_path": item.file_path, "file_type": item.file_type, "download_url": f"/artifacts/{item.id}/download"} for item in task.artifacts]}
 
 
 @app.post("/tasks", status_code=201)
@@ -263,6 +266,14 @@ def execute_persisted_task(
     """Run the existing Agent and persist only orchestration metadata and artifacts."""
     task.status = "running"
     db.commit()
+
+    def on_progress(stage: str) -> None:
+        if stage not in {"analyzing", "planning", "executing", "verifying", "completed", "failed"}:
+            return
+        task.workflow_stage = stage
+        task.status = "completed" if stage == "completed" else ("failed" if stage == "failed" else "running")
+        db.commit()
+
     try:
         result = run_agent_pipeline(
             paper_path=paper_upload.path,
@@ -272,9 +283,11 @@ def execute_persisted_task(
             mode=mode,
             paper_display_name=paper_upload.original_filename,
             template_display_name=template_upload.original_filename if template_upload else None,
+            progress_callback=on_progress,
         )
     except Exception as exc:
         task.status = "failed"
+        task.workflow_stage = "failed"
         task.agent_trace = [{"step": "task_orchestrator", "status": "error", "message": str(exc)}]
         db.commit()
         return {"status": "error", "error": str(exc), "agent_trace": task.agent_trace}
@@ -284,6 +297,7 @@ def execute_persisted_task(
     task.score = result.get("after_score") if isinstance(result.get("after_score"), (int, float)) else None
     result_status = str(result.get("status") or "error")
     task.status = "completed" if result_status == "ok" else ("pending" if result_status == "requires_confirmation" else "failed")
+    task.workflow_stage = "completed" if result_status == "ok" else ("analyzing" if result_status == "requires_confirmation" else "failed")
     filename = result.get("filename")
     if isinstance(filename, str):
         task.artifacts.append(Artifact(file_path=str(OUTPUT_DIR / Path(filename).name), file_type="docx"))
@@ -297,7 +311,13 @@ def execute_persisted_task(
     return result
 
 
-def build_workflow_steps(trace: object) -> list[dict[str, str]]:
+def workflow_progress(workflow_stage: str | None, status: str) -> int:
+    if status == "failed" or workflow_stage == "failed":
+        return 0
+    return {"analyzing": 20, "planning": 40, "executing": 60, "verifying": 80, "completed": 100}.get(workflow_stage or "", 0)
+
+
+def build_workflow_steps(trace: object, workflow_stage: str | None = None, task_status: str | None = None) -> list[dict[str, str]]:
     """Project the existing Agent Trace onto the five user-facing workflow stages."""
     stages = [("analyzing", "文档解析"), ("planning", "模板识别与格式规划"), ("executing", "自动修改"), ("verifying", "质量验证"), ("completed", "处理完成")]
     events = trace if isinstance(trace, list) else []
@@ -316,6 +336,18 @@ def build_workflow_steps(trace: object) -> list[dict[str, str]]:
         elif key == "completed" and "completed" not in states:
             status = "pending"
         result.append({"key": key, "label": label, "status": status})
+    if workflow_stage in {"analyzing", "planning", "executing", "verifying", "completed", "failed"}:
+        order = ["analyzing", "planning", "executing", "verifying", "completed"]
+        current_index = order.index(workflow_stage) if workflow_stage in order else -1
+        for item in result:
+            if item["key"] in order and order.index(item["key"]) < current_index:
+                item["status"] = "completed"
+            elif item["key"] == workflow_stage:
+                item["status"] = "failed" if workflow_stage == "failed" else ("completed" if workflow_stage == "completed" else "running")
+            elif workflow_stage == "failed" and item["key"] == "completed":
+                item["status"] = "failed"
+            elif workflow_stage != "failed" and item["key"] in order and order.index(item["key"]) > current_index:
+                item["status"] = "pending"
     return result
 
 

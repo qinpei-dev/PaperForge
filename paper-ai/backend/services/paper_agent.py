@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, Callable
 
 from .agent_orchestrator import AgentTraceBuilder
 from .document_model import build_document_model
@@ -81,7 +81,17 @@ def run_paper_agent(
     mode: str = "ai",
     paper_display_name: str | None = None,
     template_display_name: str | None = None,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
+    def notify(stage: str) -> None:
+        if progress_callback is None:
+            return
+        try:
+            progress_callback(stage)
+        except Exception:
+            # Progress reporting is observational and must never break the Agent.
+            pass
+
     state = AgentState(paper_path=paper_path, template_path=template_path, output_dir=output_dir)
     normalized_mode = "local" if mode == "local" else "ai"
     paper_name = paper_display_name or paper_path.name
@@ -99,6 +109,7 @@ def run_paper_agent(
     content_result: dict[str, Any] | None = None
 
     try:
+        notify("analyzing")
         state.start("识别文档类型", "正在判断该文件是否为标准论文。")
         classification = classify_document(paper_path)
         trace.mark_task("classify_document", "done", f"{classification['label']}，置信度 {classification['confidence']}")
@@ -158,7 +169,9 @@ def run_paper_agent(
         normalized_rules = [rule.to_dict() for rule in normalized_rule_objects]
         execution_plan = plan.to_dict()
 
+        notify("planning")
         state.start("修复标题与正文格式", "正在统一标题层级、正文字体、段落缩进和页面基础格式。")
+        notify("executing")
         runtime_result = run_runtime(
             source=paper_path,
             output_factory=lambda suffix: build_output_path(output_dir, paper_path, suffix),
@@ -218,6 +231,7 @@ def run_paper_agent(
         state.finish(f"重复风险等级：{repeat_risk['level']}，风险值 {repeat_risk['score']}/100。")
 
         state.start("最终复查", "正在计算本地评分、AI增强评分和最终评分。")
+        notify("verifying")
         after_analysis = analyze_docx(
             final_path,
             template_path=template_path,
@@ -259,7 +273,7 @@ def run_paper_agent(
         content_human_review = None
         if content_result and content_result.get("decision") == "HUMAN_REVIEW":
             content_human_review = {"reason": content_result.get("decision_reason"), "severity": "high_risk", "affected_targets": [f"body_paragraph#{item.get('paragraph_index')}" for item in content_result.get("provenance", {}).get("hitl", [])], "items": content_result.get("provenance", {}).get("hitl", []), "suggested_action": "请人工确认高风险内容后再决定是否修改。", "can_resume": True}
-        return {
+        result = {
             "status": "ok",
             "mode": normalized_mode,
             "requires_confirmation": False,
@@ -305,7 +319,10 @@ def run_paper_agent(
                 status="ok",
             ),
         }
+        notify("completed")
+        return result
     except Exception as exc:
+        notify("failed")
         state.fail(str(exc))
         return {
             "status": "error",

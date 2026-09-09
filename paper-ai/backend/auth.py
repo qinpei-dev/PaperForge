@@ -22,7 +22,12 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
 def _jwt_secret() -> str:
-    return os.getenv("JWT_SECRET_KEY", "paperforge-local-development-secret-change-me")
+    configured = os.getenv("JWT_SECRET_KEY", "").strip()
+    if configured:
+        return configured
+    if os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "local")).strip().lower() in {"production", "prod"}:
+        raise RuntimeError("JWT_SECRET_KEY must be configured in production.")
+    return "paperforge-local-development-secret-change-me"
 
 
 def hash_password(password: str) -> str:

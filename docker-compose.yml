@@ -28,6 +28,7 @@ services:
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env before starting Docker Compose}
+      APP_ENV: production
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
       AUTH_REQUIRED: ${AUTH_REQUIRED:-true}
       AUTO_CREATE_DB: "false"

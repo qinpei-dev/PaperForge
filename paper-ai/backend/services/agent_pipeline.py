@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, Callable
 
 from .paper_agent import run_paper_agent
 from .task_state import create_task_id, get_task_state_path, init_task_state, update_task_state
@@ -25,6 +25,7 @@ def run_agent_pipeline(
     mode: str = "ai",
     paper_display_name: str | None = None,
     template_display_name: str | None = None,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     task_id = create_task_id()
     task_state_path = get_task_state_path(output_dir, task_id)
@@ -45,8 +46,14 @@ def run_agent_pipeline(
             mode=mode,
             paper_display_name=paper_display_name,
             template_display_name=template_display_name,
+            progress_callback=progress_callback,
         )
     except Exception as exc:
+        if progress_callback is not None:
+            try:
+                progress_callback("failed")
+            except Exception:
+                pass
         duration_ms = elapsed_ms(started_at)
         failed_result = {
             "status": "error",

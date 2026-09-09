@@ -72,6 +72,21 @@
 
 验收结果：`git diff --check`、全量 `pytest`（11 passed）、前端 `npm run build`、`docker compose --env-file .env.example config --quiet`、`compileall`、Alembic head 和敏感/临时文件检查均 PASS。
 
+## [DONE] PaperForge Day 4 Agent Runtime 增强
+
+状态：**PASS**
+
+完成：
+
+- 新增兼容旧任务的 `Task.workflow_stage` 与 Alembic 0003 migration。
+- `run_agent_pipeline` 新增可选 progress callback，阶段顺序稳定，callback 异常不影响主流程。
+- SaaS Task 实时持久化 workflow stage，API 返回 `workflow_stage` / `progress`。
+- Task Detail 与 Dashboard 展示当前 Agent 阶段。
+- 生产模式缺失 `JWT_SECRET_KEY` 时禁止启动，本地开发保留兼容 fallback；Compose 显式使用 production。
+- 新增 workflow、失败、旧任务兼容和用户隔离测试。
+
+验收结果：Day 4 新增测试通过，全量 `pytest` 16 passed，frontend `npm run build` PASS，`compileall` PASS，Alembic migration PASS，Compose config PASS，`git diff --check` PASS。
+
 ## [CURRENT] PaperForge Release Freeze
 
 当前公开版本：`v2.0-paperforge`。本轮仅进行公开包装、文档治理和低风险展示文案调整，不改变主链路。
