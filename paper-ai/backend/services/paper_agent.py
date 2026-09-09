@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from .agent_orchestrator import AgentTraceBuilder
 from .document_model import build_document_model
+from .document_intelligence import analyze_document
 from .document_classifier import classify_document
 from .docx_analyzer import analyze_docx
 from .agent_runtime import run_runtime
@@ -103,6 +104,7 @@ def run_paper_agent(
     after_analysis: dict[str, Any] | None = None
     modification_report: dict[str, Any] | None = None
     document_model: dict[str, Any] | None = None
+    document_analysis: dict[str, Any] | None = None
     normalized_rules: list[dict[str, Any]] = []
     execution_plan: dict[str, Any] | None = None
     runtime_result: dict[str, Any] | None = None
@@ -162,7 +164,13 @@ def run_paper_agent(
 
         # P0.1 artifacts now feed the P0.2 runtime; only safe, existing
         # formatter capabilities are eligible for autonomous execution.
+        state.start("文档智能分析", "正在识别论文结构、段落语义、图表和参考文献。")
         model = build_document_model(paper_path, classification=classification)
+        intelligence = analyze_document(model, document_path=paper_path)
+        document_analysis = intelligence.to_dict()
+        state.finish(f"已完成文档智能分析：识别 {len(intelligence.sections)} 个章节、{len(intelligence.elements)} 个语义元素。")
+        trace.mark_task("document_intelligence", "done", f"章节 {len(intelligence.sections)}，元素 {len(intelligence.elements)}")
+        trace.record_tool("document_intelligence.analyze_document", summary=f"章节 {len(intelligence.sections)}，元素 {len(intelligence.elements)}")
         normalized_rule_objects = normalize_rules(template_profile, template_uploaded=template_path is not None)
         plan = build_execution_plan(model, normalized_rule_objects, before_analysis)
         document_model = model.to_dict()
@@ -293,6 +301,7 @@ def run_paper_agent(
             "language_review": {"mode": language_review["mode"], "error": language_review["error"]},
             "language_suggestions": language_review["suggestions"],
             "document_model": document_model,
+            "document_analysis": document_analysis,
             "rules": normalized_rules,
             "execution_plan": execution_plan,
             "workflow": runtime_result["workflow"] if runtime_result else None,

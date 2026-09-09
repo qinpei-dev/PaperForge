@@ -66,6 +66,7 @@ def init_task_state(
             "agent_trace_json": None,
         },
         "classification": None,
+        "document_analysis": None,
         "before_score": None,
         "after_score": None,
         "ai_used": None,
@@ -124,6 +125,8 @@ def update_task_state(
 
 def apply_result_fields(state: dict[str, Any], result: dict[str, Any], *, output_dir: Path | None) -> None:
     state["classification"] = result.get("classification")
+    if "document_analysis" in result:
+        state["document_analysis"] = result.get("document_analysis")
     state["before_score"] = result.get("before_score")
     state["after_score"] = result.get("after_score")
 

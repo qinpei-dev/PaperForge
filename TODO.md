@@ -1,5 +1,19 @@
 # TODO
 
+## [DONE] PaperForge Day 7 Document Intelligence Layer
+
+状态：**PASS**
+
+完成：
+
+- 新增 `backend/services/document_intelligence.py`，生成可序列化 `DocumentAnalysis`。
+- 在既有 parse/model 与 Planner 之间接入中英文论文结构识别和段落语义分类。
+- 将 `document_analysis` 暴露在 pipeline 结果并保存到 task state；旧任务/旧结果缺少该字段时保持兼容。
+- 不修改 Executor、DOCX formatter、SSE 协议或数据库结构。
+- 新增 4 项测试；全量后端 pytest 28 passed，Python 编译和 `git diff --check` PASS。
+
+下一步建议：进入 Day7-P1 AI reasoning 的窄范围设计，先只消费分析结果并输出可解释建议，不直接执行高风险内容改写。
+
 ## [DONE] PaperForge V2 Final Acceptance
 
 状态：**READY**
