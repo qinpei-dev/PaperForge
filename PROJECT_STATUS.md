@@ -8,6 +8,10 @@
 
 当前阶段：**Day 7 Document Intelligence Layer 完成，准备 AI reasoning 评估**
 
+最新增量：**AI Reasoning Layer 已完成窄范围接入**。Reasoning 只消费既有
+document analysis、检测到的问题和模板规则，生成可序列化解释，不直接修改
+DOCX；Planner 仅附带 reasoning，Executor、SSE 协议和旧任务字段保持兼容。
+
 Day 3 已在不改变 Planner / Executor / Verifier 核心逻辑的前提下完成 Agent Trace 驱动的工作流状态展示、Task Detail/Dashboard 产品化、Storage 抽象、Compose 健康检查与部署文档整理。
 
 验收日期：**2026-09-08**

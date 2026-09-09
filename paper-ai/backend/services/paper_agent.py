@@ -9,6 +9,7 @@ from typing import Any, Callable
 from .agent_orchestrator import AgentTraceBuilder
 from .document_model import build_document_model
 from .document_intelligence import analyze_document
+from .ai_reasoning import generate_reasoning
 from .document_classifier import classify_document
 from .docx_analyzer import analyze_docx
 from .agent_runtime import run_runtime
@@ -105,6 +106,7 @@ def run_paper_agent(
     modification_report: dict[str, Any] | None = None
     document_model: dict[str, Any] | None = None
     document_analysis: dict[str, Any] | None = None
+    reasoning_results: list[dict[str, Any]] = []
     normalized_rules: list[dict[str, Any]] = []
     execution_plan: dict[str, Any] | None = None
     runtime_result: dict[str, Any] | None = None
@@ -172,9 +174,11 @@ def run_paper_agent(
         trace.mark_task("document_intelligence", "done", f"章节 {len(intelligence.sections)}，元素 {len(intelligence.elements)}")
         trace.record_tool("document_intelligence.analyze_document", summary=f"章节 {len(intelligence.sections)}，元素 {len(intelligence.elements)}")
         normalized_rule_objects = normalize_rules(template_profile, template_uploaded=template_path is not None)
-        plan = build_execution_plan(model, normalized_rule_objects, before_analysis)
         document_model = model.to_dict()
         normalized_rules = [rule.to_dict() for rule in normalized_rule_objects]
+        detected_issues = _detected_format_issues(before_analysis)
+        reasoning_results = generate_reasoning(document_analysis, detected_issues, normalized_rules)
+        plan = build_execution_plan(model, normalized_rule_objects, before_analysis, reasoning_results)
         execution_plan = plan.to_dict()
 
         notify("planning")
@@ -302,6 +306,7 @@ def run_paper_agent(
             "language_suggestions": language_review["suggestions"],
             "document_model": document_model,
             "document_analysis": document_analysis,
+            "reasoning_results": reasoning_results,
             "rules": normalized_rules,
             "execution_plan": execution_plan,
             "workflow": runtime_result["workflow"] if runtime_result else None,
@@ -353,6 +358,28 @@ def run_paper_agent(
 def build_output_path(output_dir: Path, source: Path, suffix: str) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     return output_dir / f"{source.stem}_{suffix}_{timestamp}.docx"
+
+
+def _detected_format_issues(analysis: dict[str, Any]) -> list[dict[str, Any]]:
+    """Convert existing analyzer evidence into reasoning-layer issue inputs."""
+    issues: list[dict[str, Any]] = []
+    breakdown = (analysis.get("report") or {}).get("breakdown") or []
+    for item in breakdown:
+        if not isinstance(item, dict) or int(item.get("score", 100)) >= 90:
+            continue
+        key = str(item.get("key") or "")
+        issue_type = {
+            "heading_format": "heading_mismatch",
+            "body_font": "paragraph_format_mismatch",
+            "spacing_indent": "paragraph_format_mismatch",
+        }.get(key)
+        if issue_type:
+            issues.append({"issue_id": key, "issue_type": issue_type, "key": key, "score": item.get("score"), "evidence": item.get("issues") or item.get("label")})
+    for item in (analysis.get("reference_check") or {}).get("risk_items") or []:
+        issues.append({"issue_id": "reference-format", "issue_type": "reference_format_issue", "target": "references", "risk_level": item.get("level"), "evidence": item.get("message")})
+    for item in (analysis.get("figure_table_check") or {}).get("risk_items") or []:
+        issues.append({"issue_id": "figure-table-format", "issue_type": "figure_table_issue", "target": "figures_tables", "risk_level": item.get("level"), "evidence": item.get("message")})
+    return issues
 
 
 def build_modification_report(

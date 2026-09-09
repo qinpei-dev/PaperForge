@@ -1,5 +1,17 @@
 # TODO
 
+## [DONE] PaperForge AI Reasoning Layer
+
+状态：**PASS**
+
+完成：
+
+- 新增 `backend/services/ai_reasoning.py`，对标题、正文段落、参考文献和图表格式问题输出结构化解释、建议、风险等级和 confidence。
+- Planner 的 `PlanStep` 增加可选 `reasoning`，旧的 `build_execution_plan` 调用保持兼容。
+- pipeline 结果和 task state 新增 `reasoning_results`；不修改 Executor、SSE 协议或数据库结构。
+- 新增 `test_ai_reasoning.py`，覆盖 reasoning、confidence、Planner 接入和旧 state 初始化兼容。
+- 全量后端 pytest 31 passed，Python 编译和 `git diff --check` PASS。
+
 ## [DONE] PaperForge Day 7 Document Intelligence Layer
 
 状态：**PASS**

@@ -27,6 +27,7 @@ class PlanStep:
     conflict_reason: str | None = None
     expected: Any = None
     field: str | None = None
+    reasoning: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -108,7 +109,7 @@ ANALYSIS_KEY_BY_TARGET = {
 }
 
 
-def build_execution_plan(document: DocumentModel, rules: list[Rule], analysis: dict[str, Any]) -> ExecutionPlan:
+def build_execution_plan(document: DocumentModel, rules: list[Rule], analysis: dict[str, Any], reasoning_results: list[dict[str, Any]] | None = None) -> ExecutionPlan:
     """Create a conservative plan from measured analysis, not a rule dump."""
     breakdown = {item.get("key"): item for item in ((analysis.get("report") or {}).get("breakdown") or [])}
     review_steps: list[PlanStep] = []
@@ -203,6 +204,9 @@ def build_execution_plan(document: DocumentModel, rules: list[Rule], analysis: d
     steps.extend(review_steps)
     requires_human_review = any(not step.auto_fixable for step in steps)
     plan_seed = document.document_id + "|" + "|".join(step.id + step.rule_id for step in steps)
+    if reasoning_results:
+        for step in steps:
+            step.reasoning = _reasoning_for_step(step, reasoning_results)
     return ExecutionPlan(
         plan_id=f"plan-{sha256(plan_seed.encode('utf-8')).hexdigest()[:12]}",
         document_id=document.document_id,
@@ -218,6 +222,19 @@ def local_format_step(sequence: int, rule: Rule, action: str, target: str, locat
         evidence=rule.evidence, risk_level="low", auto_fixable=True, dependencies=["document_analysis"],
         status="planned", reason=reason, related_rule_ids=[rule.id], target_locator=locator, expected=rule.expected, field=rule.property,
     )
+
+
+def _reasoning_for_step(step: PlanStep, reasoning_results: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for result in reasoning_results:
+        if not isinstance(result, dict):
+            continue
+        context = result.get("context") or {}
+        if result.get("issue_id") == step.rule_id or step.rule_id in (context.get("rule_ids") or []):
+            return result
+        issue_type = context.get("issue_type")
+        if (step.target.startswith("heading") and issue_type == "heading_mismatch") or (step.target == "body" and issue_type == "paragraph_format_mismatch") or (step.target == "references" and issue_type == "reference_format_issue") or (step.target in {"figures_tables", "caption:figure", "caption:table"} and issue_type == "figure_table_issue"):
+            return result
+    return None
 
 
 def reliable_heading_locator(document: DocumentModel, target: str) -> dict[str, Any] | None:
