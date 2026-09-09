@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from .paper_agent import run_paper_agent
 from .task_state import create_task_id, get_task_state_path, init_task_state, update_task_state
+from .template_registry import ResolvedTemplate, resolve_template_request
 
 
 FALLBACK_BY_STEP = {
@@ -25,8 +26,18 @@ def run_agent_pipeline(
     mode: str = "ai",
     paper_display_name: str | None = None,
     template_display_name: str | None = None,
+    template_id: str | None = None,
+    template_version: str | None = None,
+    resolved_template: ResolvedTemplate | None = None,
     progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
+    selected_template = resolved_template or resolve_template_request(
+        template_path=template_path,
+        template_id=template_id,
+        template_version=template_version,
+    )
+    effective_template_path = selected_template.template_path
+    template_provenance = selected_template.provenance()
     task_id = create_task_id()
     task_state_path = get_task_state_path(output_dir, task_id)
     task_state, task_started_at = init_task_state(
@@ -34,18 +45,20 @@ def run_agent_pipeline(
         task_id=task_id,
         mode="local" if mode == "local" else "ai",
         paper_path=paper_path,
-        template_path=template_path,
+        template_path=effective_template_path,
+        template=template_provenance,
     )
     started_at = perf_counter()
     try:
         result = run_paper_agent(
             paper_path=paper_path,
-            template_path=template_path,
+            template_path=effective_template_path,
             output_dir=output_dir,
             allow_non_paper=allow_non_paper,
             mode=mode,
             paper_display_name=paper_display_name,
-            template_display_name=template_display_name,
+            template_display_name=template_display_name or selected_template.definition.name,
+            template_identity=template_provenance,
             progress_callback=progress_callback,
         )
     except Exception as exc:
@@ -61,7 +74,10 @@ def run_agent_pipeline(
             "download_url": None,
             "task_id": task_id,
             "task_state_path": str(task_state_path),
-            "agent_trace": [
+            "template": template_provenance,
+            "resolved_template_id": template_provenance["id"],
+            "resolved_template_version": template_provenance["version"],
+            "agent_trace": add_template_trace([
                 {
                     "step": "agent_pipeline",
                     "status": "error",
@@ -69,7 +85,7 @@ def run_agent_pipeline(
                     "fallback_used": False,
                     "message": str(exc),
                 }
-            ],
+            ], template_provenance),
         }
         update_task_state(
             task_state_path,
@@ -83,6 +99,10 @@ def run_agent_pipeline(
         return failed_result
 
     normalized = normalize_pipeline_result(result, elapsed_ms(started_at))
+    normalized.setdefault("template", template_provenance)
+    normalized["resolved_template_id"] = template_provenance["id"]
+    normalized["resolved_template_version"] = template_provenance["version"]
+    normalized["agent_trace"] = add_template_trace(normalized.get("agent_trace"), template_provenance)
     normalized["task_id"] = task_id
     normalized["task_state_path"] = str(task_state_path)
     update_task_state(
@@ -95,6 +115,25 @@ def run_agent_pipeline(
         output_dir=output_dir,
     )
     return normalized
+
+
+def add_template_trace(trace: Any, template: dict[str, Any]) -> list[dict[str, Any]]:
+    items = list(trace) if isinstance(trace, list) else []
+    if any(isinstance(item, dict) and item.get("step") == "resolve_template" for item in items):
+        return items
+    return [
+        {
+            "step": "resolve_template",
+            "status": "ok",
+            "duration_ms": 0,
+            "fallback_used": template.get("resolution") in {"default", "legacy_upload"},
+            "message": f"Template: {template.get('name')} / v{template.get('version')}",
+            "template_id": template.get("id"),
+            "template_version": template.get("version"),
+            "template_name": template.get("name"),
+        },
+        *items,
+    ]
 
 
 def normalize_pipeline_result(result: dict[str, Any], total_duration_ms: int) -> dict[str, Any]:

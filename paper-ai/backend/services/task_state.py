@@ -45,6 +45,7 @@ def init_task_state(
     mode: str,
     paper_path: Path,
     template_path: Path | None,
+    template: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], float]:
     now = utc_now_iso()
     state = {
@@ -68,6 +69,7 @@ def init_task_state(
         "classification": None,
         "document_analysis": None,
         "template_analysis": None,
+        "template": template,
         "reasoning_results": [],
         "quality_report": None,
         "before_score": None,
@@ -132,6 +134,8 @@ def apply_result_fields(state: dict[str, Any], result: dict[str, Any], *, output
         state["document_analysis"] = result.get("document_analysis")
     if "template_analysis" in result:
         state["template_analysis"] = result.get("template_analysis")
+    if "template" in result:
+        state["template"] = result.get("template")
     if "reasoning_results" in result:
         state["reasoning_results"] = result.get("reasoning_results") or []
     if "quality_report" in result:

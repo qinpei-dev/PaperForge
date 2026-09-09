@@ -1,5 +1,24 @@
 # TODO
 
+## [DONE] PaperForge Day9-P0 — Multi-template Template Registry
+
+状态：**PASS（等待用户验收）**
+
+完成：
+
+- 新增统一 `TemplateRegistry`，支持 register、get、list、resolve。
+- 模板定义包含稳定 `template_id`、name、school、document_type、version、status、source、locator 和 metadata。
+- 支持同一 template family 多版本、精确 ID/version 解析、metadata 匹配、默认模板兼容，以及不存在、歧义、disabled 明确失败。
+- 内置通用默认规则和版本化 bundled DOCX；旧请求不传 `template_id` 与旧模板上传流程保持兼容。
+- result、task state、Agent Trace、修改报告和 Task Detail 可追踪实际 template ID/version。
+- 新增 `GET /templates`；`POST /tasks` 与 `POST /agent/run` 新增可选 `template_id`、`template_version`。
+- 前端新增最小 Template Selector，并在同步结果与异步任务详情展示 template provenance。
+- Registry 返回深拷贝定义，模板解析结果按调用生成，未发现跨模板共享可变状态。
+- 未修改数据库结构、Executor 或 SSE 协议；未扩展到用户模板管理、多租户模板持久化或模板市场。
+- 新增 `test_template_registry.py`；后端 pytest 47 passed，Python compileall、frontend build、git diff check PASS。
+
+下一步：等待 Day9-P0 用户验收后，再决定是否 commit；本轮暂不 commit、不 push。
+
 ## [DONE] PaperForge Day8-P1 — Template Rule Extraction Enhancement
 
 状态：**PASS**

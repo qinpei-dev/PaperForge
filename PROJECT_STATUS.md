@@ -6,7 +6,9 @@
 
 中文定位：**学术文档可信智能处理 Agent**
 
-当前阶段：**Day8-P1 Template Rule Extraction Enhancement 完成，具备进入 Day9 Multi-template SaaS 条件**
+当前阶段：**Day9-P0 Multi-template Template Registry 完成，等待用户验收**
+
+Day9-P0 最新增量：**Multi-template Template Registry 已完成**。新增统一内存 Registry、稳定 template identity、版本/status/source/locator/metadata、精确与元数据解析、禁用与歧义保护；内置通用默认规则和版本化 bundled DOCX。`GET /templates`、`POST /tasks`、`POST /agent/run` 已最小接入，result、task state、Agent Trace、报告和任务详情可追踪实际模板 ID/version。旧请求不传 `template_id` 继续走兼容默认，旧模板上传继续可用；未修改数据库结构、Executor 或 SSE 协议。验收结果：后端 pytest 47 passed，Python compileall、frontend build、git diff check PASS。
 
 Day8-P1 最新增量：**Template Rule Extraction Enhancement 已完成**。模板知识新增样式继承、区域覆盖、规则优先级和最终 effective rules；AI Reasoning 优先消费 effective rules 判断格式问题。未修改 Executor、SSE 协议或数据库结构；旧 reasoning 调用、无模板输入和旧 task state 保持兼容。
 

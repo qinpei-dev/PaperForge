@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type AgentStep = { name: string; status: "running" | "done" | "error"; message: string };
@@ -125,6 +125,8 @@ type Provenance = { changes?: ProvenanceChange[]; summary?: { planned_steps?: nu
 type ContentIssue = { issue_id?: string; paragraph_index?: number; issue_type?: string; original_text?: string; suggested_text?: string; reason?: string; action_policy?: string; source?: string; verification_status?: string; status?: string };
 type ContentReview = { issues?: ContentIssue[]; counts?: { AUTO_FIX?: number; SUGGEST_ONLY?: number; HITL_REQUIRED?: number }; provenance?: { auto_fixes?: ContentIssue[]; suggestions?: ContentIssue[]; accepted?: ContentIssue[]; hitl?: ContentIssue[] }; verification?: { total?: number; verified?: number; failed?: number } };
 type ReviewSummary = { formatting?: Record<string, number>; content?: Record<string, number>; overall?: Record<string, number> };
+type TemplateOption = { template_id: string; name: string; school: string; document_type: string; version: string; status: string };
+type TemplateIdentity = { id: string; version: string; name: string; school?: string; document_type?: string };
 type AgentResult = {
   status: "ok" | "requires_confirmation";
   mode?: string;
@@ -156,6 +158,7 @@ type AgentResult = {
   change_evidence?: unknown[];
   pending_actions?: ContentIssue[];
   content_score?: { before_content_score?: number; after_content_score?: number; delta?: number; verified_changes_count?: number; unresolved_issue_count?: number; score_delta_reasons?: string[] };
+  template?: TemplateIdentity;
 };
 type PreviewResult = { title: string; html: string };
 
@@ -214,6 +217,8 @@ export default function Home() {
   const [paperFilename, setPaperFilename] = useState("");
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [templateFilename, setTemplateFilename] = useState("");
+  const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [templateId, setTemplateId] = useState("");
   const [agentMode, setAgentMode] = useState<"local" | "ai">("ai");
   const [classification, setClassification] = useState<Classification | null>(null);
   const [confirmedNonPaper, setConfirmedNonPaper] = useState(false);
@@ -237,6 +242,26 @@ export default function Home() {
   const needsConfirmation = classification?.requires_confirmation === true;
   const canRun = hasPaper && (!needsConfirmation || confirmedNonPaper);
   const buttonDisabled = running || !canRun;
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadTemplates() {
+      try {
+        const response = await fetch(apiUrl("/templates"), { cache: "no-store" });
+        const data = await readResponseData(response);
+        if (!response.ok || cancelled) return;
+        const options = Array.isArray(data.templates) ? data.templates as TemplateOption[] : [];
+        setTemplates(options);
+        const defaultId = typeof data.default_template_id === "string" ? data.default_template_id : options[0]?.template_id;
+        const defaultVersion = typeof data.default_template_version === "string" ? data.default_template_version : options.find((item) => item.template_id === defaultId)?.version;
+        if (defaultId && defaultVersion) setTemplateId(`${defaultId}@@${defaultVersion}`);
+      } catch {
+        // The legacy upload/default flow remains usable if registry discovery is unavailable.
+      }
+    }
+    void loadTemplates();
+    return () => { cancelled = true; };
+  }, []);
 
   async function onPaperChange(file: File | null) {
     setPaperFile(file);
@@ -297,6 +322,11 @@ export default function Home() {
     formData.append("mode", agentMode);
     formData.append("allow_non_paper", String(allowNonPaper));
     if (templateFile) formData.append("template", templateFile);
+    else if (templateId) {
+      const [selectedId, selectedVersion] = templateId.split("@@", 2);
+      formData.append("template_id", selectedId);
+      if (selectedVersion) formData.append("template_version", selectedVersion);
+    }
 
     setRunning(true);
     setPreview(null);
@@ -453,6 +483,14 @@ export default function Home() {
               <FilePicker title="模板 docx" description="可选。上传后会优先参考模板样式。" filename={templateFilename} onChange={onTemplateChange} />
             </section>
 
+            <label className="template-selector">
+              <span>系统模板</span>
+              <select value={templateId} disabled={Boolean(templateFile)} onChange={(event) => setTemplateId(event.target.value)}>
+                {templates.map((item) => <option key={`${item.template_id}-${item.version}`} value={`${item.template_id}@@${item.version}`}>{item.name} · {item.school} · {item.document_type} · v{item.version}</option>)}
+              </select>
+              <small>{templateFile ? "已上传兼容模板，本次优先使用上传文件。" : "选择 Registry 中的模板；默认保持通用论文规则。"}</small>
+            </label>
+
             <section className="mode-switch" aria-label="Agent 模式">
               <button className={agentMode === "local" ? "active" : ""} onClick={() => setAgentMode("local")} type="button">
                 本地规则模式
@@ -503,6 +541,8 @@ export default function Home() {
             </div>
 
             <ScoreOverview result={result} />
+
+            {result.template ? <p className="template-provenance">Template: {result.template.name} / v{result.template.version}（{result.template.id}）</p> : null}
 
             <RuntimeSummary result={result} />
 

@@ -21,6 +21,7 @@ from .plagiarism_checker import check_repeat_risk
 from .rule_engine import normalize_rules
 from .template_extractor import extract_template_profile
 from .template_intelligence import analyze_template
+from .template_registry import resolve_template_request
 from .review_evidence import aggregate_review_evidence, content_score_summary
 
 
@@ -85,6 +86,7 @@ def run_paper_agent(
     mode: str = "ai",
     paper_display_name: str | None = None,
     template_display_name: str | None = None,
+    template_identity: dict[str, Any] | None = None,
     progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     def notify(stage: str) -> None:
@@ -96,10 +98,15 @@ def run_paper_agent(
             # Progress reporting is observational and must never break the Agent.
             pass
 
+    if template_identity is None:
+        resolved_template = resolve_template_request(template_path=template_path)
+        template_path = resolved_template.template_path
+        template_identity = resolved_template.provenance()
+
     state = AgentState(paper_path=paper_path, template_path=template_path, output_dir=output_dir)
     normalized_mode = "local" if mode == "local" else "ai"
     paper_name = paper_display_name or paper_path.name
-    template_name = template_display_name or (template_path.name if template_path else None)
+    template_name = template_display_name or str(template_identity.get("name") or "") or (template_path.name if template_path else None)
     trace = AgentTraceBuilder(mode=normalized_mode, has_template=template_path is not None)
     classification: dict[str, Any] | None = None
     template_profile: dict[str, Any] | None = None
@@ -131,6 +138,9 @@ def run_paper_agent(
                 "classification": classification,
                 "steps": state.steps,
                 "message": classification["warning"],
+                "template": template_identity,
+                "resolved_template_id": template_identity["id"],
+                "resolved_template_version": template_identity["version"],
                 "agent_trace": trace.build(
                     classification=classification,
                     requires_confirmation=True,
@@ -288,6 +298,7 @@ def run_paper_agent(
             evidence_summary=evidence_summary,
             content_score=content_score,
         )
+        modification_report["template"] = template_identity
         trace.mark_task("generate_report", "done", f"人工复查项 {len(modification_report.get('manual_review_items') or [])} 项")
         trace.record_tool("report_generator/build_modification_report", summary=f"人工复查项 {len(modification_report.get('manual_review_items') or [])} 项")
         state.finish(f"报告已生成，最终文件：{final_path.name}")
@@ -313,6 +324,9 @@ def run_paper_agent(
             "filename": final_path.name,
             "original_filename": paper_name,
             "original_template_filename": template_name,
+            "template": template_identity,
+            "resolved_template_id": template_identity["id"],
+            "resolved_template_version": template_identity["version"],
             "before_analysis": before_analysis,
             "after_analysis": after_analysis,
             "modification_report": modification_report,
@@ -360,6 +374,9 @@ def run_paper_agent(
             "steps": state.steps,
             "error": str(exc),
             "download_url": None,
+            "template": template_identity,
+            "resolved_template_id": template_identity["id"],
+            "resolved_template_version": template_identity["version"],
             "agent_trace": trace.build(
                 classification=classification,
                 template_profile=template_profile,

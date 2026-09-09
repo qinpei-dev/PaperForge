@@ -497,6 +497,33 @@ p {
   display: none;
 }
 
+.template-selector {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  color: #334155;
+  font-size: 14px;
+}
+
+.template-selector select {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #162033;
+}
+
+.template-selector small,
+.template-provenance {
+  color: #64748b;
+}
+
+.template-provenance {
+  margin: 12px 0;
+  font-size: 14px;
+}
+
 .agent-button,
 .secondary-button,
 .download {

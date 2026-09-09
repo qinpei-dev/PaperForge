@@ -26,6 +26,13 @@ from db.session import SessionLocal, get_db, init_db
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
 from services.task_worker import task_worker
 from services.task_events import has_events, publish_event, subscribe_event
+from services.template_registry import (
+    TEMPLATE_STATUSES,
+    ResolvedTemplate,
+    TemplateRegistryError,
+    resolve_template_request,
+    template_registry,
+)
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -88,6 +95,23 @@ def startup_database() -> None:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/templates")
+def list_templates(
+    school: str | None = Query(None),
+    document_type: str | None = Query(None),
+    status: str | None = Query("active"),
+) -> dict[str, object]:
+    if status is not None and status not in TEMPLATE_STATUSES:
+        raise HTTPException(status_code=422, detail="status 必须是 active、deprecated 或 disabled。")
+    templates = template_registry.list(school=school, document_type=document_type, status=status)
+    default_template = template_registry.resolve()
+    return {
+        "default_template_id": template_registry.default_template_id,
+        "default_template_version": default_template.definition.version,
+        "templates": [item.public_dict() for item in templates],
+    }
 
 
 @app.post("/auth/register", response_model=AuthResponse, status_code=201)
@@ -174,7 +198,7 @@ def get_task(task_id: str, user: User = Depends(get_current_user), db: Session =
     task = db.scalar(statement)
     if task is None:
         raise HTTPException(status_code=404, detail="没有找到该任务。")
-    return {"id": task.id, "task_id": task.id, "project_id": task.project_id, "status": task.status, "workflow_stage": task.workflow_stage, "progress": workflow_progress(task.workflow_stage, task.status), "paper_name": task.paper_name or task.project.title, "uploaded_file": task.uploaded_file, "trace": task.agent_trace, "agent_trace": task.agent_trace, "workflow_steps": build_workflow_steps(task.agent_trace, task.workflow_stage, task.status), "score_history": {"before": task.before_score, "after": task.score}, "score": task.score, "created_at": task.created_at, "artifacts": [{"id": item.id, "file_path": item.file_path, "file_type": item.file_type, "download_url": f"/artifacts/{item.id}/download"} for item in task.artifacts]}
+    return {"id": task.id, "task_id": task.id, "project_id": task.project_id, "status": task.status, "workflow_stage": task.workflow_stage, "progress": workflow_progress(task.workflow_stage, task.status), "paper_name": task.paper_name or task.project.title, "uploaded_file": task.uploaded_file, "template": template_from_trace(task.agent_trace), "trace": task.agent_trace, "agent_trace": task.agent_trace, "workflow_steps": build_workflow_steps(task.agent_trace, task.workflow_stage, task.status), "score_history": {"before": task.before_score, "after": task.score}, "score": task.score, "created_at": task.created_at, "artifacts": [{"id": item.id, "file_path": item.file_path, "file_type": item.file_type, "download_url": f"/artifacts/{item.id}/download"} for item in task.artifacts]}
 
 
 @app.get("/tasks/{task_id}/events")
@@ -215,6 +239,8 @@ def task_events(
 async def create_task(
     paper: UploadFile = File(...),
     template: UploadFile | None = File(None),
+    template_id: str | None = Form(None),
+    template_version: str | None = Form(None),
     allow_non_paper: bool = Form(False),
     mode: str = Form("ai"),
     user: User = Depends(get_current_user),
@@ -226,12 +252,13 @@ async def create_task(
     request_id = uuid4()
     paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
     template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
+    selected_template = resolve_template_or_422(template_upload, template_id, template_version)
     project = get_or_create_default_project(db, user)
-    task = Task(project_id=project.id, status="pending", paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path))
+    task = Task(project_id=project.id, status="pending", paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path), agent_trace=[template_trace_item(selected_template)])
     db.add(task)
     db.commit()
     db.refresh(task)
-    publish_task_event(task.id, "task_created", status="pending", progress=0, message="任务已创建，等待 Agent 启动。")
+    publish_task_event(task.id, "task_created", status="pending", progress=0, message="任务已创建，等待 Agent 启动。", template=selected_template.provenance())
     task_worker.submit(
         run_task_in_worker,
         task.id,
@@ -239,6 +266,7 @@ async def create_task(
         template_upload,
         allow_non_paper,
         mode,
+        selected_template,
         sessionmaker(bind=db.get_bind(), autoflush=False, expire_on_commit=False),
     )
     return {"task_id": task.id, "status": "pending", "result_status": "pending"}
@@ -256,6 +284,8 @@ async def classify_uploaded_document(paper: UploadFile = File(...), user: User |
 async def run_agent(
     paper: UploadFile = File(...),
     template: UploadFile | None = File(None),
+    template_id: str | None = Form(None),
+    template_version: str | None = Form(None),
     allow_non_paper: bool = Form(False),
     mode: str = Form("ai"),
     user: User | None = Depends(require_user_if_enabled),
@@ -264,6 +294,7 @@ async def run_agent(
     request_id = uuid4()
     paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
     template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
+    selected_template = resolve_template_or_422(template_upload, template_id, template_version)
     task = None
     if user is not None:
         project = get_or_create_default_project(db, user)
@@ -272,7 +303,7 @@ async def run_agent(
         db.commit()
         db.refresh(task)
     if task is not None:
-        result = execute_persisted_task(task, db, paper_upload, template_upload, allow_non_paper, mode)
+        result = execute_persisted_task(task, db, paper_upload, template_upload, allow_non_paper, mode, selected_template)
     else:
         result = run_agent_pipeline(
             paper_path=paper_upload.path,
@@ -281,7 +312,8 @@ async def run_agent(
             allow_non_paper=allow_non_paper,
             mode=mode,
             paper_display_name=paper_upload.original_filename,
-            template_display_name=template_upload.original_filename if template_upload else None,
+            template_display_name=template_upload.original_filename if template_upload and selected_template.resolution == "legacy_upload" else None,
+            resolved_template=selected_template,
         )
     result.setdefault("original_filename", paper_upload.original_filename)
     result.setdefault(
@@ -303,6 +335,35 @@ def publish_task_event(task_id: str, event_type: str, **payload: object) -> None
         LOGGER.exception("Unable to publish task event %s for %s", event_type, task_id)
 
 
+def resolve_template_or_422(
+    template_upload: StoredUpload | None,
+    template_id: str | None,
+    template_version: str | None,
+) -> ResolvedTemplate:
+    try:
+        return resolve_template_request(
+            template_path=template_upload.path if template_upload else None,
+            template_id=template_id.strip() if template_id and template_id.strip() else None,
+            template_version=template_version.strip() if template_version and template_version.strip() else None,
+        )
+    except TemplateRegistryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def template_trace_item(selected_template: ResolvedTemplate) -> dict[str, object]:
+    identity = selected_template.provenance()
+    return {
+        "step": "resolve_template",
+        "status": "ok",
+        "duration_ms": 0,
+        "fallback_used": identity.get("resolution") in {"default", "legacy_upload"},
+        "message": f"Template: {identity['name']} / v{identity['version']}",
+        "template_id": identity["id"],
+        "template_version": identity["version"],
+        "template_name": identity["name"],
+    }
+
+
 def execute_persisted_task(
     task: Task,
     db: Session,
@@ -310,6 +371,7 @@ def execute_persisted_task(
     template_upload: StoredUpload | None,
     allow_non_paper: bool,
     mode: str,
+    selected_template: ResolvedTemplate,
 ) -> dict[str, object]:
     """Run the existing Agent and persist only orchestration metadata and artifacts."""
     task.status = "running"
@@ -335,7 +397,8 @@ def execute_persisted_task(
             allow_non_paper=allow_non_paper,
             mode=mode,
             paper_display_name=paper_upload.original_filename,
-            template_display_name=template_upload.original_filename if template_upload else None,
+            template_display_name=template_upload.original_filename if template_upload and selected_template.resolution == "legacy_upload" else None,
+            resolved_template=selected_template,
             progress_callback=on_progress,
         )
     except Exception as exc:
@@ -347,7 +410,10 @@ def execute_persisted_task(
         publish_task_event(task.id, "task_failed", status="failed", workflow_stage="failed", progress=0, message="任务处理失败，请稍后重试。")
         return {"status": "error", "error": str(exc), "agent_trace": task.agent_trace}
 
-    task.agent_trace = result.get("agent_trace")
+    result_trace = result.get("agent_trace")
+    if not isinstance(result_trace, list):
+        result_trace = []
+    task.agent_trace = result_trace
     task.before_score = result.get("before_score") if isinstance(result.get("before_score"), (int, float)) else None
     task.score = result.get("after_score") if isinstance(result.get("after_score"), (int, float)) else None
     result_status = str(result.get("status") or "error")
@@ -386,6 +452,7 @@ def run_task_in_worker(
     template_upload: StoredUpload | None,
     allow_non_paper: bool,
     mode: str,
+    selected_template: ResolvedTemplate,
     session_factory: sessionmaker[Session] = SessionLocal,
 ) -> None:
     """Run one queued task with a session owned by the worker thread."""
@@ -401,6 +468,7 @@ def run_task_in_worker(
             template_upload=template_upload,
             allow_non_paper=allow_non_paper,
             mode=mode,
+            selected_template=selected_template,
         )
     except Exception as exc:
         LOGGER.exception("Task worker failed for task %s", task_id)
@@ -419,6 +487,19 @@ def workflow_progress(workflow_stage: str | None, status: str) -> int:
     if status == "failed" or workflow_stage == "failed":
         return 0
     return {"analyzing": 20, "planning": 40, "executing": 60, "verifying": 80, "completed": 100}.get(workflow_stage or "", 0)
+
+
+def template_from_trace(trace: object) -> dict[str, object] | None:
+    if not isinstance(trace, list):
+        return None
+    for item in trace:
+        if isinstance(item, dict) and item.get("step") == "resolve_template":
+            return {
+                "id": item.get("template_id"),
+                "version": item.get("template_version"),
+                "name": item.get("template_name") or str(item.get("message") or "").removeprefix("Template: ").rsplit(" / v", 1)[0],
+            }
+    return None
 
 
 def build_workflow_steps(trace: object, workflow_stage: str | None = None, task_status: str | None = None) -> list[dict[str, str]]:
