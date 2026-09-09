@@ -23,10 +23,10 @@ docker compose version
 在项目根目录执行：
 
 ```powershell
-Copy-Item paper-ai/backend/.env.example paper-ai/backend/.env
+Copy-Item .env.example .env
 ```
 
-然后按需编辑 `paper-ai/backend/.env`。密钥只会作为后端容器的运行时环境变量传入；`.env` 已从 Git 和 Docker build context 中排除。
+然后按需编辑根目录 `.env`，至少替换 `POSTGRES_PASSWORD` 和 `JWT_SECRET_KEY`。密钥只会作为容器运行时环境变量传入；`.env` 已从 Git 和 Docker build context 中排除。`paper-ai/backend/.env.example` 仍用于非 Docker 本地启动。
 
 没有 API Key 时，可以保持 `DEEPSEEK_API_KEY` 为空并使用 `local` 模式。
 

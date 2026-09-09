@@ -57,6 +57,21 @@
 - 当前仍为同步任务编排，不是异步队列或断点续跑
 - 保留 `/agent/run` 旧接口和 `AUTH_REQUIRED=false` 本地兼容模式
 
+## [DONE] PaperForge Day 3 SaaS 产品化增强
+
+状态：**PASS**
+
+完成：
+
+- Task 增加兼容的论文名称、修改前评分和 Day 3 Alembic 迁移。
+- 复用 Agent Trace 生成 analyzing → planning → executing → verifying → completed / failed 的详情页流程展示。
+- Task Detail 展示论文名、创建时间、状态、评分变化、Trace、修改后 DOCX 和分析报告下载。
+- Dashboard 展示 Workspace、总任务数、已完成、处理中和最近任务。
+- 新增 StorageService、LocalStorage 默认实现和 S3Storage 预留接口，保持 `uploads/`、`outputs/` 原路径。
+- Compose 补充服务健康检查、数据库/JWT/API 环境变量说明和根目录 `.env.example`。
+
+验收结果：`git diff --check`、全量 `pytest`（11 passed）、前端 `npm run build`、`docker compose --env-file .env.example config --quiet`、`compileall`、Alembic head 和敏感/临时文件检查均 PASS。
+
 ## [CURRENT] PaperForge Release Freeze
 
 当前公开版本：`v2.0-paperforge`。本轮仅进行公开包装、文档治理和低风险展示文案调整，不改变主链路。

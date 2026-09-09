@@ -92,6 +92,18 @@ DOCX storage                                      Provenance / Evidence / Trace
 
 The frontend does not modify DOCX files directly. The backend maintains the document-processing boundary and exposes classify, run, preview, and download endpoints. See [Architecture Overview](docs/ARCHITECTURE_OVERVIEW.md) for the GitHub-friendly system view and [detailed architecture](docs/ARCHITECTURE.md) for implementation-level boundaries.
 
+### SaaS task architecture
+
+```text
+User → Workspace → Project → Task → Agent Pipeline → Artifact
+                                      ↓
+                         Trace / score / verification evidence
+```
+
+Tasks use the Agent Trace as the source for the user-facing workflow: analyzing → planning → executing → verifying → completed (or failed). The database accepts the new states while keeping legacy `created`/`running` rows readable. The Task Detail page presents the trace, score change, generated DOCX and analysis report; the Dashboard presents workspace information and task statistics.
+
+File handling is behind a small `StorageService` boundary. `LocalStorage` remains the default and keeps the existing `uploads/` and `outputs/` paths. `S3Storage` is reserved as an adapter surface for a future cloud deployment; no files are migrated in this release.
+
 ## Demo
 
 The repository includes constructed, de-identified demo inputs, a template, and outputs from a real local run:
@@ -156,10 +168,12 @@ npm run dev
 
 Open `http://127.0.0.1:3000`. The backend health endpoint is `http://127.0.0.1:8000/health`.
 
+Local development uses SQLite by default. To use PostgreSQL locally, set `DATABASE_URL` and run `alembic upgrade head` from `paper-ai/backend` before starting the API.
+
 ### Docker Compose
 
 ```powershell
-Copy-Item paper-ai/backend/.env.example paper-ai/backend/.env
+Copy-Item .env.example .env
 docker compose up --build
 ```
 

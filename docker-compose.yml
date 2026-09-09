@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-paperforge}
       POSTGRES_USER: ${POSTGRES_USER:-paperforge}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-paperforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before starting Docker Compose}
     ports:
       - "5432:5432"
     volumes:
@@ -22,12 +22,12 @@ services:
     build:
       context: ./paper-ai/backend
       dockerfile: Dockerfile
-    env_file:
-      - ./paper-ai/backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-paperforge}:${POSTGRES_PASSWORD:-paperforge}@postgres:5432/${POSTGRES_DB:-paperforge}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-paperforge}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before starting Docker Compose}@postgres:5432/${POSTGRES_DB:-paperforge}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-paperforge-secret-in-production}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env before starting Docker Compose}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
       AUTH_REQUIRED: ${AUTH_REQUIRED:-true}
       AUTO_CREATE_DB: "false"

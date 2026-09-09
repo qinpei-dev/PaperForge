@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse
 from services.document_classifier import classify_document
 from services.agent_pipeline import run_agent_pipeline
 from services.preview_service import build_docx_preview
+from services.storage import LocalStorage
 from services.content_review import apply_content_suggestion
 from services.review_evidence import aggregate_review_evidence, content_score_summary
 from auth import auth_is_required, create_access_token, get_current_user, get_optional_current_user, hash_password, validate_email, verify_password
@@ -28,9 +29,10 @@ from sqlalchemy.orm import Session
 
 
 BASE_DIR = Path(__file__).resolve().parent
-UPLOAD_DIR = BASE_DIR / "uploads"
+STORAGE = LocalStorage(BASE_DIR)
+UPLOAD_DIR = STORAGE.path_for("uploads")
 TEMPLATE_DIR = BASE_DIR / "templates"
-OUTPUT_DIR = BASE_DIR / "outputs"
+OUTPUT_DIR = STORAGE.path_for("outputs")
 
 for directory in (UPLOAD_DIR, TEMPLATE_DIR, OUTPUT_DIR):
     directory.mkdir(exist_ok=True)
@@ -156,7 +158,7 @@ def list_tasks(user: User = Depends(get_current_user), db: Session = Depends(get
         .order_by(Task.created_at.desc())
     )
     tasks = db.scalars(statement).all()
-    return [{"id": item.id, "project_id": item.project_id, "status": item.status, "score": item.score, "created_at": item.created_at, "title": item.project.title} for item in tasks]
+    return [{"id": item.id, "project_id": item.project_id, "status": item.status, "score": item.score, "created_at": item.created_at, "title": item.paper_name or item.project.title} for item in tasks]
 
 
 @app.get("/tasks/{task_id}")
@@ -165,7 +167,7 @@ def get_task(task_id: str, user: User = Depends(get_current_user), db: Session =
     task = db.scalar(statement)
     if task is None:
         raise HTTPException(status_code=404, detail="没有找到该任务。")
-    return {"id": task.id, "task_id": task.id, "project_id": task.project_id, "status": task.status, "uploaded_file": task.uploaded_file, "trace": task.agent_trace, "agent_trace": task.agent_trace, "score": task.score, "created_at": task.created_at, "artifacts": [{"id": item.id, "file_path": item.file_path, "file_type": item.file_type} for item in task.artifacts]}
+    return {"id": task.id, "task_id": task.id, "project_id": task.project_id, "status": task.status, "paper_name": task.paper_name or task.project.title, "uploaded_file": task.uploaded_file, "trace": task.agent_trace, "agent_trace": task.agent_trace, "workflow_steps": build_workflow_steps(task.agent_trace), "score_history": {"before": task.before_score, "after": task.score}, "score": task.score, "created_at": task.created_at, "artifacts": [{"id": item.id, "file_path": item.file_path, "file_type": item.file_type, "download_url": f"/artifacts/{item.id}/download"} for item in task.artifacts]}
 
 
 @app.post("/tasks", status_code=201)
@@ -184,7 +186,7 @@ async def create_task(
     paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
     template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
     project = get_or_create_default_project(db, user)
-    task = Task(project_id=project.id, status="pending", uploaded_file=str(paper_upload.path))
+    task = Task(project_id=project.id, status="pending", paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path))
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -222,7 +224,7 @@ async def run_agent(
     task = None
     if user is not None:
         project = get_or_create_default_project(db, user)
-        task = Task(project_id=project.id, status="pending", uploaded_file=str(paper_upload.path))
+        task = Task(project_id=project.id, status="pending", paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path))
         db.add(task)
         db.commit()
         db.refresh(task)
@@ -278,6 +280,7 @@ def execute_persisted_task(
         return {"status": "error", "error": str(exc), "agent_trace": task.agent_trace}
 
     task.agent_trace = result.get("agent_trace")
+    task.before_score = result.get("before_score") if isinstance(result.get("before_score"), (int, float)) else None
     task.score = result.get("after_score") if isinstance(result.get("after_score"), (int, float)) else None
     result_status = str(result.get("status") or "error")
     task.status = "completed" if result_status == "ok" else ("pending" if result_status == "requires_confirmation" else "failed")
@@ -292,6 +295,40 @@ def execute_persisted_task(
     db.commit()
     db.refresh(task)
     return result
+
+
+def build_workflow_steps(trace: object) -> list[dict[str, str]]:
+    """Project the existing Agent Trace onto the five user-facing workflow stages."""
+    stages = [("analyzing", "文档解析"), ("planning", "模板识别与格式规划"), ("executing", "自动修改"), ("verifying", "质量验证"), ("completed", "处理完成")]
+    events = trace if isinstance(trace, list) else []
+    states = {str(item.get("state", "")).lower() for item in events if isinstance(item, dict)}
+    actions = {str(item.get("action", "")).lower() for item in events if isinstance(item, dict)}
+    has_error = any(str(item.get("status", "")).lower() in {"error", "failed"} for item in events if isinstance(item, dict))
+    completed = {"analyzing", "planning", "executing", "verifying"}
+    if states & {"completed", "failed"}:
+        completed.update({"analyzing", "planning", "executing", "verifying"})
+    result = []
+    for key, label in stages:
+        active = key in states or (key == "planning" and "accept_execution_plan" in actions)
+        status = "completed" if key in completed and (active or states) else ("completed" if key == "completed" and "completed" in states else "pending")
+        if key == "completed" and has_error:
+            status = "failed"
+        elif key == "completed" and "completed" not in states:
+            status = "pending"
+        result.append({"key": key, "label": label, "status": status})
+    return result
+
+
+@app.get("/artifacts/{artifact_id}/download")
+def download_artifact(artifact_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> FileResponse:
+    artifact = db.scalar(select(Artifact).join(Artifact.task).join(Task.project).join(Project.workspace).where(Artifact.id == artifact_id, Workspace.owner_id == user.id))
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="没有找到属于当前用户的产物。")
+    target = Path(artifact.file_path)
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="产物文件不存在。")
+    media_type = "application/json" if artifact.file_type == "report" else "application/octet-stream"
+    return FileResponse(path=target, filename=target.name, media_type=media_type)
 
 
 @app.get("/download/{filename}")

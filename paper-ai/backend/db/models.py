@@ -55,9 +55,12 @@ class Task(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=False)
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="created")
+    # New workflow states are persisted as strings so legacy rows remain readable.
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    paper_name: Mapped[str | None] = mapped_column(String(320), nullable=True)
     uploaded_file: Mapped[str | None] = mapped_column(Text, nullable=True)
     agent_trace: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON, nullable=True)
+    before_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
