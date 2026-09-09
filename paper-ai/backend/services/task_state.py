@@ -68,6 +68,7 @@ def init_task_state(
         "classification": None,
         "document_analysis": None,
         "reasoning_results": [],
+        "quality_report": None,
         "before_score": None,
         "after_score": None,
         "ai_used": None,
@@ -130,6 +131,8 @@ def apply_result_fields(state: dict[str, Any], result: dict[str, Any], *, output
         state["document_analysis"] = result.get("document_analysis")
     if "reasoning_results" in result:
         state["reasoning_results"] = result.get("reasoning_results") or []
+    if "quality_report" in result:
+        state["quality_report"] = result.get("quality_report")
     state["before_score"] = result.get("before_score")
     state["after_score"] = result.get("after_score")
 

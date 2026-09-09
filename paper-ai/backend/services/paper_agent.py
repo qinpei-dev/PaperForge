@@ -10,6 +10,7 @@ from .agent_orchestrator import AgentTraceBuilder
 from .document_model import build_document_model
 from .document_intelligence import analyze_document
 from .ai_reasoning import generate_reasoning
+from .paper_quality import analyze_paper_quality
 from .document_classifier import classify_document
 from .docx_analyzer import analyze_docx
 from .agent_runtime import run_runtime
@@ -107,6 +108,7 @@ def run_paper_agent(
     document_model: dict[str, Any] | None = None
     document_analysis: dict[str, Any] | None = None
     reasoning_results: list[dict[str, Any]] = []
+    quality_report: dict[str, Any] | None = None
     normalized_rules: list[dict[str, Any]] = []
     execution_plan: dict[str, Any] | None = None
     runtime_result: dict[str, Any] | None = None
@@ -193,6 +195,7 @@ def run_paper_agent(
             plan=plan,
             before_analysis=before_analysis,
         )
+        quality_report = analyze_paper_quality(document_analysis, reasoning_results, runtime_result.get("verification"))
         formatted_path = Path(runtime_result["formatted_path"])
         format_log = runtime_result["execution"]["format_log"]
         trace.mark_task("format_document", "done", f"格式处理记录 {len(format_log)} 项")
@@ -307,6 +310,7 @@ def run_paper_agent(
             "document_model": document_model,
             "document_analysis": document_analysis,
             "reasoning_results": reasoning_results,
+            "quality_report": quality_report,
             "rules": normalized_rules,
             "execution_plan": execution_plan,
             "workflow": runtime_result["workflow"] if runtime_result else None,

@@ -1,5 +1,17 @@
 # TODO
 
+## [DONE] PaperForge Day7-P2 Paper Quality Intelligence
+
+状态：**PASS**
+
+完成：
+
+- 新增 `backend/services/paper_quality.py`，基于 document analysis、reasoning results 和 verification results 生成四维质量报告。
+- 支持 format、structure、reference、visual 维度，并保留每个维度的 evidence。
+- 接入 Verifier 后处理链路，结果和 task state 新增 `quality_report`。
+- 不修改 Executor、SSE 协议或数据库；旧任务缺少 quality_report 时保持兼容。
+- 新增 `test_paper_quality.py`；全量后端 pytest、编译和 diff 检查通过。
+
 ## [DONE] PaperForge AI Reasoning Layer
 
 状态：**PASS**
