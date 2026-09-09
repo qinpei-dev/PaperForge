@@ -167,6 +167,11 @@ function apiUrl(path: string) {
   return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+function authorizationHeaders(): Record<string, string> {
+  const token = localStorage.getItem("paperforge_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
@@ -260,7 +265,7 @@ export default function Home() {
     setMessage("正在识别文档类型...");
     try {
       const requestUrl = apiUrl("/document/classify");
-      const response = await fetch(requestUrl, { method: "POST", body: formData });
+      const response = await fetch(requestUrl, { method: "POST", headers: authorizationHeaders(), body: formData });
       const data = await readResponseData(response);
       if (!response.ok) {
         setMessage(apiErrorMessage(data, "文档类型识别失败。"));
@@ -300,7 +305,7 @@ export default function Home() {
     setMessage("PaperForge 正在按计划处理文档，并在输出后执行验证...");
     try {
       const requestUrl = apiUrl("/tasks");
-      const response = await fetch(requestUrl, { method: "POST", body: formData });
+      const response = await fetch(requestUrl, { method: "POST", headers: authorizationHeaders(), body: formData });
       const data = await readResponseData(response);
       const status = typeof data.result_status === "string" ? data.result_status : typeof data.status === "string" ? data.status : "";
       if (status === "requires_confirmation") {
