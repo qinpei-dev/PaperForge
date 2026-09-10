@@ -90,6 +90,8 @@ def test_storage_rejects_traversal_and_is_tenant_isolated(tmp_path: Path) -> Non
     assert first != second and storage.open(first).read() == b"a" and storage.open(second).read() == b"b"
     with pytest.raises(ValueError):
         storage.resolve_local_path("local://tenant-templates/../escape/1.0/file.docx")
+    with pytest.raises(ValueError):
+        storage.resolve_local_path("local://tenant-templates/%2e%2e/escape/1.0/file.docx")
     storage.delete(first)
     assert not storage.exists(first) and storage.exists(second)
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import BinaryIO
+from urllib.parse import unquote
 from uuid import uuid4
 
 
@@ -106,7 +107,7 @@ class LocalTemplateStorage(TemplateStorage):
     def resolve_local_path(self, locator: str) -> Path:
         if not locator.startswith(self.scheme):
             raise ValueError("unsupported template storage locator")
-        relative = Path(locator.removeprefix(self.scheme))
+        relative = Path(unquote(locator.removeprefix(self.scheme)))
         if relative.is_absolute() or ".." in relative.parts or len(relative.parts) != 4 or relative.suffix.lower() != ".docx":
             raise ValueError("invalid template storage locator")
         target = (self.root / relative).resolve()
