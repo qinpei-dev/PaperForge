@@ -82,12 +82,12 @@ def _owner_count(db: Session, tenant_id: str) -> int:
 
 
 def change_role(db: Session, membership: TenantMembership, new_role: str, *, actor: TenantMembership) -> TenantMembership:
-    if new_role not in ROLES:
-        raise ValueError("unknown tenant role")
     if actor.tenant_id != membership.tenant_id or actor.role != ROLE_OWNER:
         raise PermissionError("only an owner can change roles")
-    if membership.role == ROLE_OWNER and new_role != ROLE_OWNER and _owner_count(db, membership.tenant_id) <= 1:
-        raise ValueError("tenant must retain an owner")
+    if new_role not in {ROLE_ADMIN, ROLE_MEMBER}:
+        raise ValueError("unknown tenant role")
+    if membership.role == ROLE_OWNER:
+        raise ValueError("owner role cannot be changed through this API")
     membership.role = new_role
     return membership
 
@@ -95,6 +95,6 @@ def change_role(db: Session, membership: TenantMembership, new_role: str, *, act
 def remove_member(db: Session, membership: TenantMembership, *, actor: TenantMembership) -> None:
     if actor.tenant_id != membership.tenant_id or actor.role != ROLE_OWNER:
         raise PermissionError("only an owner can remove members")
-    if membership.role == ROLE_OWNER and _owner_count(db, membership.tenant_id) <= 1:
-        raise ValueError("tenant must retain an owner")
+    if membership.role == ROLE_OWNER:
+        raise ValueError("owner cannot be removed through this API")
     db.delete(membership)

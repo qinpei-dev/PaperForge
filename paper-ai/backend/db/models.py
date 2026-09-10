@@ -39,6 +39,7 @@ class Tenant(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     memberships: Mapped[list[TenantMembership]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
+    invitations: Mapped[list[TenantInvitation]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
     templates: Mapped[list[Template]] = relationship(back_populates="tenant")
     tasks: Mapped[list[Task]] = relationship(back_populates="tenant")
 
@@ -62,6 +63,29 @@ class TenantMembership(Base):
 
     tenant: Mapped[Tenant] = relationship(back_populates="memberships")
     user: Mapped[User] = relationship(back_populates="tenant_memberships")
+
+
+class TenantInvitation(Base):
+    __tablename__ = "tenant_invitations"
+    __table_args__ = (
+        CheckConstraint("role IN ('admin', 'member')", name="ck_tenant_invitations_role"),
+        CheckConstraint("status IN ('pending', 'accepted', 'revoked', 'expired')", name="ck_tenant_invitations_status"),
+        Index("ix_tenant_invitations_tenant_status", "tenant_id", "status"),
+        UniqueConstraint("token_hash", name="uq_tenant_invitations_token_hash"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True, nullable=False)
+    email: Mapped[str] = mapped_column(String(320), index=True, nullable=False)
+    role: Mapped[str] = mapped_column(String(50), nullable=False, default="member")
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending", index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    tenant: Mapped[Tenant] = relationship(back_populates="invitations")
 
 
 class Workspace(Base):

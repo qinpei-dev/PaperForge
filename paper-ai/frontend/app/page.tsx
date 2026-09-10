@@ -164,6 +164,9 @@ type AgentResult = {
 type PreviewResult = { title: string; html: string };
 type AuthUser = { email: string };
 type MembershipInfo = { tenant_id: string; role: "owner" | "admin" | "member"; permissions: string[] };
+type WorkspaceOption = { tenant_id: string; name: string; role: "owner" | "admin" | "member" };
+type TenantMember = { user_id: string; email: string; role: "owner" | "admin" | "member" };
+type TenantInvitation = { id: string; email: string; role: "admin" | "member"; status: string; expires_at: string };
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, "");
@@ -175,7 +178,8 @@ function apiUrl(path: string) {
 
 function authorizationHeaders(): Record<string, string> {
   const token = localStorage.getItem("paperforge_token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  const tenantId = localStorage.getItem("paperforge_active_tenant");
+  return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(tenantId ? { "X-Tenant-ID": tenantId } : {}) };
 }
 
 function storedAuthUser(): AuthUser | null {
@@ -255,6 +259,13 @@ export default function Home() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [membership, setMembership] = useState<MembershipInfo | null>(null);
+  const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
+  const [activeTenantId, setActiveTenantId] = useState("");
+  const [members, setMembers] = useState<TenantMember[]>([]);
+  const [invitations, setInvitations] = useState<TenantInvitation[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"admin" | "member">("member");
+  const [invitationLink, setInvitationLink] = useState("");
   const [authenticationRequired, setAuthenticationRequired] = useState(false);
 
   const visibleSteps = useMemo(() => {
@@ -276,6 +287,26 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
+    async function loadWorkspaces() {
+      if (!authUser) { setWorkspaces([]); setActiveTenantId(""); return; }
+      try {
+        const response = await fetch(apiUrl("/workspaces"), { cache: "no-store", headers: authorizationHeaders() });
+        const data = await readResponseData(response);
+        const options = Array.isArray(data) ? data.filter((item): item is WorkspaceOption => isRecord(item) && typeof item.tenant_id === "string" && typeof item.name === "string" && (item.role === "owner" || item.role === "admin" || item.role === "member")) : [];
+        if (cancelled) return;
+        setWorkspaces(options);
+        const saved = localStorage.getItem("paperforge_active_tenant");
+        const next = options.find((item) => item.tenant_id === saved)?.tenant_id ?? options[0]?.tenant_id ?? "";
+        if (next) localStorage.setItem("paperforge_active_tenant", next); else localStorage.removeItem("paperforge_active_tenant");
+        setActiveTenantId(next);
+      } catch { if (!cancelled) { setWorkspaces([]); setActiveTenantId(""); } }
+    }
+    void loadWorkspaces();
+    return () => { cancelled = true; };
+  }, [authUser]);
+
+  useEffect(() => {
+    let cancelled = false;
     async function loadMembership() {
       if (!authUser) { setMembership(null); return; }
       try {
@@ -290,7 +321,7 @@ export default function Home() {
     }
     void loadMembership();
     return () => { cancelled = true; };
-  }, [authUser]);
+  }, [authUser, activeTenantId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -313,7 +344,26 @@ export default function Home() {
     }
     void loadTemplates();
     return () => { cancelled = true; };
-  }, []);
+  }, [activeTenantId, authUser]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadGovernance() {
+      if (!authUser || !activeTenantId || !membership) { setMembers([]); setInvitations([]); return; }
+      try {
+        const memberResponse = await fetch(apiUrl(`/tenants/${encodeURIComponent(activeTenantId)}/members`), { cache: "no-store", headers: authorizationHeaders() });
+        const memberData = await readResponseData(memberResponse);
+        if (memberResponse.ok && Array.isArray(memberData) && !cancelled) setMembers(memberData as unknown as TenantMember[]);
+        if (membership.role === "owner") {
+          const invitationResponse = await fetch(apiUrl(`/tenants/${encodeURIComponent(activeTenantId)}/invitations`), { cache: "no-store", headers: authorizationHeaders() });
+          const invitationData = await readResponseData(invitationResponse);
+          if (invitationResponse.ok && Array.isArray(invitationData) && !cancelled) setInvitations(invitationData as unknown as TenantInvitation[]);
+        } else if (!cancelled) setInvitations([]);
+      } catch { if (!cancelled) { setMembers([]); setInvitations([]); } }
+    }
+    void loadGovernance();
+    return () => { cancelled = true; };
+  }, [authUser, activeTenantId, membership?.role]);
 
   function requireAuthentication() {
     setAuthenticationRequired(true);
@@ -324,10 +374,57 @@ export default function Home() {
     localStorage.removeItem("paperforge_token");
     localStorage.removeItem("paperforge_user");
     localStorage.removeItem("paperforge_workspace");
+    localStorage.removeItem("paperforge_active_tenant");
     setAuthUser(null);
     setMembership(null);
     setAuthenticationRequired(false);
     setMessage("已退出登录。");
+  }
+
+  function switchWorkspace(tenantId: string) {
+    localStorage.setItem("paperforge_active_tenant", tenantId);
+    setActiveTenantId(tenantId);
+    setMembership(null); setTemplates([]); setMembers([]); setInvitations([]); setInvitationLink("");
+    setResult(null); setPreview(null); setClassification(null); setMessage("已切换 Workspace，正在加载该空间的数据。");
+  }
+
+  async function updateMember(member: TenantMember, role: "admin" | "member") {
+    if (!activeTenantId || member.role === role) return;
+    const response = await fetch(apiUrl(`/tenants/${encodeURIComponent(activeTenantId)}/members/${encodeURIComponent(member.user_id)}`), { method: "PATCH", headers: { ...authorizationHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ role }) });
+    const data = await readResponseData(response);
+    if (!response.ok) { setMessage(apiErrorMessage(data, "成员角色更新失败。")); return; }
+    setMembers((items) => items.map((item) => item.user_id === member.user_id ? data as unknown as TenantMember : item));
+  }
+
+  async function removeMember(member: TenantMember) {
+    if (!activeTenantId) return;
+    const response = await fetch(apiUrl(`/tenants/${encodeURIComponent(activeTenantId)}/members/${encodeURIComponent(member.user_id)}`), { method: "DELETE", headers: authorizationHeaders() });
+    if (!response.ok) { setMessage(apiErrorMessage(await readResponseData(response), "成员移除失败。")); return; }
+    setMembers((items) => items.filter((item) => item.user_id !== member.user_id));
+  }
+
+  async function createInvitation() {
+    if (!activeTenantId || !inviteEmail.trim()) return;
+    const response = await fetch(apiUrl(`/tenants/${encodeURIComponent(activeTenantId)}/invitations`), { method: "POST", headers: { ...authorizationHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }) });
+    const data = await readResponseData(response);
+    if (!response.ok) { setMessage(apiErrorMessage(data, "创建邀请失败。")); return; }
+    const invitation = data as unknown as TenantInvitation & { invitation_url?: string };
+    setInvitations((items) => [invitation, ...items]); setInvitationLink(invitation.invitation_url ? `${window.location.origin}${invitation.invitation_url}` : ""); setInviteEmail("");
+  }
+
+  async function addExistingMember() {
+    if (!activeTenantId || !inviteEmail.trim()) return;
+    const response = await fetch(apiUrl(`/tenants/${encodeURIComponent(activeTenantId)}/members`), { method: "POST", headers: { ...authorizationHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }) });
+    const data = await readResponseData(response);
+    if (!response.ok) { setMessage(apiErrorMessage(data, "添加成员失败；对方可能尚未注册。")); return; }
+    setMembers((items) => [...items, data as unknown as TenantMember]); setInviteEmail(""); setMessage("已添加现有用户为 Workspace 成员。");
+  }
+
+  async function revokeInvitation(invitation: TenantInvitation) {
+    if (!activeTenantId) return;
+    const response = await fetch(apiUrl(`/tenants/${encodeURIComponent(activeTenantId)}/invitations/${encodeURIComponent(invitation.id)}`), { method: "DELETE", headers: authorizationHeaders() });
+    if (!response.ok) { setMessage(apiErrorMessage(await readResponseData(response), "撤销邀请失败。")); return; }
+    setInvitations((items) => items.map((item) => item.id === invitation.id ? { ...item, status: "revoked" } : item));
   }
 
   async function onPaperChange(file: File | null) {
@@ -532,6 +629,7 @@ export default function Home() {
               <nav className="home-auth" aria-label="账户操作">
                 {authUser ? <>
                   <span className="home-user" title={authUser.email}>{authUser.email}</span>
+                  {workspaces.length ? <label className="workspace-switcher"><span className="sr-only">切换 Workspace</span><select value={activeTenantId} onChange={(event) => switchWorkspace(event.target.value)}>{workspaces.map((item) => <option key={item.tenant_id} value={item.tenant_id}>{item.name}</option>)}</select></label> : null}
                   {membership && <span className="tenant-role" title={`Workspace ${membership.tenant_id}`}>{membership.role === "owner" ? "Owner" : membership.role === "admin" ? "Admin" : "Member"}</span>}
                   <Link className="home-auth-link" href="/dashboard">工作台</Link>
                   <button className="home-auth-link logout-button" type="button" onClick={logout}>退出登录</button>
@@ -585,6 +683,15 @@ export default function Home() {
               </ol>
             </div>
           </header>
+
+          {authUser && !workspaces.length ? <section className="governance-panel empty-workspace"><h2>没有可用 Workspace</h2><p>当前账号没有有效 Workspace。请联系空间 Owner 获取邀请后刷新页面。</p></section> : null}
+          {authUser && membership?.role === "owner" ? <section className="governance-panel" aria-label="成员与邀请管理">
+            <div className="section-title"><span>成员管理</span><strong>{members.length} 位成员</strong></div>
+            <div className="member-list">{members.map((item) => <div className="member-row" key={item.user_id}><span title={item.email}>{item.email}</span><b>{item.role === "owner" ? "Owner" : item.role === "admin" ? "Admin" : "Member"}</b>{item.role !== "owner" ? <span className="member-actions"><select value={item.role} onChange={(event) => void updateMember(item, event.target.value as "admin" | "member")}><option value="admin">Admin</option><option value="member">Member</option></select><button type="button" onClick={() => void removeMember(item)}>删除</button></span> : null}</div>)}</div>
+            <div className="invite-form"><h3>添加成员或创建邀请</h3><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" placeholder="name@example.com" aria-label="邀请邮箱" /><select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as "admin" | "member")}><option value="member">Member</option><option value="admin">Admin</option></select><button type="button" onClick={() => void addExistingMember()}>添加已注册用户</button><button type="button" onClick={() => void createInvitation()}>创建邀请</button></div>
+            {invitationLink ? <p className="invitation-link">复制邀请链接：<code>{invitationLink}</code></p> : null}
+            {invitations.length ? <div className="invitation-list">{invitations.map((item) => <div className="member-row" key={item.id}><span>{item.email}</span><b>{item.role} · {item.status}</b>{item.status === "pending" ? <button type="button" onClick={() => void revokeInvitation(item)}>撤销</button> : null}</div>)}</div> : null}
+          </section> : null}
 
           <section className="setup-panel" aria-label="上传与运行">
             <div className="section-title">

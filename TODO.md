@@ -977,6 +977,18 @@
 
 下一步：Day10-P1 可实现受 OWNER 约束的成员邀请/增删/角色变更 API 与 workspace 切换 UX；本轮不创建 tag、不部署 production。
 
+## [DONE] PaperForge Day10-P1 — Tenant Member Governance + Active Workspace Switching
+
+目标：让 Owner 可安全管理 `admin/member`，让多 Workspace 用户可切换 active tenant，同时不弱化 Day9/Day10-P0 isolation。
+
+完成：新增 Owner-only 成员添加、角色更新、删除 API；Owner 不能经普通 API 被授予、降级或移除。新增持久化轻量 invitation，token 仅保存 hash，具备 7 天 expiry、一次性接受、撤销、邮箱匹配和原子 membership 创建。`GET /workspaces` 返回 active tenant memberships；首页提供 Workspace selector，localStorage 仅存 UI preference，切换时清空旧 tenant 的 templates/results/members/invitations，并由后端继续校验每个 `X-Tenant-ID`。Owner 可见最小成员与邀请管理 UI；非 Owner 不显示 mutation controls。
+
+验收：成员、邀请、隔离、SaaS targeted pytest 21 passed；backend full pytest 73 passed；compileall、frontend build、PostgreSQL fresh upgrade 与 `0007→0008→0007→0008` roundtrip、git diff check PASS。
+
+暂未实现：ownership transfer、custom roles/fine-grained editor、SSO/SAML、SCIM、enterprise directory、email delivery、audit-log enterprise dashboard。
+
+下一步建议：Day10-P2 仅在真实团队工作流需求明确后，增加 ownership transfer 的双确认流程、审计事件与 invitation acceptance UX；不在 P2 前扩展企业 IAM。
+
 ## [DONE] PaperForge Day9-P3 — Tenant Template Management & Storage
 
 目标：登录用户可上传、持久化、管理并安全使用 tenant-scoped DOCX Template Resource，同时保持 legacy task upload 为临时语义。

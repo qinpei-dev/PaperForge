@@ -24,7 +24,7 @@ from services.storage import LocalStorage
 from services.content_review import apply_content_suggestion
 from services.review_evidence import aggregate_review_evidence, content_score_summary
 from auth import auth_is_required, create_access_token, get_current_user, get_optional_current_user, hash_password, validate_email, verify_password
-from db.models import Artifact, Project, Task, Template, TenantMembership, User, Workspace
+from db.models import Artifact, Project, Task, Template, Tenant, TenantInvitation, TenantMembership, User, Workspace
 from db.session import SessionLocal, get_db, init_db
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
 from services.task_worker import task_worker
@@ -41,7 +41,8 @@ from services.template_persistence import bootstrap_template_registry, refresh_t
 from services.template_repository import TemplateRepository
 from services.template_intelligence import analyze_template
 from services.tenant_context import TenantContext, bootstrap_personal_tenants, ensure_personal_tenant, get_current_tenant, resolve_tenant_context
-from services.rbac import MEMBER_READ, ROLE_PERMISSIONS, TASK_CREATE, TASK_MANAGE, TASK_READ, TEMPLATE_READ, TEMPLATE_WRITE, require_tenant_permission
+from services.rbac import MEMBER_MANAGE, MEMBER_READ, ROLE_ADMIN, ROLE_MEMBER, ROLE_OWNER, ROLE_PERMISSIONS, TASK_CREATE, TASK_MANAGE, TASK_READ, TEMPLATE_READ, TEMPLATE_WRITE, add_member, change_role, remove_member, require_tenant_permission
+from services.tenant_invitations import INVITATION_PENDING, accept_invitation, create_invitation, expire_pending_invitations
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -365,6 +366,23 @@ def membership_public_dict(membership: TenantMembership) -> dict[str, object]:
     }
 
 
+def invitation_public_dict(invitation: TenantInvitation) -> dict[str, object]:
+    return {
+        "id": invitation.id,
+        "tenant_id": invitation.tenant_id,
+        "email": invitation.email,
+        "role": invitation.role,
+        "status": invitation.status,
+        "expires_at": invitation.expires_at,
+        "created_at": invitation.created_at,
+        "accepted_at": invitation.accepted_at,
+    }
+
+
+def require_owner_governance(context: TenantContext) -> None:
+    require_permission(context, MEMBER_MANAGE)
+
+
 @app.get("/tenants/membership/me")
 def current_membership(context: TenantContext = Depends(get_current_tenant)) -> dict[str, object]:
     return membership_public_dict(context.membership)
@@ -381,6 +399,122 @@ def list_tenant_members(tenant_id: str, user: User = Depends(get_current_user), 
     require_permission(context, MEMBER_READ)
     memberships = db.scalars(select(TenantMembership).where(TenantMembership.tenant_id == tenant_id, TenantMembership.status == "active").order_by(TenantMembership.created_at)).all()
     return [membership_public_dict(item) for item in memberships]
+
+
+@app.post("/tenants/{tenant_id}/members", status_code=201)
+def add_tenant_member(tenant_id: str, payload: dict[str, object] = Body(...), user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
+    context = resolve_tenant_context(db, user, tenant_id)
+    require_owner_governance(context)
+    email = validate_email(str(payload.get("email") or ""))
+    role = str(payload.get("role") or ROLE_MEMBER)
+    if role not in {ROLE_ADMIN, ROLE_MEMBER}:
+        raise HTTPException(status_code=422, detail="成员角色只能是 admin 或 member。")
+    target = db.scalar(select(User).where(User.email == email))
+    if target is None:
+        raise HTTPException(status_code=404, detail="没有找到可添加的用户。")
+    try:
+        membership = add_member(db, tenant_id=tenant_id, user_id=target.id, role=role)
+        db.commit()
+        db.refresh(membership)
+        return membership_public_dict(membership)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="该用户已是此 Workspace 成员。") from exc
+
+
+@app.patch("/tenants/{tenant_id}/members/{user_id}")
+def update_tenant_member(tenant_id: str, user_id: str, payload: dict[str, object] = Body(...), user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
+    context = resolve_tenant_context(db, user, tenant_id)
+    require_owner_governance(context)
+    role = str(payload.get("role") or "")
+    if role not in {ROLE_ADMIN, ROLE_MEMBER}:
+        raise HTTPException(status_code=422, detail="成员角色只能是 admin 或 member。")
+    membership = db.scalar(select(TenantMembership).where(TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == user_id))
+    if membership is None:
+        raise HTTPException(status_code=404, detail="没有找到成员。")
+    try:
+        change_role(db, membership, role, actor=context.membership)
+        db.commit()
+        db.refresh(membership)
+        return membership_public_dict(membership)
+    except (ValueError, PermissionError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Owner 不能通过普通成员接口变更角色。") from exc
+
+
+@app.delete("/tenants/{tenant_id}/members/{user_id}", status_code=204)
+def delete_tenant_member(tenant_id: str, user_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Response:
+    context = resolve_tenant_context(db, user, tenant_id)
+    require_owner_governance(context)
+    membership = db.scalar(select(TenantMembership).where(TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == user_id))
+    if membership is None:
+        raise HTTPException(status_code=404, detail="没有找到成员。")
+    try:
+        remove_member(db, membership, actor=context.membership)
+        db.commit()
+    except (ValueError, PermissionError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Owner 不能通过普通成员接口删除。") from exc
+    return Response(status_code=204)
+
+
+@app.post("/tenants/{tenant_id}/invitations", status_code=201)
+def create_tenant_invitation(tenant_id: str, payload: dict[str, object] = Body(...), user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
+    context = resolve_tenant_context(db, user, tenant_id)
+    require_owner_governance(context)
+    email = validate_email(str(payload.get("email") or ""))
+    role = str(payload.get("role") or ROLE_MEMBER)
+    if role not in {ROLE_ADMIN, ROLE_MEMBER}:
+        raise HTTPException(status_code=422, detail="邀请角色只能是 admin 或 member。")
+    try:
+        invitation, token = create_invitation(db, tenant_id=tenant_id, email=email, role=role, created_by=user.id)
+        db.commit()
+        db.refresh(invitation)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    result = invitation_public_dict(invitation)
+    result["token"] = token
+    result["invitation_url"] = f"/tenant-invitations/{token}/accept"
+    return result
+
+
+@app.get("/tenants/{tenant_id}/invitations")
+def list_tenant_invitations(tenant_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[dict[str, object]]:
+    context = resolve_tenant_context(db, user, tenant_id)
+    require_owner_governance(context)
+    expire_pending_invitations(db, tenant_id)
+    db.commit()
+    invitations = db.scalars(select(TenantInvitation).where(TenantInvitation.tenant_id == tenant_id).order_by(TenantInvitation.created_at.desc())).all()
+    return [invitation_public_dict(item) for item in invitations]
+
+
+@app.delete("/tenants/{tenant_id}/invitations/{invitation_id}", status_code=204)
+def revoke_tenant_invitation(tenant_id: str, invitation_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Response:
+    context = resolve_tenant_context(db, user, tenant_id)
+    require_owner_governance(context)
+    invitation = db.scalar(select(TenantInvitation).where(TenantInvitation.id == invitation_id, TenantInvitation.tenant_id == tenant_id))
+    if invitation is None:
+        raise HTTPException(status_code=404, detail="没有找到邀请。")
+    if invitation.status != INVITATION_PENDING:
+        raise HTTPException(status_code=409, detail="该邀请已不可撤销。")
+    invitation.status = "revoked"
+    db.commit()
+    return Response(status_code=204)
+
+
+@app.post("/tenant-invitations/{token}/accept")
+def accept_tenant_invitation(token: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
+    try:
+        invitation = accept_invitation(db, token=token, user=user)
+        db.commit()
+        return {"status": "accepted", "membership": membership_public_dict(db.scalar(select(TenantMembership).where(TenantMembership.tenant_id == invitation.tenant_id, TenantMembership.user_id == user.id)))}
+    except PermissionError as exc:
+        db.rollback()
+        raise HTTPException(status_code=403, detail="邀请邮箱与当前登录用户不匹配。") from exc
+    except ValueError as exc:
+        db.commit() if "expired" in str(exc) else db.rollback()
+        raise HTTPException(status_code=409, detail="邀请无效、已使用、已撤销或已过期。") from exc
 
 
 def require_user_if_enabled(user: User | None = Depends(get_optional_current_user)) -> User | None:
@@ -405,8 +539,9 @@ def get_or_create_default_project(db: Session, user: User) -> Project:
 
 @app.get("/workspaces")
 def list_workspaces(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[dict[str, object]]:
-    workspaces = db.scalars(select(Workspace).where(Workspace.owner_id == user.id).order_by(Workspace.created_at)).all()
-    return [{"id": item.id, "name": item.name, "created_at": item.created_at} for item in workspaces]
+    ensure_personal_tenant(db, user)
+    memberships = db.scalars(select(TenantMembership).where(TenantMembership.user_id == user.id, TenantMembership.status == "active").order_by(TenantMembership.created_at)).all()
+    return [{"id": item.tenant_id, "tenant_id": item.tenant_id, "name": item.tenant.name, "role": item.role, "created_at": item.tenant.created_at} for item in memberships if item.tenant.status == "active"]
 
 
 @app.get("/tasks")

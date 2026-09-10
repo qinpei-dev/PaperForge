@@ -111,6 +111,35 @@ input {
   font-weight: 800;
 }
 
+.workspace-switcher select,
+.member-actions select,
+.invite-form select,
+.invite-form input {
+  max-width: 100%;
+  min-height: 36px;
+  border: 1px solid #94a3b8;
+  border-radius: 9px;
+  padding: 7px 10px;
+  background: #fff;
+  color: #1e293b;
+}
+.workspace-switcher { max-width: min(100%, 260px); }
+.workspace-switcher select { width: 100%; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+.governance-panel { grid-column: 1 / -1; display: grid; gap: 14px; padding: 18px; border: 1px solid #bfdbfe; border-radius: 16px; background: #f8fbff; min-width: 0; }
+.empty-workspace { color: #475569; }
+.member-list, .invitation-list { display: grid; gap: 8px; }
+.member-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #dbeafe; }
+.member-row > span:first-child { overflow-wrap: anywhere; color: #334155; }
+.member-row b { color: #0f766e; font-size: 13px; white-space: nowrap; }
+.member-row button, .invite-form button { min-height: 36px; border: 1px solid #0f766e; border-radius: 9px; padding: 7px 11px; background: #fff; color: #0f766e; font: inherit; font-weight: 700; cursor: pointer; }
+.member-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.invite-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 8px; }
+.invite-form h3 { width: 100%; margin: 0; font-size: 15px; }
+.invite-form input { flex: 1 1 220px; }
+.invitation-link { overflow-wrap: anywhere; color: #334155; }
+.invitation-link code { white-space: normal; overflow-wrap: anywhere; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
 .home-auth-link {
   display: inline-flex;
   align-items: center;
@@ -1652,6 +1681,9 @@ p {
   .home-auth { justify-content: flex-start; margin-bottom: 20px; }
   .home-user { max-width: 100%; flex-basis: 100%; }
   .home-auth-link { flex: 1 1 auto; }
+  .workspace-switcher { flex: 1 1 100%; max-width: 100%; }
+  .member-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .member-actions { grid-column: 1 / -1; justify-content: flex-start; }
 
   .page {
     padding: 14px;
