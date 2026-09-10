@@ -15,3 +15,10 @@ Application rollback means restarting the previously recorded immutable backend/
 The public edge must supply TLS, a public frontend domain, a backend API route, forwarded headers (`Host`, `X-Forwarded-For`, `X-Forwarded-Proto`), adequate upload/download limits, and SSE-compatible buffering/timeouts. Route browser API, SSE, and artifact-download traffic to the backend without response buffering; retain streaming connections long enough for task events. The repository does not prescribe Nginx, Caddy, Kubernetes, HA, or autoscaling.
 
 The environment contract is intentionally split: PostgreSQL credentials (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`) construct the backend `DATABASE_URL` inside Compose; `JWT_SECRET_KEY`, `APP_ENV=production`, `AUTH_REQUIRED=true`, `CORS_ORIGINS`, and optional `DEEPSEEK_*` configure the backend. `PAPERFORGE_*_IMAGE` must be immutable image references. `NEXT_PUBLIC_API_BASE_URL` is a frontend **build-time** contract, and `CORS_ORIGINS` is the matching runtime browser-origin allowlist. Local filesystem storage paths remain `/app/uploads`, `/app/outputs`, `/app/template_storage`, `/app/task_states`, and `/app/templates`, each mounted to a named volume.
+# Day11 Durable Task Runtime
+
+`tasks` and `task_events` in PostgreSQL are the authoritative source for SaaS task lifecycle and replayable SSE history. The JSON task-state file remains a compatibility artifact for the document pipeline and must not be used to decide a production task's state.
+
+On backend startup, every persisted `running` task is treated as orphaned because the in-process worker cannot safely resume DOCX execution. It is transitioned to `interrupted`, with a `backend_restart` reason, detection timestamp, and the prior worker run identity. This is intentional: PaperForge currently has no verified checkpoint/resume semantics.
+
+SSE clients may reconnect with `Last-Event-ID`; the server authorizes the task against the selected tenant and replays only later tenant-scoped rows from `task_events`. Production operators must run Alembic migration `0010_day11_durable_task_runtime` before deploying the backend image.

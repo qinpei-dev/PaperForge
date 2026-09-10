@@ -8,6 +8,7 @@ import hashlib
 import re
 import zipfile
 from datetime import datetime
+from time import sleep
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -24,11 +25,11 @@ from services.storage import LocalStorage
 from services.content_review import apply_content_suggestion
 from services.review_evidence import aggregate_review_evidence, content_score_summary
 from auth import auth_is_required, create_access_token, get_current_user, get_optional_current_user, hash_password, validate_email, verify_password
-from db.models import Artifact, Project, Task, Template, Tenant, TenantAuditEvent, TenantInvitation, TenantMembership, TenantOwnershipTransfer, User, Workspace
+from db.models import Artifact, Project, Task, TaskEvent, Template, Tenant, TenantAuditEvent, TenantInvitation, TenantMembership, TenantOwnershipTransfer, User, Workspace
 from db.session import SessionLocal, get_db, init_db
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
 from services.task_worker import task_worker
-from services.task_events import has_events, publish_event, subscribe_event
+from services.durable_tasks import advance_running_task, claim_pending_task, finish_running_task, record_task_event, reconcile_orphaned_tasks
 from services.template_registry import (
     TEMPLATE_STATUSES,
     ResolvedTemplate,
@@ -45,7 +46,7 @@ from services.rbac import AUDIT_READ, MEMBER_MANAGE, MEMBER_READ, ROLE_ADMIN, RO
 from services.tenant_invitations import INVITATION_PENDING, accept_invitation, create_invitation, expire_pending_invitations
 from services.tenant_audit import record_audit_event
 from services.ownership_transfers import ACCEPTED as TRANSFER_ACCEPTED, CANCELLED as TRANSFER_CANCELLED, PENDING as TRANSFER_PENDING, accept_transfer, create_transfer, expire_pending_transfers
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -108,6 +109,14 @@ def startup_database() -> None:
     try:
         bootstrap_personal_tenants(db)
         bootstrap_template_registry(db)
+        # Alembic is authoritative in production.  The guard keeps historical
+        # migration compatibility tests (and an intentionally old local DB)
+        # from loading ORM columns that do not exist until Day11 is applied.
+        task_columns = {column["name"] for column in inspect(db.get_bind()).get_columns("tasks")}
+        if {"progress", "worker_run_id", "recovery_metadata"}.issubset(task_columns):
+            interrupted = reconcile_orphaned_tasks(db, worker_identity=f"backend-startup-{uuid4().hex[:12]}")
+            if interrupted:
+                LOGGER.warning("Reconciled %s orphaned running task(s) after backend startup", interrupted)
     finally:
         db.close()
 
@@ -619,7 +628,7 @@ def list_tasks(context: TenantContext = Depends(get_current_tenant), db: Session
     require_permission(context, TASK_READ)
     statement = select(Task).where(Task.tenant_id == context.tenant_id).order_by(Task.created_at.desc())
     tasks = db.scalars(statement).all()
-    return [{"id": item.id, "project_id": item.project_id, "tenant_id": item.tenant_id, "user_id": item.user_id, "status": item.status, "workflow_stage": item.workflow_stage, "progress": workflow_progress(item.workflow_stage, item.status), "score": item.score, "created_at": item.created_at, "title": item.paper_name or item.project.title} for item in tasks]
+    return [{"id": item.id, "project_id": item.project_id, "tenant_id": item.tenant_id, "user_id": item.user_id, "status": item.status, "workflow_stage": item.workflow_stage, "progress": item.progress, "score": item.score, "created_at": item.created_at, "title": item.paper_name or item.project.title} for item in tasks]
 
 
 @app.get("/tasks/{task_id}")
@@ -629,13 +638,14 @@ def get_task(task_id: str, context: TenantContext = Depends(get_current_tenant),
     task = db.scalar(statement)
     if task is None:
         raise HTTPException(status_code=404, detail="没有找到该任务。")
-    return {"id": task.id, "task_id": task.id, "project_id": task.project_id, "tenant_id": task.tenant_id, "user_id": task.user_id, "status": task.status, "workflow_stage": task.workflow_stage, "progress": workflow_progress(task.workflow_stage, task.status), "paper_name": task.paper_name or task.project.title, "uploaded_file": task.uploaded_file, "template": template_from_trace(task.agent_trace), "trace": task.agent_trace, "agent_trace": task.agent_trace, "workflow_steps": build_workflow_steps(task.agent_trace, task.workflow_stage, task.status), "score_history": {"before": task.before_score, "after": task.score}, "score": task.score, "created_at": task.created_at, "artifacts": [{"id": item.id, "file_path": item.file_path, "file_type": item.file_type, "download_url": f"/artifacts/{item.id}/download"} for item in task.artifacts]}
+    return {"id": task.id, "task_id": task.id, "project_id": task.project_id, "tenant_id": task.tenant_id, "user_id": task.user_id, "status": task.status, "workflow_stage": task.workflow_stage, "progress": task.progress, "current_stage": task.current_stage, "started_at": task.started_at, "finished_at": task.finished_at, "updated_at": task.updated_at, "error_code": task.error_code, "error_message": task.error_message, "attempt_count": task.attempt_count, "paper_name": task.paper_name or task.project.title, "uploaded_file": task.uploaded_file, "template": template_from_trace(task.agent_trace), "trace": task.agent_trace, "agent_trace": task.agent_trace, "workflow_steps": build_workflow_steps(task.agent_trace, task.workflow_stage, task.status), "score_history": {"before": task.before_score, "after": task.score}, "score": task.score, "created_at": task.created_at, "artifacts": [{"id": item.id, "file_path": item.file_path, "file_type": item.file_type, "download_url": f"/artifacts/{item.id}/download"} for item in task.artifacts]}
 
 
 @app.get("/tasks/{task_id}/events")
 def task_events(
     task_id: str,
     after: int = Query(0, ge=0),
+    last_event_id: str | None = Header(None, alias="Last-Event-ID"),
     context: TenantContext = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
@@ -645,20 +655,31 @@ def task_events(
     if task is None:
         raise HTTPException(status_code=404, detail="没有找到该任务。")
 
+    try:
+        cursor = max(after, int(last_event_id or 0))
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Last-Event-ID 必须是事件序号。")
+    session_factory = sessionmaker(bind=db.get_bind(), autoflush=False, expire_on_commit=False)
+
     def stream():
-        if task.status in {"completed", "failed"} and not has_events(task_id):
-            event_type = "task_completed" if task.status == "completed" else "task_failed"
-            payload = {"status": task.status, "workflow_stage": task.workflow_stage, "progress": workflow_progress(task.workflow_stage, task.status), "message": "任务已完成。" if task.status == "completed" else "任务处理失败，请稍后重试。", "timestamp": datetime.now().astimezone().isoformat(), "event_type": event_type}
-            yield "event: workflow_update\n"
-            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-            return
-        for event in subscribe_event(task_id, after_sequence=after):
-            if event is None:
-                yield ": keep-alive\n\n"
-                continue
-            yield f"id: {event.sequence}\n"
-            yield "event: workflow_update\n"
-            yield f"data: {json.dumps(event.payload, ensure_ascii=False, default=str)}\n\n"
+        current = cursor
+        while True:
+            stream_db = session_factory()
+            try:
+                events = stream_db.scalars(select(TaskEvent).where(TaskEvent.task_id == task_id, TaskEvent.tenant_id == context.tenant_id, TaskEvent.sequence > current).order_by(TaskEvent.sequence).limit(100)).all()
+                current_task = stream_db.scalar(select(Task).where(Task.id == task_id, Task.tenant_id == context.tenant_id))
+                for event in events:
+                    current = event.sequence
+                    payload = {"status": event.metadata_json.get("status"), "workflow_stage": event.stage, "progress": event.progress, "message": event.message, "timestamp": event.created_at.isoformat(), "event_type": event.event_type, "event_id": event.id}
+                    yield f"id: {event.sequence}\n"
+                    yield "event: workflow_update\n"
+                    yield f"data: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
+                if current_task is None or (current_task.status in {"completed", "failed", "cancelled", "interrupted"} and not events):
+                    return
+            finally:
+                stream_db.close()
+            yield ": keep-alive\n\n"
+            sleep(1)
 
     return StreamingResponse(
         stream(),
@@ -687,11 +708,11 @@ async def create_task(
     template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
     selected_template = resolve_template_or_422(db, template_upload, template_id, template_version, context.tenant_id)
     project = get_or_create_default_project(db, context.current_user)
-    task = Task(project_id=project.id, tenant_id=context.tenant_id, user_id=context.current_user.id, status="pending", paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path), agent_trace=[template_trace_item(selected_template)])
+    task = Task(project_id=project.id, tenant_id=context.tenant_id, user_id=context.current_user.id, status="pending", progress=0, paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path), agent_trace=[template_trace_item(selected_template)], input_metadata={"mode": mode, "allow_non_paper": allow_non_paper, "template": selected_template.provenance(), "original_paper_name": paper_upload.original_filename})
     db.add(task)
     db.commit()
     db.refresh(task)
-    publish_task_event(task.id, "task_created", status="pending", progress=0, message="任务已创建，等待 Agent 启动。", template=selected_template.provenance())
+    publish_task_event(task.id, "task_created", db=db, status="pending", progress=0, message="任务已创建，等待 Agent 启动。", template=selected_template.provenance())
     task_worker.submit(
         run_task_in_worker,
         task.id,
@@ -735,10 +756,11 @@ async def run_agent(
     task = None
     if context is not None:
         project = get_or_create_default_project(db, context.current_user)
-        task = Task(project_id=project.id, tenant_id=context.tenant_id, user_id=context.current_user.id, status="pending", paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path))
+        task = Task(project_id=project.id, tenant_id=context.tenant_id, user_id=context.current_user.id, status="pending", progress=0, paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path), input_metadata={"mode": mode, "allow_non_paper": allow_non_paper, "template": selected_template.provenance(), "original_paper_name": paper_upload.original_filename})
         db.add(task)
         db.commit()
         db.refresh(task)
+        publish_task_event(task.id, "task_created", db=db, status="pending", progress=0, message="任务已创建，正在同步执行。", template=selected_template.provenance())
     if task is not None:
         result = execute_persisted_task(task, db, paper_upload, template_upload, allow_non_paper, mode, selected_template)
     else:
@@ -766,11 +788,16 @@ async def run_agent(
     return result
 
 
-def publish_task_event(task_id: str, event_type: str, **payload: object) -> None:
-    """Event delivery is observational and must not interrupt task execution."""
+def publish_task_event(task_id: str, event_type: str, *, db: Session, **payload: object) -> None:
+    """Append an event before committing state; PostgreSQL is the SSE authority."""
     try:
-        publish_event(task_id, event_type, **payload)
+        task = db.get(Task, task_id)
+        if task is None:
+            return
+        record_task_event(db, task, event_type, **payload)
+        db.commit()
     except Exception:
+        db.rollback()
         LOGGER.exception("Unable to publish task event %s for %s", event_type, task_id)
 
 
@@ -819,20 +846,21 @@ def execute_persisted_task(
     selected_template: ResolvedTemplate,
 ) -> dict[str, object]:
     """Run the existing Agent and persist only orchestration metadata and artifacts."""
-    task.status = "running"
-    db.commit()
-    publish_task_event(task.id, "task_started", status="running", progress=0, message="Agent 已启动。")
+    run_id = claim_pending_task(db, task.id)
+    if run_id is None:
+        return {"status": "error", "error": "任务已被其他 worker 领取或已结束。"}
+    db.refresh(task)
+    publish_task_event(task.id, "task_started", db=db, status="running", workflow_stage="analyzing", progress=0, message="Agent 已启动。", worker_run_id=run_id)
 
     def on_progress(stage: str) -> None:
         if stage not in {"analyzing", "planning", "executing", "verifying"}:
             return
-        task.workflow_stage = stage
-        task.status = "running"
-        db.commit()
+        progress = workflow_progress(stage, "running")
+        if not advance_running_task(db, task, run_id, stage=stage, progress=progress):
+            return
         messages = {"analyzing": "文档解析完成", "planning": "模板分析与格式规划完成", "executing": "正在执行修改", "verifying": "正在进行质量验证"}
-        progress = workflow_progress(stage, task.status)
-        publish_task_event(task.id, "workflow_stage_changed", status=task.status, workflow_stage=stage, progress=progress, message=messages.get(stage, stage))
-        publish_task_event(task.id, "progress_updated", status=task.status, workflow_stage=stage, progress=progress, message=f"当前进度 {progress}%")
+        publish_task_event(task.id, "workflow_stage_changed", db=db, status="running", workflow_stage=stage, progress=progress, message=messages.get(stage, stage))
+        publish_task_event(task.id, "progress_updated", db=db, status="running", workflow_stage=stage, progress=progress, message=f"当前进度 {progress}%")
 
     try:
         result = run_agent_pipeline(
@@ -850,11 +878,10 @@ def execute_persisted_task(
         )
     except Exception as exc:
         LOGGER.exception("Persisted task %s failed during orchestration", task.id)
-        task.status = "failed"
-        task.workflow_stage = "failed"
         task.agent_trace = [{"step": "task_orchestrator", "status": "error", "message": str(exc)}]
         db.commit()
-        publish_task_event(task.id, "task_failed", status="failed", workflow_stage="failed", progress=0, message="任务处理失败，请稍后重试。")
+        finish_running_task(db, task, run_id, status="failed", stage="failed", progress=task.progress, error_code="agent_exception", error_message=str(exc))
+        publish_task_event(task.id, "task_failed", db=db, status="failed", workflow_stage="failed", progress=task.progress, message="任务处理失败，请稍后重试。")
         return {"status": "error", "error": str(exc), "agent_trace": task.agent_trace}
 
     result_trace = result.get("agent_trace")
@@ -866,8 +893,9 @@ def execute_persisted_task(
     result_status = str(result.get("status") or "error")
     if result_status == "error":
         LOGGER.error("Persisted task %s failed: %s", task.id, result.get("error") or "unknown error")
-    task.status = "running" if result_status == "ok" else ("pending" if result_status == "requires_confirmation" else "failed")
-    task.workflow_stage = "verifying" if result_status == "ok" else ("analyzing" if result_status == "requires_confirmation" else "failed")
+    # Persist metadata while the row is still owned by this exact execution.
+    if task.status != "running" or task.worker_run_id != run_id:
+        return {"status": "error", "error": "任务执行租约已失效。"}
     artifact_count = 0
     filename = result.get("filename")
     if isinstance(filename, str):
@@ -882,14 +910,18 @@ def execute_persisted_task(
     db.commit()
     db.refresh(task)
     if artifact_count:
-        publish_task_event(task.id, "artifact_created", status=task.status, workflow_stage=task.workflow_stage, progress=workflow_progress(task.workflow_stage, task.status), message="处理产物已生成。", artifact_count=artifact_count)
+        publish_task_event(task.id, "artifact_created", db=db, status="running", workflow_stage="verifying", progress=80, message="处理产物已生成。", artifact_count=artifact_count)
     if result_status == "ok":
-        task.status = "completed"
-        task.workflow_stage = "completed"
+        finish_running_task(db, task, run_id, status="completed", stage="completed", progress=100, result_metadata={"filename": result.get("filename"), "artifact_count": artifact_count})
+        publish_task_event(task.id, "task_completed", db=db, status="completed", workflow_stage="completed", progress=100, message="任务已完成。")
+    elif result_status == "requires_confirmation":
+        # Existing synchronous compatibility behavior exposes confirmation as pending.
+        task.status = "pending"; task.workflow_stage = "analyzing"; task.current_stage = "analyzing"; task.worker_run_id = None; task.updated_at = datetime.now().astimezone(); task.state_version += 1
         db.commit()
-        publish_task_event(task.id, "task_completed", status="completed", workflow_stage="completed", progress=100, message="任务已完成。")
-    elif task.status == "failed":
-        publish_task_event(task.id, "task_failed", status="failed", workflow_stage="failed", progress=0, message="任务处理失败，请稍后重试。")
+        publish_task_event(task.id, "task_confirmation_required", db=db, status="pending", workflow_stage="analyzing", progress=task.progress, message="任务需要用户确认后继续。")
+    else:
+        finish_running_task(db, task, run_id, status="failed", stage="failed", progress=task.progress, error_code="agent_error", error_message=str(result.get("error") or "Agent failed"))
+        publish_task_event(task.id, "task_failed", db=db, status="failed", workflow_stage="failed", progress=task.progress, message="任务处理失败，请稍后重试。")
     return result
 
 
@@ -921,11 +953,11 @@ def run_task_in_worker(
         LOGGER.exception("Task worker failed for task %s", task_id)
         task = db.get(Task, task_id)
         if task is not None:
-            task.status = "failed"
-            task.workflow_stage = "failed"
             task.agent_trace = [{"step": "task_worker", "status": "error", "message": str(exc)}]
             db.commit()
-            publish_task_event(task.id, "task_failed", status="failed", workflow_stage="failed", progress=0, message="任务处理失败，请稍后重试。")
+            if task.status == "running" and task.worker_run_id:
+                finish_running_task(db, task, task.worker_run_id, status="failed", stage="failed", progress=task.progress, error_code="worker_exception", error_message=str(exc))
+                publish_task_event(task.id, "task_failed", db=db, status="failed", workflow_stage="failed", progress=task.progress, message="任务处理失败，请稍后重试。")
     finally:
         db.close()
 

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, Index, JSON, String, Text, UniqueConstraint, func, text
+from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -44,6 +44,7 @@ class Tenant(Base):
     audit_events: Mapped[list[TenantAuditEvent]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
     templates: Mapped[list[Template]] = relationship(back_populates="tenant")
     tasks: Mapped[list[Task]] = relationship(back_populates="tenant")
+    task_events: Mapped[list[TaskEvent]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
 
 
 class TenantMembership(Base):
@@ -165,12 +166,52 @@ class Task(Base):
     agent_trace: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON, nullable=True)
     before_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Day11 durable runtime fields.  ``status`` and ``workflow_stage`` keep
+    # their existing lowercase API values for compatibility.
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    current_stage: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    input_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    result_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    worker_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    recovery_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    state_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     project: Mapped[Project] = relationship(back_populates="tasks")
     tenant: Mapped[Tenant] = relationship(back_populates="tasks")
     user: Mapped[User] = relationship(back_populates="tasks")
     artifacts: Mapped[list[Artifact]] = relationship(back_populates="task", cascade="all, delete-orphan")
+    events: Mapped[list[TaskEvent]] = relationship(back_populates="task", cascade="all, delete-orphan")
+
+
+class TaskEvent(Base):
+    """Append-only, tenant-scoped task events used by SSE replay."""
+
+    __tablename__ = "task_events"
+    __table_args__ = (
+        Index("ix_task_events_task_sequence", "task_id", "sequence", unique=True),
+        Index("ix_task_events_tenant_sequence", "tenant_id", "sequence"),
+    )
+
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, default=new_id)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    stage: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    progress: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    task: Mapped[Task] = relationship(back_populates="events")
+    tenant: Mapped[Tenant] = relationship(back_populates="task_events")
 
 
 class Artifact(Base):

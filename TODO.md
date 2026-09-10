@@ -1010,3 +1010,10 @@
 目标：在不进行真实 production deployment 的前提下，为 release candidate 建立可重复的镜像、环境、持久化、备份/恢复、迁移、回滚和 public-edge 部署基础。
 
 状态：已完成。下一步只有在获得 production host、registry image digest、domain/TLS/reverse proxy、production secrets 和已验证的 DB/file backup destination 后，才可评估创建 `v3.7.2-multi-tenant-saas` 作为真实部署候选；本轮不开始 Day11。
+## [DONE] PaperForge Day11 — Durable Task Runtime
+
+目标：消除进程内 TaskWorker 在 backend restart 后遗留 RUNNING 和 SSE history 丢失的生产可靠性缺口。
+
+完成：在既有 `tasks` 表上通过 Alembic `0010_day11_durable_task_runtime` 增量保存 durable lifecycle metadata；新增 `task_events` append-only tenant-scoped 事件表。worker claim 使用 `PENDING -> RUNNING` compare-and-set；进度、成功、失败和中断状态均使用 worker run identity 约束，terminal state 不被旧 worker 覆盖。startup reconciliation 将 orphaned RUNNING 标记为 `interrupted` 并保留原因/检测时间/先前 worker；不伪造恢复。SSE 按 tenant 校验 task 后以数据库 event sequence 重放，支持 `Last-Event-ID`；前端在可用 SSE 连接结束时携带最后 event id 重连。旧 JSON task state 继续作为兼容性辅助输出，非 authoritative source。
+
+验收：Day11 lifecycle/claim/reconciliation/SSE replay/tenant isolation tests、Day10/SaaS regression、Python compile、Alembic migration roundtrip、frontend build、git diff check 均需 PASS。未实现真正 checkpoint/resume、retry API、distributed worker queue、multi-node scheduling、object storage、production observability 或真实 production deployment。
