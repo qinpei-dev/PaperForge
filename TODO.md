@@ -967,6 +967,16 @@
 目标：完成 P1 阶段级执行可信闭环，不再拆分单点 P1.x 任务。
 
 状态：已完成。新增轻量 Plan normalization、稳定 execution ordering、重复 PlanStep 去重、同 target 同 field 冲突审计；Executor 在冲突字段上阻断自动执行并记录 provenance。Verifier 输出真实 target verification summary，Decision 优先消费 target failed / unsupported / conflict evidence；HITL 记录具体 target、字段、原因、expected/actual 或候选值。Runtime、task state 和前端补充 execution / conflict / verification summary 与最多 5 条 HITL evidence。新增 `test_p1_execution_closure.py`，真实 DOCX manifest 回归 10/10 PASS。P1 可正式结束，下一阶段仅进入 P2 方向规划。
+## [DONE] PaperForge Day10-P0 — Tenant Membership + RBAC Foundation
+
+目标：在保持 Day9 tenant isolation 与个人 tenant 默认兼容的前提下，建立多用户/多 tenant membership、固定 RBAC 和最小成员只读 API。
+
+完成：`TenantMembership` 扩展为 `owner/admin/member`、`updated_at` 与 `(tenant_id, role)` 索引；新增集中 `rbac.py` 权限矩阵和安全的未来成员变更 service。`X-Tenant-ID` 仅作为未可信选择输入，经 active membership 校验后生成 tenant context；非成员/跨 tenant 返回 404。模板、任务、SSE、artifact、下载、预览和确认写入已通过集中权限校验；新增 `/tenants/membership/me`、`/tenants/{tenant_id}/membership/me`、`/tenants/{tenant_id}/members`。首页只轻量显示当前角色，未引入团队管理 UI。Alembic `0007_day10_membership_rbac` 从 `0006` 升级，并保留既有 owner/workspace 字段与个人 tenant backfill。
+
+验收：Day10 + Day9 + SaaS targeted pytest 20 passed；backend full pytest 69 passed；compileall、Alembic `0006→0007→0006→0007`、frontend production build、git diff check PASS。
+
+下一步：Day10-P1 可实现受 OWNER 约束的成员邀请/增删/角色变更 API 与 workspace 切换 UX；本轮不创建 tag、不部署 production。
+
 ## [DONE] PaperForge Day9-P3 — Tenant Template Management & Storage
 
 目标：登录用户可上传、持久化、管理并安全使用 tenant-scoped DOCX Template Resource，同时保持 legacy task upload 为临时语义。

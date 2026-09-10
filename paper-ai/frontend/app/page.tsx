@@ -163,6 +163,7 @@ type AgentResult = {
 };
 type PreviewResult = { title: string; html: string };
 type AuthUser = { email: string };
+type MembershipInfo = { tenant_id: string; role: "owner" | "admin" | "member"; permissions: string[] };
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, "");
@@ -253,6 +254,7 @@ export default function Home() {
   const [classifying, setClassifying] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [membership, setMembership] = useState<MembershipInfo | null>(null);
   const [authenticationRequired, setAuthenticationRequired] = useState(false);
 
   const visibleSteps = useMemo(() => {
@@ -271,6 +273,24 @@ export default function Home() {
   useEffect(() => {
     setAuthUser(storedAuthUser());
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadMembership() {
+      if (!authUser) { setMembership(null); return; }
+      try {
+        const response = await fetch(apiUrl("/tenants/membership/me"), { cache: "no-store", headers: authorizationHeaders() });
+        const data = await readResponseData(response);
+        if (response.ok && !cancelled && typeof data.tenant_id === "string" && (data.role === "owner" || data.role === "admin" || data.role === "member")) {
+          setMembership({ tenant_id: data.tenant_id, role: data.role, permissions: Array.isArray(data.permissions) ? data.permissions.filter((item): item is string => typeof item === "string") : [] });
+        }
+      } catch {
+        // Role display is advisory UX; server-side RBAC remains authoritative.
+      }
+    }
+    void loadMembership();
+    return () => { cancelled = true; };
+  }, [authUser]);
 
   useEffect(() => {
     let cancelled = false;
@@ -305,6 +325,7 @@ export default function Home() {
     localStorage.removeItem("paperforge_user");
     localStorage.removeItem("paperforge_workspace");
     setAuthUser(null);
+    setMembership(null);
     setAuthenticationRequired(false);
     setMessage("已退出登录。");
   }
@@ -511,6 +532,7 @@ export default function Home() {
               <nav className="home-auth" aria-label="账户操作">
                 {authUser ? <>
                   <span className="home-user" title={authUser.email}>{authUser.email}</span>
+                  {membership && <span className="tenant-role" title={`Workspace ${membership.tenant_id}`}>{membership.role === "owner" ? "Owner" : membership.role === "admin" ? "Admin" : "Member"}</span>}
                   <Link className="home-auth-link" href="/dashboard">工作台</Link>
                   <button className="home-auth-link logout-button" type="button" onClick={logout}>退出登录</button>
                 </> : <>

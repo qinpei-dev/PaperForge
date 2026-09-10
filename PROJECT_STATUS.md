@@ -6,7 +6,9 @@
 
 中文定位：**学术文档可信智能处理 Agent**
 
-当前阶段：**Day9-P3 Tenant Template Management & Storage 完成，等待用户验收**
+当前阶段：**Day10-P0 Tenant Membership + RBAC Foundation 完成，等待用户验收**
+
+Day10-P0 最新增量：**Tenant Membership + RBAC Foundation 已完成**。在既有 `TenantMembership` 上扩展固定 `owner/admin/member` 角色、`updated_at` 和 tenant+role 索引；新增集中 `services/rbac.py`，以代码级权限矩阵统一 tenant、template、task、member 授权，并预留最后 OWNER 保护、非 OWNER 不得变更角色/移除成员的服务约束。Tenant Context 现在可接收不可信 `X-Tenant-ID`，但只能解析当前用户的 active membership；非成员与跨 tenant 行为继续返回 404。新增当前 membership、指定 tenant 当前 membership、tenant members 只读 API；模板、任务、SSE、Artifact、下载、预览和确认版写入均接入相应权限。旧客户端未传 active tenant 时仍自动使用 personal tenant。Alembic `0007` 从 `0006` 扩展既有 membership 表，不移除 legacy owner/workspace 关系。首页轻量展示当前 Owner/Admin/Member，后端仍为唯一 authority。验收结果：backend pytest 69 passed，Day10/Day9/SaaS 专项 20 passed，Python compileall、Alembic `0006→0007→0006→0007`、frontend build、git diff check PASS。
 
 Day9-P3 最新增量：**Tenant Template Management & Storage 已完成**。新增 `LocalTemplateStorage`，托管模板数据库只保存稳定 `local://tenant-templates/...` locator，不保存本地绝对路径；文件按 tenant/resource/version 隔离，并具备安全 locator 解析、删除和本地处理边界。`Template` 新增 storage locator、原始文件名、文件大小、content type、SHA-256、uploaded_by 等正式字段，Alembic `0006` 从 `0005` 升级。登录用户可通过 `POST /templates` 上传合法 DOCX，系统完成空文件/扩展名/大小/ZIP DOCX 校验和 Template Intelligence 解析后才创建 tenant-scoped 资源；失败会回滚 DB 并清理已写文件。新增 tenant-aware detail、patch、原始文件下载和受 provenance 保护的 delete；已被 Task 使用的模板只能 disabled，不能物理删除。Registry 在创建、更新、删除后立即刷新，版本身份不可静默覆盖；Task trace 保留实际模板快照。首页新增最小“我的模板”上传与选择入口，legacy 临时模板上传仍保持 ephemeral。验收结果：后端 pytest 62 passed，Day9-P3 专项 3 passed，Python compileall、Alembic fresh/`0005→0006`、frontend build、git diff check PASS。
 

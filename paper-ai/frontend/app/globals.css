@@ -98,6 +98,19 @@ input {
   white-space: nowrap;
 }
 
+.tenant-role {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid #99f6e4;
+  border-radius: 999px;
+  background: #f0fdfa;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .home-auth-link {
   display: inline-flex;
   align-items: center;

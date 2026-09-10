@@ -47,8 +47,9 @@ class TenantMembership(Base):
     __tablename__ = "tenant_memberships"
     __table_args__ = (
         UniqueConstraint("tenant_id", "user_id", name="uq_tenant_memberships_tenant_user"),
-        CheckConstraint("role IN ('owner', 'member')", name="ck_tenant_memberships_role"),
+        CheckConstraint("role IN ('owner', 'admin', 'member')", name="ck_tenant_memberships_role"),
         CheckConstraint("status IN ('active', 'disabled')", name="ck_tenant_memberships_status"),
+        Index("ix_tenant_memberships_tenant_role", "tenant_id", "role"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -57,6 +58,7 @@ class TenantMembership(Base):
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="member")
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="active", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     tenant: Mapped[Tenant] = relationship(back_populates="memberships")
     user: Mapped[User] = relationship(back_populates="tenant_memberships")

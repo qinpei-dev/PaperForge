@@ -13,7 +13,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
-from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
@@ -24,7 +24,7 @@ from services.storage import LocalStorage
 from services.content_review import apply_content_suggestion
 from services.review_evidence import aggregate_review_evidence, content_score_summary
 from auth import auth_is_required, create_access_token, get_current_user, get_optional_current_user, hash_password, validate_email, verify_password
-from db.models import Artifact, Project, Task, Template, User, Workspace
+from db.models import Artifact, Project, Task, Template, TenantMembership, User, Workspace
 from db.session import SessionLocal, get_db, init_db
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
 from services.task_worker import task_worker
@@ -41,6 +41,7 @@ from services.template_persistence import bootstrap_template_registry, refresh_t
 from services.template_repository import TemplateRepository
 from services.template_intelligence import analyze_template
 from services.tenant_context import TenantContext, bootstrap_personal_tenants, ensure_personal_tenant, get_current_tenant, resolve_tenant_context
+from services.rbac import MEMBER_READ, ROLE_PERMISSIONS, TASK_CREATE, TASK_MANAGE, TASK_READ, TEMPLATE_READ, TEMPLATE_WRITE, require_tenant_permission
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -120,11 +121,15 @@ def list_templates(
     status: str | None = Query("active"),
     user: User | None = Depends(get_optional_current_user),
     db: Session = Depends(get_db),
+    requested_tenant_id: str | None = Header(None, alias="X-Tenant-ID"),
 ) -> dict[str, object]:
     if status is not None and status not in TEMPLATE_STATUSES:
         raise HTTPException(status_code=422, detail="status 必须是 active、deprecated 或 disabled。")
     bootstrap_template_registry(db)
-    tenant_id = resolve_tenant_context(db, user).tenant_id if user is not None else None
+    context = resolve_tenant_context(db, user, requested_tenant_id) if user is not None else None
+    if context is not None:
+        require_permission(context, TEMPLATE_READ)
+    tenant_id = context.tenant_id if context is not None else None
     repository = TemplateRepository(db)
     templates = repository.list_visible(tenant_id, school=school, document_type=document_type, status=status)
     default_template = template_registry.resolve(tenant_id=tenant_id)
@@ -146,6 +151,7 @@ def create_managed_template(
     context: TenantContext = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
+    require_permission(context, TEMPLATE_WRITE)
     original_filename, file_size, checksum = validate_managed_template_upload(file)
     clean_name = require_template_text(name, "name", 300)
     clean_version = require_template_text(version, "version", 100)
@@ -189,6 +195,7 @@ def create_managed_template(
 
 @app.get("/templates/{resource_id}")
 def get_template_detail(resource_id: str, context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> dict[str, object]:
+    require_permission(context, TEMPLATE_READ)
     item = TemplateRepository(db).get_visible_resource(context.tenant_id, resource_id)
     if item is None:
         raise HTTPException(status_code=404, detail="没有找到模板。")
@@ -201,6 +208,7 @@ def update_managed_template(resource_id: str, payload: dict[str, object] = Body(
     item = repository.get_visible_resource(context.tenant_id, resource_id)
     if item is None or item.scope != "tenant" or item.tenant_id != context.tenant_id:
         raise HTTPException(status_code=404, detail="没有找到可修改的模板。")
+    require_permission(context, TEMPLATE_WRITE)
     allowed = {"name": 300, "school": 200, "document_type": 100, "status": 50}
     unexpected = set(payload) - set(allowed)
     if unexpected:
@@ -219,6 +227,7 @@ def update_managed_template(resource_id: str, payload: dict[str, object] = Body(
 
 @app.get("/templates/{resource_id}/file")
 def download_template_file(resource_id: str, context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> FileResponse:
+    require_permission(context, TEMPLATE_READ)
     item = TemplateRepository(db).get_visible_resource(context.tenant_id, resource_id)
     if item is None or not item.storage_locator or not MANAGED_TEMPLATE_STORAGE.exists(item.storage_locator):
         raise HTTPException(status_code=404, detail="没有找到模板文件。")
@@ -231,6 +240,7 @@ def delete_managed_template(resource_id: str, context: TenantContext = Depends(g
     item = repository.get_visible_resource(context.tenant_id, resource_id)
     if item is None or item.scope != "tenant" or item.tenant_id != context.tenant_id:
         raise HTTPException(status_code=404, detail="没有找到可删除的模板。")
+    require_permission(context, TEMPLATE_WRITE)
     if template_has_task_provenance(db, item):
         raise HTTPException(status_code=409, detail="该模板已被历史任务使用，只能将 status 更新为 disabled。")
     locator = item.storage_locator
@@ -340,6 +350,39 @@ def current_user(user: User = Depends(get_current_user)) -> UserResponse:
     return UserResponse(id=user.id, email=user.email)
 
 
+def require_permission(context: TenantContext, permission: str) -> None:
+    require_tenant_permission(context.membership, permission)
+
+
+def membership_public_dict(membership: TenantMembership) -> dict[str, object]:
+    return {
+        "tenant_id": membership.tenant_id,
+        "user_id": membership.user_id,
+        "email": membership.user.email,
+        "role": membership.role,
+        "joined_at": membership.created_at,
+        "permissions": sorted(ROLE_PERMISSIONS[membership.role]),
+    }
+
+
+@app.get("/tenants/membership/me")
+def current_membership(context: TenantContext = Depends(get_current_tenant)) -> dict[str, object]:
+    return membership_public_dict(context.membership)
+
+
+@app.get("/tenants/{tenant_id}/membership/me")
+def tenant_membership_me(tenant_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
+    return membership_public_dict(resolve_tenant_context(db, user, tenant_id).membership)
+
+
+@app.get("/tenants/{tenant_id}/members")
+def list_tenant_members(tenant_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[dict[str, object]]:
+    context = resolve_tenant_context(db, user, tenant_id)
+    require_permission(context, MEMBER_READ)
+    memberships = db.scalars(select(TenantMembership).where(TenantMembership.tenant_id == tenant_id, TenantMembership.status == "active").order_by(TenantMembership.created_at)).all()
+    return [membership_public_dict(item) for item in memberships]
+
+
 def require_user_if_enabled(user: User | None = Depends(get_optional_current_user)) -> User | None:
     if auth_is_required() and user is None:
         raise HTTPException(status_code=401, detail="需要登录后访问。", headers={"WWW-Authenticate": "Bearer"})
@@ -368,6 +411,7 @@ def list_workspaces(user: User = Depends(get_current_user), db: Session = Depend
 
 @app.get("/tasks")
 def list_tasks(context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> list[dict[str, object]]:
+    require_permission(context, TASK_READ)
     statement = select(Task).where(Task.tenant_id == context.tenant_id).order_by(Task.created_at.desc())
     tasks = db.scalars(statement).all()
     return [{"id": item.id, "project_id": item.project_id, "tenant_id": item.tenant_id, "user_id": item.user_id, "status": item.status, "workflow_stage": item.workflow_stage, "progress": workflow_progress(item.workflow_stage, item.status), "score": item.score, "created_at": item.created_at, "title": item.paper_name or item.project.title} for item in tasks]
@@ -375,6 +419,7 @@ def list_tasks(context: TenantContext = Depends(get_current_tenant), db: Session
 
 @app.get("/tasks/{task_id}")
 def get_task(task_id: str, context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> dict[str, object]:
+    require_permission(context, TASK_READ)
     statement = select(Task).where(Task.id == task_id, Task.tenant_id == context.tenant_id)
     task = db.scalar(statement)
     if task is None:
@@ -389,6 +434,7 @@ def task_events(
     context: TenantContext = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
+    require_permission(context, TASK_READ)
     statement = select(Task).where(Task.id == task_id, Task.tenant_id == context.tenant_id)
     task = db.scalar(statement)
     if task is None:
@@ -428,6 +474,7 @@ async def create_task(
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
     """Create a task and hand execution to the lightweight in-process worker."""
+    require_permission(context, TASK_CREATE)
     if mode not in {"local", "ai"}:
         raise HTTPException(status_code=422, detail="mode 必须是 local 或 ai。")
     request_id = uuid4()
@@ -471,11 +518,14 @@ async def run_agent(
     mode: str = Form("ai"),
     user: User | None = Depends(require_user_if_enabled),
     db: Session = Depends(get_db),
+    requested_tenant_id: str | None = Header(None, alias="X-Tenant-ID"),
 ) -> dict[str, object]:
     request_id = uuid4()
     paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
     template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
-    context = resolve_tenant_context(db, user) if user is not None else None
+    context = resolve_tenant_context(db, user, requested_tenant_id) if user is not None else None
+    if context is not None:
+        require_permission(context, TASK_CREATE)
     selected_template = resolve_template_or_422(db, template_upload, template_id, template_version, context.tenant_id if context else None)
     task = None
     if context is not None:
@@ -730,6 +780,7 @@ def build_workflow_steps(trace: object, workflow_stage: str | None = None, task_
 
 @app.get("/artifacts/{artifact_id}/download")
 def download_artifact(artifact_id: str, context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> FileResponse:
+    require_permission(context, TASK_READ)
     artifact = db.scalar(select(Artifact).join(Artifact.task).where(Artifact.id == artifact_id, Task.tenant_id == context.tenant_id))
     if artifact is None:
         raise HTTPException(status_code=404, detail="没有找到属于当前用户的产物。")
@@ -741,11 +792,14 @@ def download_artifact(artifact_id: str, context: TenantContext = Depends(get_cur
 
 
 @app.get("/download/{filename}")
-def download_file(filename: str, user: User | None = Depends(require_user_if_enabled), db: Session = Depends(get_db)) -> FileResponse:
+def download_file(filename: str, user: User | None = Depends(require_user_if_enabled), db: Session = Depends(get_db), requested_tenant_id: str | None = Header(None, alias="X-Tenant-ID")) -> FileResponse:
     target = OUTPUT_DIR / Path(filename).name
     if not target.exists():
         raise HTTPException(status_code=404, detail="没有找到生成后的 Word 文件。")
-    ensure_artifact_access(filename, resolve_tenant_context(db, user) if user is not None else None, db)
+    context = resolve_tenant_context(db, user, requested_tenant_id) if user is not None else None
+    if context is not None:
+        require_permission(context, TASK_READ)
+    ensure_artifact_access(filename, context, db)
     return FileResponse(
         path=target,
         filename=target.name,
@@ -765,12 +819,15 @@ async def apply_suggestion(
     confidence: float = Form(0.85),
     user: User | None = Depends(require_user_if_enabled),
     db: Session = Depends(get_db),
+    requested_tenant_id: str | None = Header(None, alias="X-Tenant-ID"),
 ) -> dict[str, object]:
     source = OUTPUT_DIR / Path(filename).name
     if not source.exists():
         raise HTTPException(status_code=404, detail="没有找到可确认修改的 DOCX。")
-    context = resolve_tenant_context(db, user) if user is not None else None
+    context = resolve_tenant_context(db, user, requested_tenant_id) if user is not None else None
     source_artifact = ensure_artifact_access(filename, context, db)
+    if context is not None:
+        require_permission(context, TASK_MANAGE)
     output = OUTPUT_DIR / f"{source.stem}_confirmed_{datetime.now().strftime('%Y%m%d%H%M%S%f')}.docx"
     result = apply_content_suggestion(source, output, {"issue_id": issue_id, "paragraph_index": paragraph_index, "original_text": original, "suggested_text": suggested, "issue_type": issue_type, "reason": reason, "confidence": confidence})
     if result.get("status") == "conflict":
@@ -790,11 +847,14 @@ async def apply_suggestion(
 
 
 @app.get("/preview/{filename}")
-def preview_file(filename: str, user: User | None = Depends(require_user_if_enabled), db: Session = Depends(get_db)) -> dict[str, str]:
+def preview_file(filename: str, user: User | None = Depends(require_user_if_enabled), db: Session = Depends(get_db), requested_tenant_id: str | None = Header(None, alias="X-Tenant-ID")) -> dict[str, str]:
     target = OUTPUT_DIR / Path(filename).name
     if not target.exists():
         raise HTTPException(status_code=404, detail="没有找到可预览的 Word 文件。")
-    ensure_artifact_access(filename, resolve_tenant_context(db, user) if user is not None else None, db)
+    context = resolve_tenant_context(db, user, requested_tenant_id) if user is not None else None
+    if context is not None:
+        require_permission(context, TASK_READ)
+    ensure_artifact_access(filename, context, db)
     return build_docx_preview(target)
 
 

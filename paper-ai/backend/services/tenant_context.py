@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import NAMESPACE_URL, uuid5
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, Header, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -87,9 +87,18 @@ def bootstrap_personal_tenants(db: Session) -> int:
     return inserted
 
 
-def resolve_tenant_context(db: Session, user: User) -> TenantContext:
-    membership = ensure_personal_tenant(db, user)
+def resolve_tenant_context(db: Session, user: User, tenant_id: str | None = None) -> TenantContext:
+    """Resolve a server-verified active tenant context; client tenant ids are never trusted."""
+    membership = ensure_personal_tenant(db, user) if tenant_id is None else db.scalar(
+        select(TenantMembership).where(
+            TenantMembership.tenant_id == tenant_id,
+            TenantMembership.user_id == user.id,
+        )
+    )
     db.commit()
+    if membership is None:
+        # Keep tenant/resource anti-enumeration behavior for cross-tenant IDs.
+        raise HTTPException(status_code=404, detail="没有找到 tenant。")
     tenant = db.get(Tenant, membership.tenant_id)
     if membership.status != "active":
         raise HTTPException(status_code=403, detail="当前 tenant membership 已停用。")
@@ -101,5 +110,6 @@ def resolve_tenant_context(db: Session, user: User) -> TenantContext:
 def get_current_tenant(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    requested_tenant_id: str | None = Header(None, alias="X-Tenant-ID"),
 ) -> TenantContext:
-    return resolve_tenant_context(db, current_user)
+    return resolve_tenant_context(db, current_user, requested_tenant_id)
