@@ -1,5 +1,18 @@
 # TODO
 
+## [DONE] PaperForge Day12-P1 — Observability Foundation
+
+完成：
+
+- 每个 HTTP request 生成并返回 `X-Request-ID`，并使请求完成/失败日志可关联。
+- 新增依赖外部基础设施的 JSON structured logging；日志带 timestamp、level、request/tenant/user/task ID、event 与 duration，敏感字段和论文/文件正文不记录。
+- 复用 Day11 tenant-scoped append-only `task_events`，补齐 task created、claimed、started、stage changed、completed、failed、interrupted 的执行诊断关联。
+- 新增 `/ready`：只验证数据库可用；`/health` 保持进程存活检查。
+- 错误响应增加稳定错误代码与 request ID，避免只有字符串错误。
+- 新增 request ID、health/readiness、error response、log safety 测试。
+
+限制：仍是单节点、本地 stdout 日志与数据库 task event 查询；没有指标聚合、告警、日志留存/轮转、trace 可视化、分布式关联或外部监控平台。
+
 ## [DONE] PaperForge Day9-P2 — Tenant Context & Resource Isolation
 
 目标：建立 Tenant → Membership → Tenant Context → Template Scope → Query Isolation → Task Provenance 的最小 SaaS 资源边界，不扩展完整 RBAC、tenant switcher 或管理后台。

@@ -15,8 +15,9 @@ from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
 from fastapi import Body, Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
 from services.document_classifier import classify_document
 from services.agent_pipeline import run_agent_pipeline
@@ -30,6 +31,7 @@ from db.session import SessionLocal, get_db, init_db
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
 from services.task_worker import task_worker
 from services.durable_tasks import advance_running_task, claim_pending_task, finish_running_task, record_task_event, reconcile_orphaned_tasks
+from services.observability import bind_context, clear_context, configure_structured_logging, log_event
 from services.rate_limit import enforce_rate_limit
 from services.template_registry import (
     TEMPLATE_STATUSES,
@@ -63,6 +65,7 @@ MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(100 * 1024 * 1024)))
 MAX_DOCX_UNCOMPRESSED_BYTES = int(os.getenv("MAX_DOCX_UNCOMPRESSED_BYTES", str(300 * 1024 * 1024)))
 MAX_DOCX_ARCHIVE_ENTRIES = int(os.getenv("MAX_DOCX_ARCHIVE_ENTRIES", "5000"))
 LOGGER = logging.getLogger(__name__)
+configure_structured_logging()
 
 for directory in (UPLOAD_DIR, TEMPLATE_DIR, OUTPUT_DIR):
     directory.mkdir(exist_ok=True)
@@ -78,6 +81,46 @@ app = FastAPI(
     title="PaperForge API",
     description="Verified Academic Document Agent API",
 )
+
+
+def error_code_for_status(status_code: int) -> str:
+    if status_code in {401, 403}: return "AUTH_ERROR"
+    if status_code in {400, 409, 413, 415, 422, 429}: return "VALIDATION_ERROR"
+    return "INTERNAL_ERROR"
+
+
+def error_response(request: Request, *, status_code: int, message: object, headers: dict[str, str] | None = None) -> JSONResponse:
+    code = error_code_for_status(status_code)
+    if request.url.path.startswith("/tasks") and status_code >= 500: code = "TASK_ERROR"
+    if request.url.path.startswith(("/templates", "/artifacts", "/download", "/preview")) and status_code >= 500: code = "STORAGE_ERROR"
+    return JSONResponse(status_code=status_code, headers=headers, content={"error": {"code": code, "message": message}, "request_id": getattr(request.state, "request_id", None)})
+
+
+@app.middleware("http")
+async def request_diagnostics(request: Request, call_next):
+    started = datetime.now().timestamp(); request_id = uuid4().hex
+    request.state.request_id = request_id; bind_context(request_id=request_id)
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration = round((datetime.now().timestamp() - started) * 1000)
+        log_event(LOGGER, logging.ERROR, "http_request_failed", duration_ms=duration, method=request.method, path=request.url.path, status_code=500, error_code="INTERNAL_ERROR")
+        response = error_response(request, status_code=500, message="服务器内部错误。")
+    duration = round((datetime.now().timestamp() - started) * 1000)
+    response.headers["X-Request-ID"] = request_id
+    log_event(LOGGER, logging.INFO if response.status_code < 500 else logging.ERROR, "http_request_completed", duration_ms=duration, method=request.method, path=request.url.path, status_code=response.status_code)
+    clear_context()
+    return response
+
+
+@app.exception_handler(HTTPException)
+async def classified_http_error(request: Request, exc: HTTPException) -> JSONResponse:
+    return error_response(request, status_code=exc.status_code, message=exc.detail, headers=exc.headers)
+
+
+@app.exception_handler(RequestValidationError)
+async def classified_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    return error_response(request, status_code=422, message="请求参数无效。")
 
 
 @dataclass(frozen=True)
@@ -137,6 +180,16 @@ def startup_database() -> None:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/ready")
+def ready(db: Session = Depends(get_db)) -> JSONResponse:
+    """Readiness is deliberately limited to database reachability."""
+    try:
+        db.execute(select(1))
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "not_ready", "checks": {"database": "unavailable"}})
+    return JSONResponse(content={"status": "ready", "checks": {"database": "ok"}})
 
 
 @app.get("/templates")
@@ -713,6 +766,8 @@ async def create_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    bind_context(tenant_id=task.tenant_id, user_id=task.user_id, task_id=task.id)
+    log_event(LOGGER, logging.INFO, "task_created")
     publish_task_event(task.id, "task_created", db=db, status="pending", progress=0, message="任务已创建，等待 Agent 启动。", template=selected_template.provenance())
     task_worker.submit(
         run_task_in_worker,
@@ -764,6 +819,8 @@ async def run_agent(
         db.add(task)
         db.commit()
         db.refresh(task)
+        bind_context(tenant_id=task.tenant_id, user_id=task.user_id, task_id=task.id)
+        log_event(LOGGER, logging.INFO, "task_created")
         publish_task_event(task.id, "task_created", db=db, status="pending", progress=0, message="任务已创建，正在同步执行。", template=selected_template.provenance())
     if task is not None:
         result = execute_persisted_task(task, db, paper_upload, template_upload, allow_non_paper, mode, selected_template)
@@ -855,6 +912,9 @@ def execute_persisted_task(
     if run_id is None:
         return {"status": "error", "error": "任务已被其他 worker 领取或已结束。"}
     db.refresh(task)
+    bind_context(tenant_id=task.tenant_id, user_id=task.user_id, task_id=task.id)
+    log_event(LOGGER, logging.INFO, "task_claimed")
+    log_event(LOGGER, logging.INFO, "task_started")
     publish_task_event(task.id, "task_started", db=db, status="running", workflow_stage="analyzing", progress=0, message="Agent 已启动。", worker_run_id=run_id)
 
     def on_progress(stage: str) -> None:
@@ -863,6 +923,7 @@ def execute_persisted_task(
         progress = workflow_progress(stage, "running")
         if not advance_running_task(db, task, run_id, stage=stage, progress=progress):
             return
+        log_event(LOGGER, logging.INFO, "task_stage_changed")
         messages = {"analyzing": "文档解析完成", "planning": "模板分析与格式规划完成", "executing": "正在执行修改", "verifying": "正在进行质量验证"}
         publish_task_event(task.id, "workflow_stage_changed", db=db, status="running", workflow_stage=stage, progress=progress, message=messages.get(stage, stage))
         publish_task_event(task.id, "progress_updated", db=db, status="running", workflow_stage=stage, progress=progress, message=f"当前进度 {progress}%")
@@ -882,7 +943,8 @@ def execute_persisted_task(
             user_id=task.user_id,
         )
     except Exception as exc:
-        LOGGER.exception("Persisted task %s failed during orchestration", task.id)
+        log_event(LOGGER, logging.ERROR, "task_failed", error_code="TASK_ERROR")
+        LOGGER.exception("Persisted task orchestration failed")
         task.agent_trace = [{"step": "task_orchestrator", "status": "error", "message": str(exc)}]
         db.commit()
         finish_running_task(db, task, run_id, status="failed", stage="failed", progress=task.progress, error_code="agent_exception", error_message=str(exc))
@@ -897,7 +959,7 @@ def execute_persisted_task(
     task.score = result.get("after_score") if isinstance(result.get("after_score"), (int, float)) else None
     result_status = str(result.get("status") or "error")
     if result_status == "error":
-        LOGGER.error("Persisted task %s failed: %s", task.id, result.get("error") or "unknown error")
+        log_event(LOGGER, logging.ERROR, "task_failed", error_code="TASK_ERROR")
     # Persist metadata while the row is still owned by this exact execution.
     if task.status != "running" or task.worker_run_id != run_id:
         return {"status": "error", "error": "任务执行租约已失效。"}
@@ -919,6 +981,7 @@ def execute_persisted_task(
     if result_status == "ok":
         finish_running_task(db, task, run_id, status="completed", stage="completed", progress=100, result_metadata={"filename": result.get("filename"), "artifact_count": artifact_count})
         publish_task_event(task.id, "task_completed", db=db, status="completed", workflow_stage="completed", progress=100, message="任务已完成。")
+        log_event(LOGGER, logging.INFO, "task_completed")
     elif result_status == "requires_confirmation":
         # Existing synchronous compatibility behavior exposes confirmation as pending.
         task.status = "pending"; task.workflow_stage = "analyzing"; task.current_stage = "analyzing"; task.worker_run_id = None; task.updated_at = datetime.now().astimezone(); task.state_version += 1
@@ -927,6 +990,7 @@ def execute_persisted_task(
     else:
         finish_running_task(db, task, run_id, status="failed", stage="failed", progress=task.progress, error_code="agent_error", error_message=str(result.get("error") or "Agent failed"))
         publish_task_event(task.id, "task_failed", db=db, status="failed", workflow_stage="failed", progress=task.progress, message="任务处理失败，请稍后重试。")
+        log_event(LOGGER, logging.ERROR, "task_failed", error_code="TASK_ERROR")
     return result
 
 
@@ -955,7 +1019,9 @@ def run_task_in_worker(
             selected_template=selected_template,
         )
     except Exception as exc:
-        LOGGER.exception("Task worker failed for task %s", task_id)
+        bind_context(task_id=task_id)
+        log_event(LOGGER, logging.ERROR, "task_failed", error_code="TASK_ERROR")
+        LOGGER.exception("Task worker failed")
         task = db.get(Task, task_id)
         if task is not None:
             task.agent_trace = [{"step": "task_worker", "status": "error", "message": str(exc)}]

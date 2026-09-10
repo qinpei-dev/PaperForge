@@ -6,7 +6,9 @@
 
 中文定位：**学术文档可信智能处理 Agent**
 
-当前阶段：**Day10 已封版；Production Infrastructure P0 已完成本地部署基础演练，等待真实生产环境输入**
+当前阶段：**Day12-P1 Observability Foundation 已完成；等待真实生产环境输入**
+
+Day12-P1 最新增量：**Observability Foundation 已完成**。每个 HTTP 请求现在生成 UUID request ID，并通过 `X-Request-ID` 返回；请求完成/失败日志采用 JSON 结构，含 timestamp、level、request_id、tenant/user/task（可用时）、event 与 duration，敏感字段（JWT、password、API key、论文/文件正文）会被排除或脱敏。既有 durable `task_events` 继续作为 task execution history authority，同时新增 task created/claimed/started/stage changed/completed/failed 的关联结构化诊断日志，可按 task_id 查询一次执行过程。`/health` 仅表示进程存活；新增 `/ready` 以轻量 `SELECT 1` 验证数据库可达。HTTP 错误现返回 `error.code`、`error.message`、`request_id`，分类为 AUTH_ERROR、VALIDATION_ERROR、TASK_ERROR、STORAGE_ERROR 或 INTERNAL_ERROR。未引入 Prometheus/Grafana/ELK/OpenTelemetry 或改变业务 Agent 行为。
 
 Day12-P0 最新增量：**Security Hardening 已完成**。已审计认证、tenant authorization、上传、artifact、API、secrets、数据库边界、日志与前端。production 启动强制非占位且至少 32 字符的 `JWT_SECRET_KEY`、`AUTH_REQUIRED=true` 与显式 `CORS_ORIGINS`；生产 CORS 不再自动允许 localhost。任务、SSE、managed templates 与 artifact 均以 tenant-scoped SQL 查询授权；按 filename 的下载、预览和确认修改先解析 tenant-scoped artifact，再触及文件系统。DOCX 上传现校验安全名、扩展、MIME、原始大小、ZIP 容器、必需部件、条目数及解压总量，并继续 UUID 请求目录隔离。注册/登录按 client 与邮箱、上传/Agent 按 client 或用户实施轻量单进程限流；该措施不替代 reverse proxy/WAF 的分布式限流。前端 preview HTML 源自服务端 escape 的 DOCX renderer；access token 仍位于 localStorage，是后续 httpOnly cookie/session 迁移前的已知 XSS 影响面。未发现受跟踪 env 文件或相关 git history 中的明显真实凭证。
 

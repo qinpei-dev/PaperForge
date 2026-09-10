@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 from typing import Any
 from uuid import uuid4
 
@@ -10,9 +11,11 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from db.models import Task, TaskEvent
+from services.observability import bind_context, log_event
 
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled", "interrupted"}
+LOGGER = logging.getLogger(__name__)
 
 
 def utc_now() -> datetime:
@@ -110,6 +113,8 @@ def reconcile_orphaned_tasks(db: Session, worker_identity: str) -> int:
         task.error_message = "Backend restarted before this in-process task could finish; automatic resume is not supported."
         task.recovery_metadata = {"reason": "orphaned_running_task", "detected_at": now.isoformat(), "previous_worker_run_id": previous, "reconciled_by": worker_identity}
         task.state_version += 1
+        bind_context(tenant_id=task.tenant_id, user_id=task.user_id, task_id=task.id)
+        log_event(LOGGER, logging.WARNING, "task_interrupted", error_code="TASK_ERROR")
         record_task_event(db, task, "task_interrupted", status="interrupted", workflow_stage="interrupted", progress=task.progress, message="后端重启检测到未完成任务，已标记为中断。", interruption_reason="backend_restart", previous_worker_run_id=previous)
         changed += 1
     if changed:
