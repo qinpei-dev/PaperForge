@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import io
 import time
+import zipfile
 
 from collections.abc import Generator
 
@@ -14,6 +16,15 @@ from db.models import Artifact, Project, Task, Tenant, TenantMembership, User, W
 from db.session import get_db
 from main import app
 from services.task_worker import TaskWorker
+
+
+def valid_docx_bytes(content: bytes = b"") -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("word/document.xml", "<w:document/>")
+        archive.writestr("customXml/item.xml", content)
+    return buffer.getvalue()
 
 
 @pytest.fixture
@@ -140,7 +151,7 @@ def test_create_task_runs_pipeline_and_persists_artifacts(
     response = client.post(
         "/tasks",
         headers=auth_header(owner),
-        files={"paper": ("paper.docx", b"fake docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        files={"paper": ("paper.docx", valid_docx_bytes(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
         data={"mode": "local", "allow_non_paper": "true"},
     )
     assert response.status_code == 201, response.text
@@ -178,7 +189,7 @@ def test_create_task_isolation_between_users(
     response = client.post(
         "/tasks",
         headers=auth_header(user_a),
-        files={"paper": ("paper.docx", b"fake docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        files={"paper": ("paper.docx", valid_docx_bytes(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
         data={"mode": "local", "allow_non_paper": "true"},
     )
     assert response.status_code == 201

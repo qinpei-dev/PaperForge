@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import io
 import time
+import zipfile
 from collections.abc import Generator
 
 import pytest
@@ -14,6 +16,13 @@ from db.session import get_db
 from main import app
 from services.agent_pipeline import run_agent_pipeline
 from services.task_worker import TaskWorker
+
+
+def valid_docx_bytes() -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>"); archive.writestr("word/document.xml", "<w:document/>")
+    return buffer.getvalue()
 
 
 @pytest.fixture
@@ -92,7 +101,7 @@ def test_task_workflow_stage_api_and_isolation(client, monkeypatch: pytest.Monke
         return {"status": "ok", "after_score": 95.0, "agent_trace": []}
 
     monkeypatch.setattr("main.run_agent_pipeline", fake_pipeline)
-    response = test_client.post("/tasks", headers=headers(owner), files={"paper": ("paper.docx", b"fake", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}, data={"mode": "local", "allow_non_paper": "true"})
+    response = test_client.post("/tasks", headers=headers(owner), files={"paper": ("paper.docx", valid_docx_bytes(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}, data={"mode": "local", "allow_non_paper": "true"})
     assert response.status_code == 201
     task_id = response.json()["task_id"]
     detail = None
@@ -140,7 +149,7 @@ def test_failed_task_persists_failed_workflow_stage(client, monkeypatch: pytest.
         return {"status": "error", "error": "controlled failure", "agent_trace": []}
 
     monkeypatch.setattr("main.run_agent_pipeline", fake_pipeline)
-    response = test_client.post("/tasks", headers=headers(owner), files={"paper": ("paper.docx", b"fake", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}, data={"mode": "local", "allow_non_paper": "true"})
+    response = test_client.post("/tasks", headers=headers(owner), files={"paper": ("paper.docx", valid_docx_bytes(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}, data={"mode": "local", "allow_non_paper": "true"})
     assert response.status_code == 201
     task_id = response.json()["task_id"]
     detail = None

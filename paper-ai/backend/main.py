@@ -14,7 +14,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
-from fastapi import Body, Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
@@ -30,6 +30,7 @@ from db.session import SessionLocal, get_db, init_db
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
 from services.task_worker import task_worker
 from services.durable_tasks import advance_running_task, claim_pending_task, finish_running_task, record_task_event, reconcile_orphaned_tasks
+from services.rate_limit import enforce_rate_limit
 from services.template_registry import (
     TEMPLATE_STATUSES,
     ResolvedTemplate,
@@ -58,6 +59,9 @@ TEMPLATE_DIR = BASE_DIR / "templates"
 OUTPUT_DIR = STORAGE.path_for("outputs")
 MANAGED_TEMPLATE_STORAGE = template_storage()
 MAX_TEMPLATE_UPLOAD_BYTES = int(os.getenv("MAX_TEMPLATE_UPLOAD_BYTES", str(20 * 1024 * 1024)))
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(100 * 1024 * 1024)))
+MAX_DOCX_UNCOMPRESSED_BYTES = int(os.getenv("MAX_DOCX_UNCOMPRESSED_BYTES", str(300 * 1024 * 1024)))
+MAX_DOCX_ARCHIVE_ENTRIES = int(os.getenv("MAX_DOCX_ARCHIVE_ENTRIES", "5000"))
 LOGGER = logging.getLogger(__name__)
 
 for directory in (UPLOAD_DIR, TEMPLATE_DIR, OUTPUT_DIR):
@@ -81,28 +85,37 @@ class StoredUpload:
     path: Path
     original_filename: str
 
+def runtime_environment() -> str:
+    return os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "local")).strip().lower()
+
+
+def configured_cors_origins() -> list[str]:
+    configured = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",") if origin.strip()]
+    if runtime_environment() in {"production", "prod"}:
+        return configured
+    return ["http://localhost:3000", "http://127.0.0.1:3000", *configured]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        *[
-            origin.strip()
-            for origin in os.getenv("CORS_ORIGINS", "").split(",")
-            if origin.strip()
-        ],
-    ],
+    allow_origins=configured_cors_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Accept", "Authorization", "Content-Type", "Last-Event-ID", "X-Tenant-ID"],
 )
 
 
 @app.on_event("startup")
 def startup_database() -> None:
-    environment = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "local")).strip().lower()
-    if environment in {"production", "prod"} and not os.getenv("JWT_SECRET_KEY", "").strip():
-        raise RuntimeError("JWT_SECRET_KEY must be configured in production.")
+    environment = runtime_environment()
+    if environment in {"production", "prod"}:
+        # Validate here so deployment fails before serving a request.
+        from auth import _jwt_secret
+        _jwt_secret()
+        if not auth_is_required():
+            raise RuntimeError("AUTH_REQUIRED=true is required in production.")
+        if not configured_cors_origins():
+            raise RuntimeError("CORS_ORIGINS must contain the public HTTPS origin in production.")
     if os.getenv("AUTO_CREATE_DB", "true").strip().lower() == "true":
         init_db()
     db = SessionLocal()
@@ -154,6 +167,7 @@ def list_templates(
 
 @app.post("/templates", status_code=201)
 def create_managed_template(
+    request: Request,
     file: UploadFile = File(...),
     name: str = Form(...),
     version: str = Form(...),
@@ -163,6 +177,7 @@ def create_managed_template(
     context: TenantContext = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
+    enforce_rate_limit(request, bucket="template-upload", limit=20)
     require_permission(context, TEMPLATE_WRITE)
     original_filename, file_size, checksum = validate_managed_template_upload(file)
     clean_name = require_template_text(name, "name", 300)
@@ -290,25 +305,7 @@ def normalize_template_id(value: str) -> str:
 
 
 def validate_managed_template_upload(file: UploadFile) -> tuple[str, int, str]:
-    filename = safe_upload_filename(file.filename)
-    file.file.seek(0, os.SEEK_END)
-    size = file.file.tell()
-    file.file.seek(0)
-    if size <= 0:
-        raise HTTPException(status_code=422, detail="模板文件不能为空。")
-    if size > MAX_TEMPLATE_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail=f"模板文件不能超过 {MAX_TEMPLATE_UPLOAD_BYTES} 字节。")
-    digest = hashlib.sha256(file.file.read()).hexdigest()
-    file.file.seek(0)
-    try:
-        with zipfile.ZipFile(file.file) as archive:
-            if "[Content_Types].xml" not in archive.namelist() or "word/document.xml" not in archive.namelist():
-                raise ValueError("missing DOCX parts")
-    except (zipfile.BadZipFile, ValueError) as exc:
-        raise HTTPException(status_code=422, detail="模板不是可读取的 DOCX 文件。") from exc
-    finally:
-        file.file.seek(0)
-    return filename, size, digest
+    return validate_docx_upload(file, maximum_size=MAX_TEMPLATE_UPLOAD_BYTES, label="模板")
 
 
 def template_has_task_provenance(db: Session, item: Template) -> bool:
@@ -320,8 +317,9 @@ def template_has_task_provenance(db: Session, item: Template) -> bool:
 
 
 @app.post("/auth/register", response_model=AuthResponse, status_code=201)
-def register_user(payload: RegisterRequest, db: Session = Depends(get_db)) -> AuthResponse:
+def register_user(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)) -> AuthResponse:
     email = validate_email(payload.email)
+    enforce_rate_limit(request, bucket=f"auth-register:{email}", limit=10)
     if db.scalar(select(User).where(User.email == email)) is not None:
         raise HTTPException(status_code=409, detail="该邮箱已经注册。")
     user = User(email=email, password_hash=hash_password(payload.password))
@@ -341,8 +339,9 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db)) -> Au
 
 
 @app.post("/auth/login", response_model=AuthResponse)
-def login_user(payload: LoginRequest, db: Session = Depends(get_db)) -> AuthResponse:
+def login_user(payload: LoginRequest, request: Request, db: Session = Depends(get_db)) -> AuthResponse:
     email = validate_email(payload.email)
+    enforce_rate_limit(request, bucket=f"auth-login:{email}", limit=10)
     user = db.scalar(select(User).where(User.email == email))
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="邮箱或密码错误。", headers={"WWW-Authenticate": "Bearer"})
@@ -690,6 +689,7 @@ def task_events(
 
 @app.post("/tasks", status_code=201)
 async def create_task(
+    request: Request,
     paper: UploadFile = File(...),
     template: UploadFile | None = File(None),
     template_id: str | None = Form(None),
@@ -701,6 +701,7 @@ async def create_task(
 ) -> dict[str, object]:
     """Create a task and hand execution to the lightweight in-process worker."""
     require_permission(context, TASK_CREATE)
+    enforce_rate_limit(request, bucket=f"task-create:{context.current_user.id}", limit=20)
     if mode not in {"local", "ai"}:
         raise HTTPException(status_code=422, detail="mode 必须是 local 或 ai。")
     request_id = uuid4()
@@ -727,7 +728,8 @@ async def create_task(
 
 
 @app.post("/document/classify")
-async def classify_uploaded_document(paper: UploadFile = File(...), user: User | None = Depends(require_user_if_enabled)) -> dict[str, object]:
+async def classify_uploaded_document(request: Request, paper: UploadFile = File(...), user: User | None = Depends(require_user_if_enabled)) -> dict[str, object]:
+    enforce_rate_limit(request, bucket="document-classify", limit=30)
     upload = save_docx(paper, UPLOAD_DIR, uuid4())
     result = classify_document(upload.path)
     result["filename"] = upload.original_filename
@@ -736,6 +738,7 @@ async def classify_uploaded_document(paper: UploadFile = File(...), user: User |
 
 @app.post("/agent/run")
 async def run_agent(
+    request: Request,
     paper: UploadFile = File(...),
     template: UploadFile | None = File(None),
     template_id: str | None = Form(None),
@@ -746,6 +749,7 @@ async def run_agent(
     db: Session = Depends(get_db),
     requested_tenant_id: str | None = Header(None, alias="X-Tenant-ID"),
 ) -> dict[str, object]:
+    enforce_rate_limit(request, bucket=f"agent-run:{user.id if user else 'anonymous'}", limit=10)
     request_id = uuid4()
     paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
     template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
@@ -782,7 +786,8 @@ async def run_agent(
         template_upload.original_filename if template_upload else None,
     )
     if result["status"] == "error":
-        raise HTTPException(status_code=500, detail=result)
+        LOGGER.error("Agent request failed for task %s", task.id if task is not None else "legacy")
+        raise HTTPException(status_code=500, detail="任务处理失败，请稍后重试。")
     if task is not None:
         result["task_id"] = task.id
     return result
@@ -1030,13 +1035,19 @@ def download_artifact(artifact_id: str, context: TenantContext = Depends(get_cur
 
 @app.get("/download/{filename}")
 def download_file(filename: str, user: User | None = Depends(require_user_if_enabled), db: Session = Depends(get_db), requested_tenant_id: str | None = Header(None, alias="X-Tenant-ID")) -> FileResponse:
-    target = OUTPUT_DIR / Path(filename).name
-    if not target.exists():
-        raise HTTPException(status_code=404, detail="没有找到生成后的 Word 文件。")
     context = resolve_tenant_context(db, user, requested_tenant_id) if user is not None else None
-    if context is not None:
+    if context is None:
+        if auth_is_required():
+            raise HTTPException(status_code=404, detail="没有找到生成后的 Word 文件。")
+        target = OUTPUT_DIR / Path(filename).name
+    else:
         require_permission(context, TASK_READ)
-    ensure_artifact_access(filename, context, db)
+        artifact = ensure_artifact_access(filename, context, db)
+        if artifact is None:
+            raise HTTPException(status_code=404, detail="没有找到生成后的 Word 文件。")
+        target = Path(artifact.file_path)
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="没有找到生成后的 Word 文件。")
     return FileResponse(
         path=target,
         filename=target.name,
@@ -1058,13 +1069,20 @@ async def apply_suggestion(
     db: Session = Depends(get_db),
     requested_tenant_id: str | None = Header(None, alias="X-Tenant-ID"),
 ) -> dict[str, object]:
-    source = OUTPUT_DIR / Path(filename).name
-    if not source.exists():
-        raise HTTPException(status_code=404, detail="没有找到可确认修改的 DOCX。")
     context = resolve_tenant_context(db, user, requested_tenant_id) if user is not None else None
-    source_artifact = ensure_artifact_access(filename, context, db)
-    if context is not None:
+    if context is None:
+        if auth_is_required():
+            raise HTTPException(status_code=404, detail="没有找到可确认修改的 DOCX。")
+        source_artifact = None
+        source = OUTPUT_DIR / Path(filename).name
+    else:
         require_permission(context, TASK_MANAGE)
+        source_artifact = ensure_artifact_access(filename, context, db)
+        if source_artifact is None:
+            raise HTTPException(status_code=404, detail="没有找到可确认修改的 DOCX。")
+        source = Path(source_artifact.file_path)
+    if not source.is_file():
+        raise HTTPException(status_code=404, detail="没有找到可确认修改的 DOCX。")
     output = OUTPUT_DIR / f"{source.stem}_confirmed_{datetime.now().strftime('%Y%m%d%H%M%S%f')}.docx"
     result = apply_content_suggestion(source, output, {"issue_id": issue_id, "paragraph_index": paragraph_index, "original_text": original, "suggested_text": suggested, "issue_type": issue_type, "reason": reason, "confidence": confidence})
     if result.get("status") == "conflict":
@@ -1085,31 +1103,34 @@ async def apply_suggestion(
 
 @app.get("/preview/{filename}")
 def preview_file(filename: str, user: User | None = Depends(require_user_if_enabled), db: Session = Depends(get_db), requested_tenant_id: str | None = Header(None, alias="X-Tenant-ID")) -> dict[str, str]:
-    target = OUTPUT_DIR / Path(filename).name
-    if not target.exists():
-        raise HTTPException(status_code=404, detail="没有找到可预览的 Word 文件。")
     context = resolve_tenant_context(db, user, requested_tenant_id) if user is not None else None
-    if context is not None:
+    if context is None:
+        if auth_is_required():
+            raise HTTPException(status_code=404, detail="没有找到可预览的 Word 文件。")
+        target = OUTPUT_DIR / Path(filename).name
+    else:
         require_permission(context, TASK_READ)
-    ensure_artifact_access(filename, context, db)
+        artifact = ensure_artifact_access(filename, context, db)
+        if artifact is None:
+            raise HTTPException(status_code=404, detail="没有找到可预览的 Word 文件。")
+        target = Path(artifact.file_path)
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="没有找到可预览的 Word 文件。")
     return build_docx_preview(target)
 
 
 def ensure_artifact_access(filename: str, context: TenantContext | None, db: Session) -> Artifact | None:
-    artifact = db.scalar(
+    if context is None:
+        return None
+    return db.scalar(
         select(Artifact)
         .join(Artifact.task)
-        .where(Artifact.file_path == str(OUTPUT_DIR / Path(filename).name))
+        .where(Artifact.file_path == str(OUTPUT_DIR / Path(filename).name), Task.tenant_id == context.tenant_id)
     )
-    if artifact is None:
-        return None
-    if context is None or artifact.task.tenant_id != context.tenant_id:
-        raise HTTPException(status_code=404, detail="没有找到属于当前用户的文件。")
-    return artifact
 
 
 def save_docx(file: UploadFile, directory: Path, request_id: UUID) -> StoredUpload:
-    original_filename = safe_upload_filename(file.filename)
+    original_filename, _, _ = validate_docx_upload(file, maximum_size=MAX_UPLOAD_BYTES, label="论文")
     request_dir = directory / request_id.hex
     request_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1117,6 +1138,36 @@ def save_docx(file: UploadFile, directory: Path, request_id: UUID) -> StoredUplo
     with target.open("xb") as destination:
         shutil.copyfileobj(file.file, destination)
     return StoredUpload(path=target, original_filename=original_filename)
+
+
+def validate_docx_upload(file: UploadFile, *, maximum_size: int, label: str) -> tuple[str, int, str]:
+    """Validate both DOCX container shape and bounded archive expansion."""
+    filename = safe_upload_filename(file.filename)
+    allowed_content_types = {None, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/octet-stream"}
+    if file.content_type not in allowed_content_types:
+        raise HTTPException(status_code=415, detail=f"{label}文件类型必须是 DOCX。")
+    file.file.seek(0, os.SEEK_END)
+    size = file.file.tell()
+    file.file.seek(0)
+    if size <= 0:
+        raise HTTPException(status_code=422, detail=f"{label}文件不能为空。")
+    if size > maximum_size:
+        raise HTTPException(status_code=413, detail=f"{label}文件不能超过 {maximum_size} 字节。")
+    digest = hashlib.sha256(file.file.read()).hexdigest()
+    file.file.seek(0)
+    try:
+        with zipfile.ZipFile(file.file) as archive:
+            members = archive.infolist()
+            total_uncompressed = sum(member.file_size for member in members)
+            if len(members) > MAX_DOCX_ARCHIVE_ENTRIES or total_uncompressed > MAX_DOCX_UNCOMPRESSED_BYTES:
+                raise ValueError("archive expansion exceeds limit")
+            if "[Content_Types].xml" not in archive.namelist() or "word/document.xml" not in archive.namelist():
+                raise ValueError("missing DOCX parts")
+    except (zipfile.BadZipFile, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=f"{label}不是可读取的 DOCX 文件。") from exc
+    finally:
+        file.file.seek(0)
+    return filename, size, digest
 
 
 def safe_upload_filename(filename: str | None) -> str:

@@ -17,15 +17,19 @@ from db.models import User
 from db.session import get_db
 
 JWT_ALGORITHM = "HS256"
+MIN_PRODUCTION_JWT_SECRET_LENGTH = 32
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
 def _jwt_secret() -> str:
     configured = os.getenv("JWT_SECRET_KEY", "").strip()
+    production = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "local")).strip().lower() in {"production", "prod"}
     if configured:
+        if production and (len(configured) < MIN_PRODUCTION_JWT_SECRET_LENGTH or "replace-with" in configured.lower()):
+            raise RuntimeError("JWT_SECRET_KEY must be a non-placeholder secret of at least 32 characters in production.")
         return configured
-    if os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "local")).strip().lower() in {"production", "prod"}:
+    if production:
         raise RuntimeError("JWT_SECRET_KEY must be configured in production.")
     return "paperforge-local-development-secret-change-me"
 
@@ -55,7 +59,13 @@ def validate_email(email: str) -> str:
 
 
 def create_access_token(user_id: str) -> str:
-    expires = datetime.now(timezone.utc) + timedelta(minutes=int(os.getenv("JWT_EXPIRE_MINUTES", "1440")))
+    try:
+        lifetime_minutes = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
+    except ValueError as exc:
+        raise RuntimeError("JWT_EXPIRE_MINUTES must be an integer.") from exc
+    if not 5 <= lifetime_minutes <= 1440:
+        raise RuntimeError("JWT_EXPIRE_MINUTES must be between 5 and 1440.")
+    expires = datetime.now(timezone.utc) + timedelta(minutes=lifetime_minutes)
     return jwt.encode({"sub": user_id, "exp": expires}, _jwt_secret(), algorithm=JWT_ALGORITHM)
 
 

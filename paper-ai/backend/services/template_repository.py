@@ -47,10 +47,12 @@ class TemplateRepository:
         return self.session.get(Template, resource_id)
 
     def get_visible_resource(self, tenant_id: str | None, resource_id: str) -> Template | None:
-        item = self.get_resource(resource_id)
-        if item is None or (item.scope == "tenant" and item.tenant_id != tenant_id):
-            return None
-        return item
+        return self.session.scalar(
+            select(Template).where(
+                Template.id == resource_id,
+                or_(Template.scope == "platform", (Template.scope == "tenant") & (Template.tenant_id == tenant_id)),
+            )
+        )
 
     def delete(self, template: Template) -> None:
         self.session.delete(template)

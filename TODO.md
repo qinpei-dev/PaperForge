@@ -1017,3 +1017,8 @@
 完成：在既有 `tasks` 表上通过 Alembic `0010_day11_durable_task_runtime` 增量保存 durable lifecycle metadata；新增 `task_events` append-only tenant-scoped 事件表。worker claim 使用 `PENDING -> RUNNING` compare-and-set；进度、成功、失败和中断状态均使用 worker run identity 约束，terminal state 不被旧 worker 覆盖。startup reconciliation 将 orphaned RUNNING 标记为 `interrupted` 并保留原因/检测时间/先前 worker；不伪造恢复。SSE 按 tenant 校验 task 后以数据库 event sequence 重放，支持 `Last-Event-ID`；前端在可用 SSE 连接结束时携带最后 event id 重连。旧 JSON task state 继续作为兼容性辅助输出，非 authoritative source。
 
 验收：Day11 lifecycle/claim/reconciliation/SSE replay/tenant isolation tests、Day10/SaaS regression、Python compile、Alembic migration roundtrip、frontend build、git diff check 均需 PASS。未实现真正 checkpoint/resume、retry API、distributed worker queue、multi-node scheduling、object storage、production observability 或真实 production deployment。
+## [DONE] PaperForge Day12-P0 — Security Hardening
+
+完成：生产启动强制 JWT 密钥质量、认证和显式 CORS；tenant-scoped SQL 覆盖 task/event/template/artifact 访问；文件名 download/preview/apply 路径不再先探测文件系统。上传加入大小、MIME、DOCX ZIP 结构和展开边界，保留 UUID 隔离和安全文件名。新增单进程、有限且如实记录边界的认证/上传/Agent 速率限制；新增 Day12 upload/secret tests。审计确认 Docker production Compose 不发布 PostgreSQL 端口，DATABASE_URL 与 secrets 来自环境变量，日志不主动记录 token/password/key/正文，preview renderer 对 DOCX 文本进行 HTML escape。
+
+仍未完成：WAF、DDoS protection、外部监控、独立渗透测试、enterprise SSO、httpOnly cookie session、分布式 rate limiting、对象存储及真实 production deployment。

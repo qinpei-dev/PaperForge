@@ -4,6 +4,7 @@ import hashlib
 import io
 import re
 import shutil
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from uuid import uuid4
@@ -20,6 +21,15 @@ UUID_DOCX_PATTERN = re.compile(r"[0-9a-f]{32}\.docx")
 
 def make_upload(filename: str, content: bytes) -> UploadFile:
     return UploadFile(filename=filename, file=io.BytesIO(content))
+
+
+def valid_docx_bytes(content: bytes = b"") -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("word/document.xml", "<w:document/>")
+        archive.writestr("customXml/item.xml", content)
+    return buffer.getvalue()
 
 
 def assert_ok(name: str, condition: bool, detail: object = "") -> None:
@@ -59,8 +69,8 @@ def test_route_request_isolation(monkeypatch) -> None:
                 "/agent/run",
                 data={"mode": "local"},
                 files={
-                    "paper": ("same-name.docx", b"paper", DOCX_MIME),
-                    "template": ("same-name.docx", b"template", DOCX_MIME),
+                    "paper": ("same-name.docx", valid_docx_bytes(b"paper"), DOCX_MIME),
+                    "template": ("same-name.docx", valid_docx_bytes(b"template"), DOCX_MIME),
                 },
             )
             payload = response.json()
@@ -93,7 +103,7 @@ def test_concurrent_same_name_uploads() -> None:
 
     def store(index: int) -> api_main.StoredUpload:
         return api_main.save_docx(
-            make_upload("concurrent.docx", f"content-{index}".encode()),
+                make_upload("concurrent.docx", valid_docx_bytes(f"content-{index}".encode())),
             api_main.UPLOAD_DIR,
             request_id,
         )
@@ -106,7 +116,7 @@ def test_concurrent_same_name_uploads() -> None:
         assert_ok("concurrent_files_all_exist", all(path.exists() for path in paths))
         assert_ok(
             "concurrent_contents_preserved",
-            {path.read_bytes() for path in paths} == {f"content-{index}".encode() for index in range(8)},
+            {path.read_bytes() for path in paths} == {valid_docx_bytes(f"content-{index}".encode()) for index in range(8)},
         )
     finally:
         if request_dir.exists():
@@ -126,7 +136,7 @@ def test_extension_and_path_safety() -> None:
                 raise AssertionError(f"invalid_extension_{filename} FAIL")
 
         stored = api_main.save_docx(
-            make_upload("../../..\\templates\\template.DOCX", b"safe"),
+            make_upload("../../..\\templates\\template.DOCX", valid_docx_bytes(b"safe")),
             api_main.UPLOAD_DIR,
             request_id,
         )

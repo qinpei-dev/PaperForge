@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+import io
 from pathlib import Path
 from time import sleep
+import zipfile
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,6 +16,13 @@ from db.session import get_db
 from main import app
 from services.task_events import TaskEventStore
 from services.task_worker import TaskWorker
+
+
+def valid_docx_bytes() -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>"); archive.writestr("word/document.xml", "<w:document/>")
+    return buffer.getvalue()
 
 
 @pytest.fixture
@@ -51,7 +60,7 @@ def auth(user: dict[str, object]) -> dict[str, str]:
 
 
 def create_task(client: TestClient, user: dict[str, object]) -> str:
-    response = client.post("/tasks", headers=auth(user), files={"paper": ("paper.docx", b"fake", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}, data={"mode": "local", "allow_non_paper": "true"})
+    response = client.post("/tasks", headers=auth(user), files={"paper": ("paper.docx", valid_docx_bytes(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}, data={"mode": "local", "allow_non_paper": "true"})
     assert response.status_code == 201
     return str(response.json()["task_id"])
 

@@ -22,3 +22,11 @@ The environment contract is intentionally split: PostgreSQL credentials (`POSTGR
 On backend startup, every persisted `running` task is treated as orphaned because the in-process worker cannot safely resume DOCX execution. It is transitioned to `interrupted`, with a `backend_restart` reason, detection timestamp, and the prior worker run identity. This is intentional: PaperForge currently has no verified checkpoint/resume semantics.
 
 SSE clients may reconnect with `Last-Event-ID`; the server authorizes the task against the selected tenant and replays only later tenant-scoped rows from `task_events`. Production operators must run Alembic migration `0010_day11_durable_task_runtime` before deploying the backend image.
+
+# Day12 Security Baseline
+
+Production startup requires `AUTH_REQUIRED=true`, a non-placeholder `JWT_SECRET_KEY` of at least 32 characters, and an explicit `CORS_ORIGINS` public origin. Do not expose PostgreSQL outside the internal Docker network; database credentials and application secrets must be injected by the deployment environment, never committed.
+
+All task, event, template and artifact API reads are tenant-scoped. Outputs are not statically mounted: filename download, preview and confirmation routes resolve a tenant-authorized artifact before opening a local file. DOCX upload validation checks filename, extension, MIME, container structure, archive entry count, compressed upload size and bounded uncompressed expansion.
+
+The bundled rate limit is intentionally a single-process guard for login, upload and Agent request bursts. It is not a WAF or distributed DDoS control; production public edge infrastructure must provide those controls. The current frontend stores bearer tokens in localStorage, so a later httpOnly-cookie/session design remains a defense-in-depth improvement.

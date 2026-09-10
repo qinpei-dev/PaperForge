@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+import io
 from threading import Event
+import zipfile
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,6 +15,13 @@ from db.models import Task
 from db.session import get_db
 from main import app
 from services.task_worker import TaskWorker
+
+
+def valid_docx_bytes() -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>"); archive.writestr("word/document.xml", "<w:document/>")
+    return buffer.getvalue()
 
 
 @pytest.fixture
@@ -50,7 +59,7 @@ def auth(user: dict[str, object]) -> dict[str, str]:
 
 
 def upload(client: TestClient, user: dict[str, object]):
-    return client.post("/tasks", headers=auth(user), files={"paper": ("paper.docx", b"fake", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}, data={"mode": "local", "allow_non_paper": "true"})
+    return client.post("/tasks", headers=auth(user), files={"paper": ("paper.docx", valid_docx_bytes(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}, data={"mode": "local", "allow_non_paper": "true"})
 
 
 def test_task_creation_returns_before_worker_finishes(client, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+import io
 from pathlib import Path
+import zipfile
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,6 +24,13 @@ from services.template_registry import (
     template_registry,
 )
 from services.template_repository import TemplateRepository
+
+
+def valid_docx_bytes() -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>"); archive.writestr("word/document.xml", "<w:document/>")
+    return buffer.getvalue()
 
 
 @pytest.fixture(autouse=True)
@@ -147,7 +156,7 @@ def test_templates_api_and_task_routes_use_persisted_registry(monkeypatch: pytes
 
             registration = client.post("/auth/register", json={"email": "template-api@example.com", "password": "password123"}).json()
             headers = {"Authorization": f"Bearer {registration['access_token']}"}
-            files = {"paper": ("paper.docx", b"fake", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
+            files = {"paper": ("paper.docx", valid_docx_bytes(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
             data = {"mode": "local", "allow_non_paper": "true", "template_id": "test-university-thesis", "template_version": "2030.1"}
             assert client.post("/tasks", headers=headers, files=files, data=data).status_code == 201
             missing = client.post("/tasks", headers=headers, files=files, data={**data, "template_id": "missing"})

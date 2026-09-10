@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import io
 import time
+import zipfile
 from collections.abc import Generator
 from pathlib import Path
 
@@ -24,6 +26,14 @@ from services.template_persistence import refresh_template_registry
 from services.template_registry import BUILTIN_TEMPLATE_DEFINITIONS, TemplateNotFoundError, template_registry
 from services.template_repository import TemplateRepository
 from services.tenant_context import resolve_tenant_context
+
+
+def valid_docx_bytes() -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("word/document.xml", "<w:document/>")
+    return buffer.getvalue()
 
 
 @pytest.fixture(autouse=True)
@@ -182,7 +192,7 @@ def test_templates_api_and_task_template_resolution_are_tenant_aware(tenant_clie
     assert all(item["scope"] == "platform" and item["tenant_id"] is None for item in anonymous)
 
     monkeypatch.setattr("main.run_agent_pipeline", lambda **_: {"status": "ok", "agent_trace": []})
-    files = {"paper": ("paper.docx", b"fake", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
+    files = {"paper": ("paper.docx", valid_docx_bytes(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
     private_request = {"mode": "local", "allow_non_paper": "true", "template_id": "a-private", "template_version": "1.0"}
     assert client.post("/tasks", headers=auth(tenant_b), files=files, data=private_request).status_code == 404
     platform_request = {"mode": "local", "allow_non_paper": "true", "template_id": "paperforge-general-academic", "template_version": "2026.1"}
@@ -201,7 +211,7 @@ def test_task_detail_sse_and_result_are_tenant_isolated(tenant_client, monkeypat
         return {"status": "ok", "filename": output.name, "after_score": 90.0, "agent_trace": [], "modification_report": {"summary": "ok"}}
 
     monkeypatch.setattr("main.run_agent_pipeline", fake_pipeline)
-    response = client.post("/tasks", headers=auth(tenant_a), files={"paper": ("paper.docx", b"fake", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}, data={"mode": "local", "allow_non_paper": "true"})
+    response = client.post("/tasks", headers=auth(tenant_a), files={"paper": ("paper.docx", valid_docx_bytes(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}, data={"mode": "local", "allow_non_paper": "true"})
     assert response.status_code == 201
     task_id = response.json()["task_id"]
     detail = None
