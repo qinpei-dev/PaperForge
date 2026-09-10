@@ -1,0 +1,93 @@
+name: PaperForge v3.6 ACR Build
+
+on:
+  push:
+    branches:
+      - ops/acr-build-v3.6
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@v4
+        with:
+          ref: v3.6-saas-template-platform
+          fetch-depth: 1
+
+      - name: Verify release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          expected="57bb3328fa0893c6d985b9d581d093ce59eba1e3"
+          echo "Release commit: ${actual}"
+          test "${actual}" = "${expected}"
+
+      - name: Login to Alibaba Cloud ACR
+        shell: bash
+        env:
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${ACR_PASSWORD}" | docker login \
+            crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com \
+            --username "${ACR_USERNAME}" \
+            --password-stdin
+
+      - name: Mirror PostgreSQL image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull postgres:16-alpine
+          docker tag postgres:16-alpine \
+            crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/postgres:16-alpine
+          docker push \
+            crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/postgres:16-alpine
+
+      - name: Build backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build \
+            -t crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/paperforge-backend:v3.6 \
+            paper-ai/backend
+
+      - name: Push backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker push \
+            crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/paperforge-backend:v3.6
+
+      - name: Build frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build \
+            --build-arg NEXT_PUBLIC_API_BASE_URL=http://47.109.185.251/api \
+            -t crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/paperforge-frontend:v3.6 \
+            paper-ai/frontend
+
+      - name: Push frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker push \
+            crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/paperforge-frontend:v3.6
+
+      - name: Verify remote images
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect \
+            crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/postgres:16-alpine
+          docker buildx imagetools inspect \
+            crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/paperforge-backend:v3.6
+          docker buildx imagetools inspect \
+            crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/paperforge-frontend:v3.6
