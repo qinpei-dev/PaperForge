@@ -9,6 +9,7 @@ from typing import Any, Iterable
 
 
 TEMPLATE_STATUSES = {"active", "deprecated", "disabled"}
+TEMPLATE_SCOPES = {"platform", "tenant"}
 
 
 class TemplateRegistryError(ValueError):
@@ -36,6 +37,8 @@ class TemplateDefinition:
     version: str
     status: str
     source: str
+    scope: str = "platform"
+    tenant_id: str | None = None
     template_path: Path | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -44,6 +47,10 @@ class TemplateDefinition:
             raise TemplateRegistryError("template_id and version are required")
         if self.status not in TEMPLATE_STATUSES:
             raise TemplateRegistryError(f"invalid template status: {self.status}")
+        if self.scope not in TEMPLATE_SCOPES:
+            raise TemplateRegistryError(f"invalid template scope: {self.scope}")
+        if (self.scope == "platform") != (self.tenant_id is None):
+            raise TemplateRegistryError("platform templates require tenant_id=null and tenant templates require tenant_id")
         object.__setattr__(self, "metadata", deepcopy(self.metadata))
         if self.template_path is not None:
             object.__setattr__(self, "template_path", Path(self.template_path))
@@ -57,6 +64,8 @@ class TemplateDefinition:
             version=self.version,
             status=self.status,
             source=self.source,
+            scope=self.scope,
+            tenant_id=self.tenant_id,
             template_path=self.template_path,
             metadata=deepcopy(self.metadata),
         )
@@ -70,6 +79,8 @@ class TemplateDefinition:
             "version": self.version,
             "status": self.status,
             "source": self.source,
+            "scope": self.scope,
+            "tenant_id": self.tenant_id,
             "metadata": deepcopy(self.metadata),
         }
 
@@ -89,6 +100,8 @@ class ResolvedTemplate:
             "document_type": self.definition.document_type,
             "status": self.definition.status,
             "source": self.definition.source,
+            "scope": self.definition.scope,
+            "tenant_id": self.definition.tenant_id,
             "resolution": self.resolution,
             "metadata": deepcopy(self.definition.metadata),
         }
@@ -98,14 +111,14 @@ class TemplateRegistry:
     """Small in-memory registry; definitions are cloned at every boundary."""
 
     def __init__(self, definitions: Iterable[TemplateDefinition] = (), *, default_template_id: str | None = None) -> None:
-        self._definitions: dict[tuple[str, str], TemplateDefinition] = {}
+        self._definitions: dict[tuple[str, str | None, str, str], TemplateDefinition] = {}
         self._lock = RLock()
         self.default_template_id = default_template_id
         for definition in definitions:
             self.register(definition)
 
     def register(self, definition: TemplateDefinition) -> TemplateDefinition:
-        key = (definition.template_id, definition.version)
+        key = (definition.scope, definition.tenant_id, definition.template_id, definition.version)
         with self._lock:
             if key in self._definitions:
                 raise TemplateRegistryError(f"template already registered: {definition.template_id}@{definition.version}")
@@ -115,18 +128,22 @@ class TemplateRegistry:
 
     def replace(self, definitions: Iterable[TemplateDefinition]) -> None:
         """Atomically replace runtime entries with definitions loaded from persistence."""
-        replacement: dict[tuple[str, str], TemplateDefinition] = {}
+        replacement: dict[tuple[str, str | None, str, str], TemplateDefinition] = {}
         for definition in definitions:
-            key = (definition.template_id, definition.version)
+            key = (definition.scope, definition.tenant_id, definition.template_id, definition.version)
             if key in replacement:
                 raise TemplateRegistryError(f"duplicate template in replacement: {definition.template_id}@{definition.version}")
             replacement[key] = definition.clone()
         with self._lock:
             self._definitions = replacement
 
-    def get(self, template_id: str, version: str | None = None) -> TemplateDefinition:
+    def get(self, template_id: str, version: str | None = None, *, tenant_id: str | None = None) -> TemplateDefinition:
         with self._lock:
-            candidates = [item for (item_id, _), item in self._definitions.items() if item_id == template_id]
+            candidates = [
+                item
+                for item in self._definitions.values()
+                if item.template_id == template_id and (item.scope == "platform" or item.tenant_id == tenant_id)
+            ]
         if version is not None:
             candidates = [item for item in candidates if item.version == version]
         if not candidates:
@@ -134,6 +151,7 @@ class TemplateRegistry:
             raise TemplateNotFoundError(f"template not found: {template_id}{suffix}")
         if version is None:
             candidates.sort(key=lambda item: _version_key(item.version), reverse=True)
+        candidates.sort(key=lambda item: item.scope == "tenant", reverse=True)
         return candidates[0].clone()
 
     def list(
@@ -142,6 +160,7 @@ class TemplateRegistry:
         school: str | None = None,
         document_type: str | None = None,
         status: str | None = None,
+        tenant_id: str | None = None,
     ) -> list[TemplateDefinition]:
         with self._lock:
             values = list(self._definitions.values())
@@ -151,6 +170,7 @@ class TemplateRegistry:
             if (school is None or item.school == school)
             and (document_type is None or item.document_type == document_type)
             and (status is None or item.status == status)
+            and (item.scope == "platform" or item.tenant_id == tenant_id)
         ]
         return [item.clone() for item in sorted(filtered, key=lambda item: (item.school, item.name, _version_key(item.version)))]
 
@@ -160,18 +180,19 @@ class TemplateRegistry:
         template_id: str | None = None,
         version: str | None = None,
         metadata: dict[str, Any] | None = None,
+        tenant_id: str | None = None,
     ) -> ResolvedTemplate:
         if template_id:
-            definition = self.get(template_id, version)
+            definition = self.get(template_id, version, tenant_id=tenant_id)
             if version is None and definition.status == "disabled":
-                alternatives = [item for item in self.list() if item.template_id == template_id and item.status != "disabled"]
+                alternatives = [item for item in self.list(tenant_id=tenant_id) if item.template_id == template_id and item.status != "disabled"]
                 if alternatives:
                     definition = max(alternatives, key=lambda item: _version_key(item.version))
             return self._resolved(definition, "template_id_and_version" if version else "template_id")
         if version:
             raise TemplateRegistryError("template_version requires template_id")
         if metadata:
-            candidates = [item for item in self.list(status="active") if _matches_metadata(item, metadata)]
+            candidates = [item for item in self.list(status="active", tenant_id=tenant_id) if _matches_metadata(item, metadata)]
             if not candidates:
                 raise TemplateNotFoundError("no active template matches the requested metadata")
             if len(candidates) > 1:
@@ -180,7 +201,7 @@ class TemplateRegistry:
             return self._resolved(candidates[0], "metadata")
         if not self.default_template_id:
             raise TemplateNotFoundError("no default template is configured")
-        return self._resolved(self.get(self.default_template_id), "default")
+        return self._resolved(self.get(self.default_template_id, tenant_id=tenant_id), "default")
 
     @staticmethod
     def _resolved(definition: TemplateDefinition, resolution: str) -> ResolvedTemplate:
@@ -254,9 +275,10 @@ def resolve_template_request(
     template_id: str | None = None,
     template_version: str | None = None,
     metadata: dict[str, Any] | None = None,
+    tenant_id: str | None = None,
 ) -> ResolvedTemplate:
     if template_id:
-        return template_registry.resolve(template_id=template_id, version=template_version)
+        return template_registry.resolve(template_id=template_id, version=template_version, tenant_id=tenant_id)
     if template_path is not None:
         uploaded = TemplateDefinition(
             template_id="legacy-uploaded-template",
@@ -266,8 +288,10 @@ def resolve_template_request(
             version="unversioned",
             status="active",
             source="legacy_upload",
+            scope="tenant" if tenant_id else "platform",
+            tenant_id=tenant_id,
             template_path=template_path,
             metadata={"compatibility_mode": True},
         )
         return TemplateRegistry._resolved(uploaded, "legacy_upload")
-    return template_registry.resolve(version=template_version, metadata=metadata)
+    return template_registry.resolve(version=template_version, metadata=metadata, tenant_id=tenant_id)

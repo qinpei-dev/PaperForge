@@ -1,5 +1,24 @@
 # TODO
 
+## [DONE] PaperForge Day9-P2 — Tenant Context & Resource Isolation
+
+目标：建立 Tenant → Membership → Tenant Context → Template Scope → Query Isolation → Task Provenance 的最小 SaaS 资源边界，不扩展完整 RBAC、tenant switcher 或管理后台。
+
+已完成：
+
+- 新增 Tenant / TenantMembership，用户可属于多个 tenant；注册、登录、startup 对 personal tenant 幂等兼容。
+- 新增统一 Tenant Context；personal tenant 或 membership disabled 时明确拒绝，不静默切换。
+- Template 支持 platform / tenant scope；平台模板共享，不为 tenant 复制。
+- 数据库级保证 platform identity 唯一、同 tenant identity 唯一，同时允许不同 tenant 重名。
+- Registry、Repository、templates API 和 task/agent 模板解析 tenant-aware，跨 tenant 精确 ID 解析返回 404。
+- Task 显式保存 tenant_id、user_id 和 template provenance；Task detail、SSE、Artifact、预览和下载按 tenant 隔离。
+- 新增 Alembic `0005_day9_tenant_isolation`，覆盖 existing users/templates/tasks backfill，支持从 0004 原地升级。
+- legacy uploaded template 与不传 template_id 的默认流程保持兼容；匿名路径仅能接触平台资源。
+
+验收：backend pytest 59 passed；Day9-P2 专项 7 passed；compileall、Alembic 0005、frontend production build、git diff check 全部 PASS。
+
+下一步：等待 Day9-P2 用户验收；本轮不 commit、不 push、不创建 tag。
+
 ## [DONE] PaperForge Day9-P1 — Template Persistence
 
 状态：**PASS（等待用户验收）**

@@ -29,11 +29,13 @@ from services.task_events import has_events, publish_event, subscribe_event
 from services.template_registry import (
     TEMPLATE_STATUSES,
     ResolvedTemplate,
+    TemplateNotFoundError,
     TemplateRegistryError,
     resolve_template_request,
     template_registry,
 )
 from services.template_persistence import bootstrap_template_registry
+from services.tenant_context import TenantContext, bootstrap_personal_tenants, ensure_personal_tenant, get_current_tenant, resolve_tenant_context
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -93,6 +95,7 @@ def startup_database() -> None:
         init_db()
     db = SessionLocal()
     try:
+        bootstrap_personal_tenants(db)
         bootstrap_template_registry(db)
     finally:
         db.close()
@@ -108,14 +111,16 @@ def list_templates(
     school: str | None = Query(None),
     document_type: str | None = Query(None),
     status: str | None = Query("active"),
+    user: User | None = Depends(get_optional_current_user),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
     if status is not None and status not in TEMPLATE_STATUSES:
         raise HTTPException(status_code=422, detail="status 必须是 active、deprecated 或 disabled。")
     bootstrap_template_registry(db)
     persisted_registry = template_registry
-    templates = persisted_registry.list(school=school, document_type=document_type, status=status)
-    default_template = persisted_registry.resolve()
+    tenant_id = resolve_tenant_context(db, user).tenant_id if user is not None else None
+    templates = persisted_registry.list(school=school, document_type=document_type, status=status, tenant_id=tenant_id)
+    default_template = persisted_registry.resolve(tenant_id=tenant_id)
     return {
         "default_template_id": persisted_registry.default_template_id,
         "default_template_version": default_template.definition.version,
@@ -132,6 +137,8 @@ def register_user(payload: RegisterRequest, db: Session = Depends(get_db)) -> Au
     workspace_name = f"{email.split('@', 1)[0]}的 PaperForge Space"
     user.workspaces.append(Workspace(name=workspace_name))
     db.add(user)
+    db.flush()
+    ensure_personal_tenant(db, user)
     try:
         db.commit()
     except IntegrityError:
@@ -148,12 +155,14 @@ def login_user(payload: LoginRequest, db: Session = Depends(get_db)) -> AuthResp
     user = db.scalar(select(User).where(User.email == email))
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="邮箱或密码错误。", headers={"WWW-Authenticate": "Bearer"})
+    ensure_personal_tenant(db, user)
     workspace = db.scalar(select(Workspace).where(Workspace.owner_id == user.id).order_by(Workspace.created_at).limit(1))
     if workspace is None:
         workspace = Workspace(owner_id=user.id, name=f"{email.split('@', 1)[0]}的 PaperForge Space")
         db.add(workspace)
-        db.commit()
-        db.refresh(workspace)
+        db.flush()
+    db.commit()
+    db.refresh(workspace)
     return AuthResponse(access_token=create_access_token(user.id), user=UserResponse(id=user.id, email=user.email), workspace_id=workspace.id, workspace_name=workspace.name)
 
 
@@ -189,35 +198,29 @@ def list_workspaces(user: User = Depends(get_current_user), db: Session = Depend
 
 
 @app.get("/tasks")
-def list_tasks(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[dict[str, object]]:
-    statement = (
-        select(Task)
-        .join(Task.project)
-        .join(Project.workspace)
-        .where(Workspace.owner_id == user.id)
-        .order_by(Task.created_at.desc())
-    )
+def list_tasks(context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> list[dict[str, object]]:
+    statement = select(Task).where(Task.tenant_id == context.tenant_id).order_by(Task.created_at.desc())
     tasks = db.scalars(statement).all()
-    return [{"id": item.id, "project_id": item.project_id, "status": item.status, "workflow_stage": item.workflow_stage, "progress": workflow_progress(item.workflow_stage, item.status), "score": item.score, "created_at": item.created_at, "title": item.paper_name or item.project.title} for item in tasks]
+    return [{"id": item.id, "project_id": item.project_id, "tenant_id": item.tenant_id, "user_id": item.user_id, "status": item.status, "workflow_stage": item.workflow_stage, "progress": workflow_progress(item.workflow_stage, item.status), "score": item.score, "created_at": item.created_at, "title": item.paper_name or item.project.title} for item in tasks]
 
 
 @app.get("/tasks/{task_id}")
-def get_task(task_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
-    statement = select(Task).join(Task.project).join(Project.workspace).where(Task.id == task_id, Workspace.owner_id == user.id)
+def get_task(task_id: str, context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> dict[str, object]:
+    statement = select(Task).where(Task.id == task_id, Task.tenant_id == context.tenant_id)
     task = db.scalar(statement)
     if task is None:
         raise HTTPException(status_code=404, detail="没有找到该任务。")
-    return {"id": task.id, "task_id": task.id, "project_id": task.project_id, "status": task.status, "workflow_stage": task.workflow_stage, "progress": workflow_progress(task.workflow_stage, task.status), "paper_name": task.paper_name or task.project.title, "uploaded_file": task.uploaded_file, "template": template_from_trace(task.agent_trace), "trace": task.agent_trace, "agent_trace": task.agent_trace, "workflow_steps": build_workflow_steps(task.agent_trace, task.workflow_stage, task.status), "score_history": {"before": task.before_score, "after": task.score}, "score": task.score, "created_at": task.created_at, "artifacts": [{"id": item.id, "file_path": item.file_path, "file_type": item.file_type, "download_url": f"/artifacts/{item.id}/download"} for item in task.artifacts]}
+    return {"id": task.id, "task_id": task.id, "project_id": task.project_id, "tenant_id": task.tenant_id, "user_id": task.user_id, "status": task.status, "workflow_stage": task.workflow_stage, "progress": workflow_progress(task.workflow_stage, task.status), "paper_name": task.paper_name or task.project.title, "uploaded_file": task.uploaded_file, "template": template_from_trace(task.agent_trace), "trace": task.agent_trace, "agent_trace": task.agent_trace, "workflow_steps": build_workflow_steps(task.agent_trace, task.workflow_stage, task.status), "score_history": {"before": task.before_score, "after": task.score}, "score": task.score, "created_at": task.created_at, "artifacts": [{"id": item.id, "file_path": item.file_path, "file_type": item.file_type, "download_url": f"/artifacts/{item.id}/download"} for item in task.artifacts]}
 
 
 @app.get("/tasks/{task_id}/events")
 def task_events(
     task_id: str,
     after: int = Query(0, ge=0),
-    user: User = Depends(get_current_user),
+    context: TenantContext = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    statement = select(Task).join(Task.project).join(Project.workspace).where(Task.id == task_id, Workspace.owner_id == user.id)
+    statement = select(Task).where(Task.id == task_id, Task.tenant_id == context.tenant_id)
     task = db.scalar(statement)
     if task is None:
         raise HTTPException(status_code=404, detail="没有找到该任务。")
@@ -252,7 +255,7 @@ async def create_task(
     template_version: str | None = Form(None),
     allow_non_paper: bool = Form(False),
     mode: str = Form("ai"),
-    user: User = Depends(get_current_user),
+    context: TenantContext = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
     """Create a task and hand execution to the lightweight in-process worker."""
@@ -261,9 +264,9 @@ async def create_task(
     request_id = uuid4()
     paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
     template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
-    selected_template = resolve_template_or_422(db, template_upload, template_id, template_version)
-    project = get_or_create_default_project(db, user)
-    task = Task(project_id=project.id, status="pending", paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path), agent_trace=[template_trace_item(selected_template)])
+    selected_template = resolve_template_or_422(db, template_upload, template_id, template_version, context.tenant_id)
+    project = get_or_create_default_project(db, context.current_user)
+    task = Task(project_id=project.id, tenant_id=context.tenant_id, user_id=context.current_user.id, status="pending", paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path), agent_trace=[template_trace_item(selected_template)])
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -303,11 +306,12 @@ async def run_agent(
     request_id = uuid4()
     paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
     template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
-    selected_template = resolve_template_or_422(db, template_upload, template_id, template_version)
+    context = resolve_tenant_context(db, user) if user is not None else None
+    selected_template = resolve_template_or_422(db, template_upload, template_id, template_version, context.tenant_id if context else None)
     task = None
-    if user is not None:
-        project = get_or_create_default_project(db, user)
-        task = Task(project_id=project.id, status="pending", paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path))
+    if context is not None:
+        project = get_or_create_default_project(db, context.current_user)
+        task = Task(project_id=project.id, tenant_id=context.tenant_id, user_id=context.current_user.id, status="pending", paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path))
         db.add(task)
         db.commit()
         db.refresh(task)
@@ -323,6 +327,8 @@ async def run_agent(
             paper_display_name=paper_upload.original_filename,
             template_display_name=template_upload.original_filename if template_upload and selected_template.resolution == "legacy_upload" else None,
             resolved_template=selected_template,
+            tenant_id=context.tenant_id if context else None,
+            user_id=context.current_user.id if context else None,
         )
     result.setdefault("original_filename", paper_upload.original_filename)
     result.setdefault(
@@ -349,6 +355,7 @@ def resolve_template_or_422(
     template_upload: StoredUpload | None,
     template_id: str | None,
     template_version: str | None,
+    tenant_id: str | None,
 ) -> ResolvedTemplate:
     try:
         bootstrap_template_registry(db)
@@ -356,7 +363,10 @@ def resolve_template_or_422(
             template_path=template_upload.path if template_upload else None,
             template_id=template_id.strip() if template_id and template_id.strip() else None,
             template_version=template_version.strip() if template_version and template_version.strip() else None,
+            tenant_id=tenant_id,
         )
+    except TemplateNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="没有找到可用模板。") from exc
     except TemplateRegistryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -411,6 +421,8 @@ def execute_persisted_task(
             template_display_name=template_upload.original_filename if template_upload and selected_template.resolution == "legacy_upload" else None,
             resolved_template=selected_template,
             progress_callback=on_progress,
+            tenant_id=task.tenant_id,
+            user_id=task.user_id,
         )
     except Exception as exc:
         LOGGER.exception("Persisted task %s failed during orchestration", task.id)
@@ -548,8 +560,8 @@ def build_workflow_steps(trace: object, workflow_stage: str | None = None, task_
 
 
 @app.get("/artifacts/{artifact_id}/download")
-def download_artifact(artifact_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> FileResponse:
-    artifact = db.scalar(select(Artifact).join(Artifact.task).join(Task.project).join(Project.workspace).where(Artifact.id == artifact_id, Workspace.owner_id == user.id))
+def download_artifact(artifact_id: str, context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> FileResponse:
+    artifact = db.scalar(select(Artifact).join(Artifact.task).where(Artifact.id == artifact_id, Task.tenant_id == context.tenant_id))
     if artifact is None:
         raise HTTPException(status_code=404, detail="没有找到属于当前用户的产物。")
     target = Path(artifact.file_path)
@@ -564,7 +576,7 @@ def download_file(filename: str, user: User | None = Depends(require_user_if_ena
     target = OUTPUT_DIR / Path(filename).name
     if not target.exists():
         raise HTTPException(status_code=404, detail="没有找到生成后的 Word 文件。")
-    ensure_artifact_access(filename, user, db)
+    ensure_artifact_access(filename, resolve_tenant_context(db, user) if user is not None else None, db)
     return FileResponse(
         path=target,
         filename=target.name,
@@ -588,13 +600,17 @@ async def apply_suggestion(
     source = OUTPUT_DIR / Path(filename).name
     if not source.exists():
         raise HTTPException(status_code=404, detail="没有找到可确认修改的 DOCX。")
-    ensure_artifact_access(filename, user, db)
+    context = resolve_tenant_context(db, user) if user is not None else None
+    source_artifact = ensure_artifact_access(filename, context, db)
     output = OUTPUT_DIR / f"{source.stem}_confirmed_{datetime.now().strftime('%Y%m%d%H%M%S%f')}.docx"
     result = apply_content_suggestion(source, output, {"issue_id": issue_id, "paragraph_index": paragraph_index, "original_text": original, "suggested_text": suggested, "issue_type": issue_type, "reason": reason, "confidence": confidence})
     if result.get("status") == "conflict":
         raise HTTPException(status_code=409, detail=result)
     if result.get("status") != "ok":
         raise HTTPException(status_code=422, detail=result)
+    if source_artifact is not None:
+        source_artifact.task.artifacts.append(Artifact(file_path=str(output), file_type="docx"))
+        db.commit()
     accepted_review = {"issues": [{"issue_id": issue_id, "paragraph_index": paragraph_index, "issue_type": issue_type, "original_text": original, "suggested_text": suggested, "reason": reason, "confidence": confidence, "action_policy": "SUGGEST_ONLY", "source": "user_confirmed", "status": "accepted"}], "provenance": {"auto_fixes": [], "suggestions": [], "accepted": [result["change"]], "hitl": []}}
     evidence = aggregate_review_evidence(content_review=accepted_review)
     result["review_summary"] = evidence["review_summary"]
@@ -609,22 +625,21 @@ def preview_file(filename: str, user: User | None = Depends(require_user_if_enab
     target = OUTPUT_DIR / Path(filename).name
     if not target.exists():
         raise HTTPException(status_code=404, detail="没有找到可预览的 Word 文件。")
-    ensure_artifact_access(filename, user, db)
+    ensure_artifact_access(filename, resolve_tenant_context(db, user) if user is not None else None, db)
     return build_docx_preview(target)
 
 
-def ensure_artifact_access(filename: str, user: User | None, db: Session) -> None:
-    if user is None:
-        return
+def ensure_artifact_access(filename: str, context: TenantContext | None, db: Session) -> Artifact | None:
     artifact = db.scalar(
         select(Artifact)
         .join(Artifact.task)
-        .join(Task.project)
-        .join(Project.workspace)
-        .where(Artifact.file_path == str(OUTPUT_DIR / Path(filename).name), Workspace.owner_id == user.id)
+        .where(Artifact.file_path == str(OUTPUT_DIR / Path(filename).name))
     )
     if artifact is None:
+        return None
+    if context is None or artifact.task.tenant_id != context.tenant_id:
         raise HTTPException(status_code=404, detail="没有找到属于当前用户的文件。")
+    return artifact
 
 
 def save_docx(file: UploadFile, directory: Path, request_id: UUID) -> StoredUpload:

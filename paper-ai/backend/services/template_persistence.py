@@ -19,6 +19,8 @@ def definition_from_model(model: Template) -> TemplateDefinition:
         document_type=model.document_type,
         status=model.status,
         source=model.source,
+        scope=model.scope,
+        tenant_id=model.tenant_id,
         template_path=Path(model.template_path) if model.template_path else None,
         metadata=model.template_metadata or {},
     )
@@ -44,6 +46,8 @@ class TemplatePersistenceService:
                 document_type=definition.document_type,
                 status=definition.status,
                 source=definition.source,
+                scope="platform",
+                tenant_id=None,
                 template_path=str(definition.template_path) if definition.template_path else None,
                 metadata=definition.metadata,
             )
@@ -53,7 +57,7 @@ class TemplatePersistenceService:
         return inserted
 
     def refresh_registry(self) -> TemplateRegistry:
-        self.registry.replace(definition_from_model(item) for item in self.repository.list())
+        self.registry.replace(definition_from_model(item) for item in self.repository.list_all())
         return self.registry
 
 

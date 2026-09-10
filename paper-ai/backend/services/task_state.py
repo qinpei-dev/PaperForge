@@ -46,10 +46,14 @@ def init_task_state(
     paper_path: Path,
     template_path: Path | None,
     template: dict[str, Any] | None = None,
+    tenant_id: str | None = None,
+    user_id: str | None = None,
 ) -> tuple[dict[str, Any], float]:
     now = utc_now_iso()
     state = {
         "task_id": task_id,
+        "tenant_id": tenant_id,
+        "user_id": user_id,
         "status": "running",
         "mode": mode,
         "created_at": now,

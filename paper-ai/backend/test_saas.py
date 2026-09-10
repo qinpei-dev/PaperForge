@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from db.base import Base
-from db.models import Artifact, Project, Task, User, Workspace
+from db.models import Artifact, Project, Task, Tenant, TenantMembership, User, Workspace
 from db.session import get_db
 from main import app
 from services.task_worker import TaskWorker
@@ -70,11 +70,13 @@ def test_database_crud(saas_client: tuple[TestClient, sessionmaker[Session]]) ->
     _, testing_session = saas_client
     db = testing_session()
     user = User(email="crud@example.com", password_hash="hash")
+    tenant = Tenant(name="CRUD Tenant", slug="crud-tenant", status="active")
+    membership = TenantMembership(tenant=tenant, user=user, role="owner", status="active")
     workspace = Workspace(name="CRUD Space", owner=user)
     project = Project(title="CRUD Project", workspace=workspace)
-    task = Task(status="completed", score=88.5, uploaded_file="input.docx", project=project)
+    task = Task(status="completed", score=88.5, uploaded_file="input.docx", project=project, tenant=tenant, user=user)
     artifact = Artifact(file_path="outputs/result.docx", file_type="docx", task=task)
-    db.add(user)
+    db.add_all([user, membership])
     db.commit()
     saved = db.scalar(select(Artifact).where(Artifact.id == artifact.id))
     assert saved is not None
@@ -94,11 +96,13 @@ def test_task_isolation_between_users(saas_client: tuple[TestClient, sessionmake
 
     db = testing_session()
     workspace = db.scalar(select(Workspace).where(Workspace.id == user_a["workspace_id"]))
+    membership = db.scalar(select(TenantMembership).where(TenantMembership.user_id == user_a["user"]["id"]))
     assert workspace is not None
+    assert membership is not None
     project = Project(workspace_id=workspace.id, title="A Project", status="active")
     db.add(project)
     db.flush()
-    task = Task(project_id=project.id, status="completed", score=91.0, uploaded_file="a.docx")
+    task = Task(project_id=project.id, tenant_id=membership.tenant_id, user_id=membership.user_id, status="completed", score=91.0, uploaded_file="a.docx")
     db.add(task)
     db.commit()
     task_id = task.id

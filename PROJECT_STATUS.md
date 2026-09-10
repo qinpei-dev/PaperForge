@@ -6,7 +6,9 @@
 
 中文定位：**学术文档可信智能处理 Agent**
 
-当前阶段：**Day9-P1 Template Persistence 完成，等待用户验收**
+当前阶段：**Day9-P2 Tenant Context & Resource Isolation 完成，等待用户验收**
+
+Day9-P2 最新增量：**Tenant Context & Resource Isolation 已完成**。新增 Tenant、TenantMembership、统一 personal Tenant Context，以及 Task 的 `tenant_id/user_id` provenance；Template 扩展为 platform/tenant scope，Registry、Repository、`GET /templates`、`POST /tasks`、`POST /agent/run` 全部按 tenant 可见集合解析。Task 列表、详情、SSE、Artifact、文件名下载/预览和确认版输出均按 tenant 隔离，越权统一隐藏为 404；匿名兼容仅可使用平台模板且不能读取持久化 tenant 产物。Alembic `0005` 可从 `0004` 原地 backfill 既有用户 personal tenant、membership、平台模板和历史 Task。数据库唯一性采用 tenant identity unique constraint + platform partial unique index，允许不同 tenant 使用相同 template_id/version。验收结果：后端 pytest 59 passed，Day9-P2 专项 7 passed，Python compileall、Alembic upgrade 至 0005、frontend build、git diff check PASS。
 
 Day9-P1 最新增量：**Template Persistence 已完成**。新增 SQLAlchemy `Template` 模型与 `(template_id, version)` 数据库级唯一约束、Alembic `0004` migration、Template Repository 和 Persistence Service。内置模板以幂等 bootstrap 写入数据库且不覆盖已有 status；Registry 在 startup 和 API 解析前从持久化数据刷新。`GET /templates`、`POST /tasks`、`POST /agent/run` 已使用 DB Registry；运行时新增模板无需改 Python 静态定义即可解析，legacy upload 仍保持 ephemeral。未引入 tenant、RBAC、用户模板管理或对象存储。验收结果：后端 pytest 52 passed，Python compileall、Alembic upgrade 至 0004、frontend build、git diff check PASS。
 

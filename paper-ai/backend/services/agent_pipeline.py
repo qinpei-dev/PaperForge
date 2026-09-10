@@ -30,11 +30,14 @@ def run_agent_pipeline(
     template_version: str | None = None,
     resolved_template: ResolvedTemplate | None = None,
     progress_callback: Callable[[str], None] | None = None,
+    tenant_id: str | None = None,
+    user_id: str | None = None,
 ) -> dict[str, Any]:
     selected_template = resolved_template or resolve_template_request(
         template_path=template_path,
         template_id=template_id,
         template_version=template_version,
+        tenant_id=tenant_id,
     )
     effective_template_path = selected_template.template_path
     template_provenance = selected_template.provenance()
@@ -47,6 +50,8 @@ def run_agent_pipeline(
         paper_path=paper_path,
         template_path=effective_template_path,
         template=template_provenance,
+        tenant_id=tenant_id,
+        user_id=user_id,
     )
     started_at = perf_counter()
     try:

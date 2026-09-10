@@ -150,7 +150,7 @@ def test_templates_api_and_task_routes_use_persisted_registry(monkeypatch: pytes
             data = {"mode": "local", "allow_non_paper": "true", "template_id": "test-university-thesis", "template_version": "2030.1"}
             assert client.post("/tasks", headers=headers, files=files, data=data).status_code == 201
             missing = client.post("/tasks", headers=headers, files=files, data={**data, "template_id": "missing"})
-            assert missing.status_code == 422
+            assert missing.status_code == 404
 
             db = sessions()
             TemplateRepository(db).update_status("test-university-thesis", "2030.1", "disabled")

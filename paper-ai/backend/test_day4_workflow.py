@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from db.base import Base
-from db.models import Project, Task, User, Workspace
+from db.models import Project, Task, TenantMembership, User, Workspace
 from db.session import get_db
 from main import app
 from services.agent_pipeline import run_agent_pipeline
@@ -116,10 +116,12 @@ def test_legacy_task_without_workflow_stage_is_readable(client) -> None:
     owner = register(test_client, "day4-legacy@example.com")
     db = sessions()
     workspace = db.scalar(select(Workspace).where(Workspace.id == owner["workspace_id"]))
+    membership = db.scalar(select(TenantMembership).where(TenantMembership.user_id == owner["user"]["id"]))
     assert workspace is not None
+    assert membership is not None
     project = Project(workspace_id=workspace.id, title="Legacy", status="active")
     db.add(project); db.flush()
-    task = Task(project_id=project.id, status="completed", score=88.0)
+    task = Task(project_id=project.id, tenant_id=membership.tenant_id, user_id=membership.user_id, status="completed", score=88.0)
     db.add(task); db.commit(); task_id = task.id; db.close()
     payload = test_client.get(f"/tasks/{task_id}", headers=headers(owner)).json()
     assert payload["status"] == "completed"
