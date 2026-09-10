@@ -6,7 +6,9 @@
 
 中文定位：**学术文档可信智能处理 Agent**
 
-当前阶段：**Day10-P2 Ownership Lifecycle + Audit + Tenant Settings 完成，Day10 等待封版验收**
+当前阶段：**Day10 已封版；Production Infrastructure P0 已完成本地部署基础演练，等待真实生产环境输入**
+
+Production Infrastructure P0 最新增量：新增 immutable-image `docker-compose.prod.yml`，包含 PostgreSQL、backend、frontend、健康检查、内部网络，以及 PostgreSQL / uploads / outputs / managed templates / task states / bundled templates 的 named volumes。新增生产环境占位模板、PostgreSQL backup/restore PowerShell 脚本及 migration、rollback、公开边缘和文件备份 runbook。Docker Desktop 使用非敏感 rehearsal env 与本地 release-gate images 验证 config、Alembic `0009_day10_ownership_audit_settings`、backend `/health`、frontend HTTP 200，并在 `docker compose down`（不带 `-v`）与容器重建后确认 DB revision 和五类文件卷标记仍在。未修改 SaaS 业务代码、未移动 `v3.7.1-multi-tenant-saas`，也未执行真实 production deploy；真实公网域名/TLS/reverse proxy、registry pull 和用户端完整 upload/task workflow 尚待真实环境验证。
 
 Day10-P2 最新增量：**Ownership Lifecycle + Tenant Audit Log + Tenant Settings 已完成**。Owner 通过 24 小时、hash-only、显式接受的 transfer lifecycle 转让 ownership；接受时在事务/行锁内将旧 Owner 降为 Admin、新成员提升为 Owner。数据库对 active owner 与 pending transfer 均使用 tenant-scoped partial unique index；服务层进一步验证参与者 active 状态与唯一 Owner。新增 append-only tenant audit events，覆盖成员、邀请、ownership transfer 与设置变更，metadata 自动排除 token/hash/secret；Owner/Admin 可读，Member 不可读。新增 Owner-only Workspace display name 更新，首页治理区支持 settings、transfer、audit，另有明确确认的 `/ownership-transfer?token=...` 接受页。Alembic `0009_day10_ownership_audit_settings` 从 `0008` 升级。未扩展 SSO/SAML、SCIM、custom roles、企业目录、邮件或计费。
 

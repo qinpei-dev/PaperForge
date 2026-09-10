@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
 
 .idea/
 
@@ -13,6 +14,7 @@ dist/
 build/
 
 *.log
+backups/
 
 paper-ai/backend/uploads/*
 !paper-ai/backend/uploads/.gitkeep

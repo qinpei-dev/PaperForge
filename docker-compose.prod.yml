@@ -1,0 +1,74 @@
+name: paperforge-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in the production environment}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in the production environment}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the production environment}
+    volumes:
+      - paperforge-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    networks: [paperforge-internal]
+
+  backend:
+    image: ${PAPERFORGE_BACKEND_IMAGE:?Set an immutable backend image, for example registry/paperforge-backend:v3.7.2}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in the production environment}
+      APP_ENV: production
+      AUTH_REQUIRED: "true"
+      CORS_ORIGINS: ${CORS_ORIGINS:?Set the public HTTPS origin}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+    command: ["sh", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"]
+    volumes:
+      - paperforge-uploads:/app/uploads
+      - paperforge-outputs:/app/outputs
+      - paperforge-template-storage:/app/template_storage
+      - paperforge-task-states:/app/task_states
+      - paperforge-templates:/app/templates
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+    networks: [paperforge-internal]
+
+  frontend:
+    image: ${PAPERFORGE_FRONTEND_IMAGE:?Set an immutable frontend image, for example registry/paperforge-frontend:v3.7.2}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+    networks: [paperforge-internal]
+
+networks:
+  paperforge-internal:
+    driver: bridge
+
+volumes:
+  paperforge-postgres-data:
+  paperforge-uploads:
+  paperforge-outputs:
+  paperforge-template-storage:
+  paperforge-task-states:
+  paperforge-templates:

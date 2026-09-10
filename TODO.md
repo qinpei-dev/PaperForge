@@ -1004,3 +1004,9 @@
 验收：backend pytest 62 passed；Day9-P3 专项 3 passed；compileall、Alembic fresh upgrade、Alembic `0005→0006`、frontend production build、git diff check 全部 PASS。
 
 下一步：等待 Day9-P3 用户验收；本轮不 commit、不 push、不创建 tag。
+
+## [DONE] Production Infrastructure P0 — Reproducible Deployment Foundation
+
+目标：在不进行真实 production deployment 的前提下，为 release candidate 建立可重复的镜像、环境、持久化、备份/恢复、迁移、回滚和 public-edge 部署基础。
+
+状态：已完成。下一步只有在获得 production host、registry image digest、domain/TLS/reverse proxy、production secrets 和已验证的 DB/file backup destination 后，才可评估创建 `v3.7.2-multi-tenant-saas` 作为真实部署候选；本轮不开始 Day11。
