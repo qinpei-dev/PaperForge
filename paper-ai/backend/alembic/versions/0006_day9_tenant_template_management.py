@@ -14,7 +14,18 @@ branch_labels = None
 depends_on = None
 
 
+def _ensure_postgresql_alembic_version_capacity() -> None:
+    """Allow Alembic to persist this revision before its version row is updated."""
+    bind = op.get_bind()
+    if bind.dialect.name != "postgresql":
+        return
+    # Alembic's default VARCHAR(32) cannot hold this revision id. Do not shrink
+    # it in downgrade: the current version row may still contain this long id.
+    op.execute(sa.text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)"))
+
+
 def upgrade() -> None:
+    _ensure_postgresql_alembic_version_capacity()
     with op.batch_alter_table("templates") as batch:
         batch.add_column(sa.Column("storage_locator", sa.Text(), nullable=True))
         batch.add_column(sa.Column("original_filename", sa.String(320), nullable=True))

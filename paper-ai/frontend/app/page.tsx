@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 type AgentStep = { name: string; status: "running" | "done" | "error"; message: string };
@@ -161,6 +162,7 @@ type AgentResult = {
   template?: TemplateIdentity;
 };
 type PreviewResult = { title: string; html: string };
+type AuthUser = { email: string };
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, "");
@@ -173,6 +175,21 @@ function apiUrl(path: string) {
 function authorizationHeaders(): Record<string, string> {
   const token = localStorage.getItem("paperforge_token");
   return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function storedAuthUser(): AuthUser | null {
+  try {
+    const rawUser = localStorage.getItem("paperforge_user");
+    if (!rawUser) return null;
+    const user = JSON.parse(rawUser) as unknown;
+    return isRecord(user) && typeof user.email === "string" && user.email.trim() ? { email: user.email } : null;
+  } catch {
+    return null;
+  }
+}
+
+function isAuthenticationFailure(response: Response) {
+  return response.status === 401 || response.status === 403;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -235,6 +252,8 @@ export default function Home() {
   const [running, setRunning] = useState(false);
   const [classifying, setClassifying] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authenticationRequired, setAuthenticationRequired] = useState(false);
 
   const visibleSteps = useMemo(() => {
     if (result?.steps.length) {
@@ -250,12 +269,19 @@ export default function Home() {
   const buttonDisabled = running || !canRun;
 
   useEffect(() => {
+    setAuthUser(storedAuthUser());
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     async function loadTemplates() {
       try {
         const response = await fetch(apiUrl("/templates"), { cache: "no-store", headers: authorizationHeaders() });
         const data = await readResponseData(response);
-        if (!response.ok || cancelled) return;
+        if (!response.ok || cancelled) {
+          if (isAuthenticationFailure(response) && !cancelled) requireAuthentication();
+          return;
+        }
         const options = Array.isArray(data.templates) ? data.templates as TemplateOption[] : [];
         setTemplates(options);
         const defaultId = typeof data.default_template_id === "string" ? data.default_template_id : options[0]?.template_id;
@@ -268,6 +294,20 @@ export default function Home() {
     void loadTemplates();
     return () => { cancelled = true; };
   }, []);
+
+  function requireAuthentication() {
+    setAuthenticationRequired(true);
+    setMessage("请先登录后再继续。");
+  }
+
+  function logout() {
+    localStorage.removeItem("paperforge_token");
+    localStorage.removeItem("paperforge_user");
+    localStorage.removeItem("paperforge_workspace");
+    setAuthUser(null);
+    setAuthenticationRequired(false);
+    setMessage("已退出登录。");
+  }
 
   async function onPaperChange(file: File | null) {
     setPaperFile(file);
@@ -304,7 +344,11 @@ export default function Home() {
     try {
       const response = await fetch(apiUrl("/templates"), { method: "POST", headers: authorizationHeaders(), body: formData });
       const data = await readResponseData(response);
-      if (!response.ok) { setMessage(apiErrorMessage(data, "模板上传失败。")); return; }
+      if (!response.ok) {
+        if (isAuthenticationFailure(response)) requireAuthentication();
+        else setMessage(apiErrorMessage(data, "模板上传失败。"));
+        return;
+      }
       const created = data as unknown as TemplateOption;
       setTemplates((current) => [...current.filter((item) => item.id !== created.id), created]);
       setTemplateId(`${created.template_id}@@${created.version}`);
@@ -325,7 +369,8 @@ export default function Home() {
       const response = await fetch(requestUrl, { method: "POST", headers: authorizationHeaders(), body: formData });
       const data = await readResponseData(response);
       if (!response.ok) {
-        setMessage(apiErrorMessage(data, "文档类型识别失败。"));
+        if (isAuthenticationFailure(response)) requireAuthentication();
+        else setMessage(apiErrorMessage(data, "文档类型识别失败。"));
         return;
       }
       const nextClassification = data as Classification;
@@ -376,7 +421,8 @@ export default function Home() {
         return;
       }
       if (!response.ok || status === "error") {
-        setMessage(apiErrorMessage(data, "Agent 执行失败。"));
+        if (isAuthenticationFailure(response)) requireAuthentication();
+        else setMessage(apiErrorMessage(data, "Agent 执行失败。"));
         return;
       }
       if (status === "pending" && typeof data.task_id === "string") {
@@ -406,6 +452,10 @@ export default function Home() {
       const response = await fetch(requestUrl);
       const data = await readResponseData(response);
       if (!response.ok) {
+        if (isAuthenticationFailure(response)) {
+          requireAuthentication();
+          return false;
+        }
         const detail = apiErrorMessage(data, "在线预览生成失败。");
         setPreviewError(detail);
         setMessage(detail);
@@ -434,10 +484,11 @@ export default function Home() {
     formData.append("issue_type", issue.issue_type ?? "content");
     formData.append("reason", issue.reason ?? "用户确认采纳该建议");
     try {
-      const response = await fetch(apiUrl("/agent/apply-suggestion"), { method: "POST", body: formData });
+      const response = await fetch(apiUrl("/agent/apply-suggestion"), { method: "POST", headers: authorizationHeaders(), body: formData });
       const data = await readResponseData(response);
       if (!response.ok) {
-        setMessage(apiErrorMessage(data, "建议采纳失败，正文未覆盖。"));
+        if (isAuthenticationFailure(response)) requireAuthentication();
+        else setMessage(apiErrorMessage(data, "建议采纳失败，正文未覆盖。"));
         return;
       }
       const change = data.change as ContentIssue;
@@ -457,6 +508,16 @@ export default function Home() {
         <section className="landing-shell" aria-label="产品首页与处理工作台">
           <header className="hero">
             <div className="hero-copy">
+              <nav className="home-auth" aria-label="账户操作">
+                {authUser ? <>
+                  <span className="home-user" title={authUser.email}>{authUser.email}</span>
+                  <Link className="home-auth-link" href="/dashboard">工作台</Link>
+                  <button className="home-auth-link logout-button" type="button" onClick={logout}>退出登录</button>
+                </> : <>
+                  <Link className="home-auth-link" href="/login">登录</Link>
+                  <Link className="home-auth-link home-auth-register" href="/register">注册</Link>
+                </>}
+              </nav>
               <p className="eyebrow">PaperForge</p>
               <h1>Verified Academic Document Agent</h1>
               <p className="hero-lead">面向 DOCX 学术文档的可信智能处理系统。通过规则检测、计划执行、局部修改、重读验证、风险控制和人工确认，建立可追踪的文档处理闭环。</p>
@@ -561,6 +622,11 @@ export default function Home() {
         {classification ? <ClassificationCard classification={classification} confirmed={confirmedNonPaper} onConfirm={setConfirmedNonPaper} /> : null}
 
         {message ? <p className={message.includes("失败") || message.includes("必须") ? "message error" : "message"}>{message}</p> : null}
+        {authenticationRequired ? <section className="auth-required" aria-label="登录后继续">
+          <strong>请先登录后再继续。</strong>
+          <span>登录后可保存我的模板、创建受保护任务并继续处理。</span>
+          <div><Link className="home-auth-link home-auth-register" href="/login">去登录</Link><Link className="home-auth-link" href="/register">注册账号</Link></div>
+        </section> : null}
 
         {(running || result) ? <ProgressPanel running={running} steps={visibleSteps} /> : null}
 
