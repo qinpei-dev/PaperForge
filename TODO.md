@@ -989,6 +989,12 @@
 
 下一步建议：Day10-P2 仅在真实团队工作流需求明确后，增加 ownership transfer 的双确认流程、审计事件与 invitation acceptance UX；不在 P2 前扩展企业 IAM。
 
+## [DONE] PaperForge Day10-P2 — Ownership Lifecycle + Audit + Tenant Settings
+
+完成：新增唯一 pending 的安全 ownership transfer，token 仅存 hash、24 小时过期、目标成员明确接受；服务事务锁定 transfer/membership 并原子执行旧 Owner → Admin、新 Owner → Owner。数据库 partial unique index 限制每 tenant 至多一个 active owner 与一个 pending transfer。新增 append-only audit event、Owner-only Workspace rename、最小 settings/transfer/audit UI 与显式 ownership accept 页面。
+
+验收：P2 targeted、Day10/Day9/SaaS 回归及 full backend pytest 76 passed；compileall、frontend build、git diff check PASS。仍未实现 SSO/SAML、SCIM、custom/fine-grained roles、enterprise directory、email delivery、audit export/SIEM、billing 或 organization hierarchy。
+
 ## [DONE] PaperForge Day9-P3 — Tenant Template Management & Storage
 
 目标：登录用户可上传、持久化、管理并安全使用 tenant-scoped DOCX Template Resource，同时保持 legacy task upload 为临时语义。

@@ -167,6 +167,8 @@ type MembershipInfo = { tenant_id: string; role: "owner" | "admin" | "member"; p
 type WorkspaceOption = { tenant_id: string; name: string; role: "owner" | "admin" | "member" };
 type TenantMember = { user_id: string; email: string; role: "owner" | "admin" | "member" };
 type TenantInvitation = { id: string; email: string; role: "admin" | "member"; status: string; expires_at: string };
+type OwnershipTransfer = { id: string; to_user_id: string; status: string; expires_at: string; accept_url?: string };
+type AuditEvent = { id: string; event_type: string; target_id?: string; created_at: string; metadata?: Record<string, unknown> };
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, "");
@@ -266,6 +268,10 @@ export default function Home() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"admin" | "member">("member");
   const [invitationLink, setInvitationLink] = useState("");
+  const [tenantName, setTenantName] = useState("");
+  const [ownershipTransfer, setOwnershipTransfer] = useState<OwnershipTransfer | null>(null);
+  const [transferTargetId, setTransferTargetId] = useState("");
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [authenticationRequired, setAuthenticationRequired] = useState(false);
 
   const visibleSteps = useMemo(() => {
@@ -358,7 +364,13 @@ export default function Home() {
           const invitationResponse = await fetch(apiUrl(`/tenants/${encodeURIComponent(activeTenantId)}/invitations`), { cache: "no-store", headers: authorizationHeaders() });
           const invitationData = await readResponseData(invitationResponse);
           if (invitationResponse.ok && Array.isArray(invitationData) && !cancelled) setInvitations(invitationData as unknown as TenantInvitation[]);
+          const transferResponse = await fetch(apiUrl(`/tenants/${encodeURIComponent(activeTenantId)}/ownership-transfer`), { cache: "no-store", headers: authorizationHeaders() });
+          if (transferResponse.ok && !cancelled) setOwnershipTransfer(await transferResponse.json() as OwnershipTransfer | null);
         } else if (!cancelled) setInvitations([]);
+        if (membership.role === "owner" || membership.role === "admin") {
+          const auditResponse = await fetch(apiUrl(`/tenants/${encodeURIComponent(activeTenantId)}/audit-events?limit=8`), { cache: "no-store", headers: authorizationHeaders() });
+          const auditData = await readResponseData(auditResponse); if (auditResponse.ok && Array.isArray(auditData.events) && !cancelled) setAuditEvents(auditData.events as unknown as AuditEvent[]);
+        } else if (!cancelled) setAuditEvents([]);
       } catch { if (!cancelled) { setMembers([]); setInvitations([]); } }
     }
     void loadGovernance();
@@ -384,7 +396,7 @@ export default function Home() {
   function switchWorkspace(tenantId: string) {
     localStorage.setItem("paperforge_active_tenant", tenantId);
     setActiveTenantId(tenantId);
-    setMembership(null); setTemplates([]); setMembers([]); setInvitations([]); setInvitationLink("");
+    setMembership(null); setTemplates([]); setMembers([]); setInvitations([]); setInvitationLink(""); setOwnershipTransfer(null); setAuditEvents([]); setTenantName("");
     setResult(null); setPreview(null); setClassification(null); setMessage("已切换 Workspace，正在加载该空间的数据。");
   }
 
@@ -426,6 +438,10 @@ export default function Home() {
     if (!response.ok) { setMessage(apiErrorMessage(await readResponseData(response), "撤销邀请失败。")); return; }
     setInvitations((items) => items.map((item) => item.id === invitation.id ? { ...item, status: "revoked" } : item));
   }
+
+  async function saveTenantName() { if (!activeTenantId || !tenantName.trim()) return; const response = await fetch(apiUrl(`/tenants/${encodeURIComponent(activeTenantId)}`), { method: "PATCH", headers: { ...authorizationHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ display_name: tenantName.trim() }) }); const data = await readResponseData(response); if (!response.ok) { setMessage(apiErrorMessage(data, "Workspace 名称保存失败。")); return; } setWorkspaces((items) => items.map((item) => item.tenant_id === activeTenantId ? { ...item, name: String(data.name) } : item)); setMessage("Workspace 名称已更新。"); }
+  async function beginTransfer() { if (!activeTenantId || !transferTargetId) return; const response = await fetch(apiUrl(`/tenants/${encodeURIComponent(activeTenantId)}/ownership-transfer`), { method: "POST", headers: { ...authorizationHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ to_user_id: transferTargetId }) }); const data = await readResponseData(response); if (!response.ok) { setMessage(apiErrorMessage(data, "发起 ownership transfer 失败。")); return; } setOwnershipTransfer(data as unknown as OwnershipTransfer); setMessage("Ownership transfer 已创建，等待目标成员明确接受。"); }
+  async function cancelTransfer() { if (!activeTenantId || !ownershipTransfer) return; const response = await fetch(apiUrl(`/tenants/${encodeURIComponent(activeTenantId)}/ownership-transfer/${encodeURIComponent(ownershipTransfer.id)}`), { method: "DELETE", headers: authorizationHeaders() }); if (!response.ok) { setMessage(apiErrorMessage(await readResponseData(response), "取消 transfer 失败。")); return; } setOwnershipTransfer(null); }
 
   async function onPaperChange(file: File | null) {
     setPaperFile(file);
@@ -691,7 +707,10 @@ export default function Home() {
             <div className="invite-form"><h3>添加成员或创建邀请</h3><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" placeholder="name@example.com" aria-label="邀请邮箱" /><select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as "admin" | "member")}><option value="member">Member</option><option value="admin">Admin</option></select><button type="button" onClick={() => void addExistingMember()}>添加已注册用户</button><button type="button" onClick={() => void createInvitation()}>创建邀请</button></div>
             {invitationLink ? <p className="invitation-link">复制邀请链接：<code>{invitationLink}</code></p> : null}
             {invitations.length ? <div className="invitation-list">{invitations.map((item) => <div className="member-row" key={item.id}><span>{item.email}</span><b>{item.role} · {item.status}</b>{item.status === "pending" ? <button type="button" onClick={() => void revokeInvitation(item)}>撤销</button> : null}</div>)}</div> : null}
+            <div className="invite-form"><h3>Workspace Settings</h3><input value={tenantName} onChange={(event) => setTenantName(event.target.value)} placeholder={workspaces.find((item) => item.tenant_id === activeTenantId)?.name || "Workspace 名称"} /><button type="button" onClick={() => void saveTenantName()}>保存</button></div>
+            <div className="invite-form"><h3>Ownership Transfer</h3>{ownershipTransfer ? <><p>待成员接受，24 小时内有效。</p><button type="button" onClick={() => void cancelTransfer()}>取消转让</button></> : <><select value={transferTargetId} onChange={(event) => setTransferTargetId(event.target.value)}><option value="">选择成员</option>{members.filter((item) => item.role !== "owner").map((item) => <option value={item.user_id} key={item.user_id}>{item.email}</option>)}</select><button type="button" onClick={() => void beginTransfer()}>发起转让</button></>}</div>
           </section> : null}
+          {authUser && (membership?.role === "owner" || membership?.role === "admin") ? <section className="governance-panel"><div className="section-title"><span>Audit Log</span><strong>{auditEvents.length} 条</strong></div><div className="invitation-list">{auditEvents.map((item) => <div className="member-row" key={item.id}><span>{item.event_type}</span><b>{new Date(item.created_at).toLocaleString()}</b></div>)}</div></section> : null}
 
           <section className="setup-panel" aria-label="上传与运行">
             <div className="section-title">

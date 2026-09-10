@@ -6,7 +6,9 @@
 
 中文定位：**学术文档可信智能处理 Agent**
 
-当前阶段：**Day10-P1 Tenant Member Governance + Active Workspace Switching 完成，等待用户验收**
+当前阶段：**Day10-P2 Ownership Lifecycle + Audit + Tenant Settings 完成，Day10 等待封版验收**
+
+Day10-P2 最新增量：**Ownership Lifecycle + Tenant Audit Log + Tenant Settings 已完成**。Owner 通过 24 小时、hash-only、显式接受的 transfer lifecycle 转让 ownership；接受时在事务/行锁内将旧 Owner 降为 Admin、新成员提升为 Owner。数据库对 active owner 与 pending transfer 均使用 tenant-scoped partial unique index；服务层进一步验证参与者 active 状态与唯一 Owner。新增 append-only tenant audit events，覆盖成员、邀请、ownership transfer 与设置变更，metadata 自动排除 token/hash/secret；Owner/Admin 可读，Member 不可读。新增 Owner-only Workspace display name 更新，首页治理区支持 settings、transfer、audit，另有明确确认的 `/ownership-transfer?token=...` 接受页。Alembic `0009_day10_ownership_audit_settings` 从 `0008` 升级。未扩展 SSO/SAML、SCIM、custom roles、企业目录、邮件或计费。
 
 Day10-P1 最新增量：**Tenant Member Governance + Active Workspace Switching 已完成**。Owner 可通过集中 `services/rbac.py` 权限层添加已注册用户、在 `admin/member` 间切换及移除非 Owner 成员；普通成员 API 永不授予/降级/删除 Owner。新增轻量 `tenant_invitations`：仅保存安全随机 token 的 SHA-256 hash，支持 7 天过期、pending/accepted/revoked/expired、一次性接受、认证邮箱匹配与事务内 membership 创建；不接 SMTP。`GET /workspaces` 现返回用户全部 active membership 的 tenant 工作区，首页 Workspace Switcher 将选择仅保存在 localStorage，并让所有 tenant-scoped 请求携带 `X-Tenant-ID`；服务端仍逐次做 membership 校验，失效选择安全回退，切换时清除 tenant 专属 UI 数据。Owner 有最小成员/邀请界面；Admin/Member 不显示 mutation 入口，后端继续独立校验。Alembic `0008_day10_member_governance` 从 `0007` 增加 invitation 表。验收结果：full backend pytest 73 passed，Day10/Day9/SaaS targeted 21 passed，compileall、frontend build、PostgreSQL fresh + `0007→0008→0007→0008`、git diff check PASS。未实现 ownership transfer、custom roles、SSO/SAML、SCIM、企业目录、邮件投递或企业审计 dashboard。
 

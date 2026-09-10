@@ -24,7 +24,7 @@ from services.storage import LocalStorage
 from services.content_review import apply_content_suggestion
 from services.review_evidence import aggregate_review_evidence, content_score_summary
 from auth import auth_is_required, create_access_token, get_current_user, get_optional_current_user, hash_password, validate_email, verify_password
-from db.models import Artifact, Project, Task, Template, Tenant, TenantInvitation, TenantMembership, User, Workspace
+from db.models import Artifact, Project, Task, Template, Tenant, TenantAuditEvent, TenantInvitation, TenantMembership, TenantOwnershipTransfer, User, Workspace
 from db.session import SessionLocal, get_db, init_db
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
 from services.task_worker import task_worker
@@ -41,8 +41,10 @@ from services.template_persistence import bootstrap_template_registry, refresh_t
 from services.template_repository import TemplateRepository
 from services.template_intelligence import analyze_template
 from services.tenant_context import TenantContext, bootstrap_personal_tenants, ensure_personal_tenant, get_current_tenant, resolve_tenant_context
-from services.rbac import MEMBER_MANAGE, MEMBER_READ, ROLE_ADMIN, ROLE_MEMBER, ROLE_OWNER, ROLE_PERMISSIONS, TASK_CREATE, TASK_MANAGE, TASK_READ, TEMPLATE_READ, TEMPLATE_WRITE, add_member, change_role, remove_member, require_tenant_permission
+from services.rbac import AUDIT_READ, MEMBER_MANAGE, MEMBER_READ, ROLE_ADMIN, ROLE_MEMBER, ROLE_OWNER, ROLE_PERMISSIONS, TASK_CREATE, TASK_MANAGE, TASK_READ, TEMPLATE_READ, TEMPLATE_WRITE, add_member, change_role, remove_member, require_tenant_permission
 from services.tenant_invitations import INVITATION_PENDING, accept_invitation, create_invitation, expire_pending_invitations
+from services.tenant_audit import record_audit_event
+from services.ownership_transfers import ACCEPTED as TRANSFER_ACCEPTED, CANCELLED as TRANSFER_CANCELLED, PENDING as TRANSFER_PENDING, accept_transfer, create_transfer, expire_pending_transfers
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -378,6 +380,9 @@ def invitation_public_dict(invitation: TenantInvitation) -> dict[str, object]:
         "accepted_at": invitation.accepted_at,
     }
 
+def transfer_public_dict(transfer: TenantOwnershipTransfer) -> dict[str, object]:
+    return {"id": transfer.id, "tenant_id": transfer.tenant_id, "from_user_id": transfer.from_user_id, "to_user_id": transfer.to_user_id, "status": transfer.status, "expires_at": transfer.expires_at, "created_at": transfer.created_at, "accepted_at": transfer.accepted_at, "cancelled_at": transfer.cancelled_at}
+
 
 def require_owner_governance(context: TenantContext) -> None:
     require_permission(context, MEMBER_MANAGE)
@@ -414,6 +419,7 @@ def add_tenant_member(tenant_id: str, payload: dict[str, object] = Body(...), us
         raise HTTPException(status_code=404, detail="没有找到可添加的用户。")
     try:
         membership = add_member(db, tenant_id=tenant_id, user_id=target.id, role=role)
+        record_audit_event(db, tenant_id=tenant_id, actor_user_id=user.id, event_type="membership.added", target_type="membership", target_id=target.id, metadata={"role": role})
         db.commit()
         db.refresh(membership)
         return membership_public_dict(membership)
@@ -433,7 +439,9 @@ def update_tenant_member(tenant_id: str, user_id: str, payload: dict[str, object
     if membership is None:
         raise HTTPException(status_code=404, detail="没有找到成员。")
     try:
+        previous_role = membership.role
         change_role(db, membership, role, actor=context.membership)
+        record_audit_event(db, tenant_id=tenant_id, actor_user_id=user.id, event_type="membership.role_changed", target_type="membership", target_id=user_id, metadata={"from_role": previous_role, "to_role": role})
         db.commit()
         db.refresh(membership)
         return membership_public_dict(membership)
@@ -451,6 +459,7 @@ def delete_tenant_member(tenant_id: str, user_id: str, user: User = Depends(get_
         raise HTTPException(status_code=404, detail="没有找到成员。")
     try:
         remove_member(db, membership, actor=context.membership)
+        record_audit_event(db, tenant_id=tenant_id, actor_user_id=user.id, event_type="membership.removed", target_type="membership", target_id=user_id)
         db.commit()
     except (ValueError, PermissionError) as exc:
         db.rollback()
@@ -468,6 +477,7 @@ def create_tenant_invitation(tenant_id: str, payload: dict[str, object] = Body(.
         raise HTTPException(status_code=422, detail="邀请角色只能是 admin 或 member。")
     try:
         invitation, token = create_invitation(db, tenant_id=tenant_id, email=email, role=role, created_by=user.id)
+        record_audit_event(db, tenant_id=tenant_id, actor_user_id=user.id, event_type="invitation.created", target_type="invitation", target_id=invitation.id, metadata={"email": email, "role": role})
         db.commit()
         db.refresh(invitation)
     except ValueError as exc:
@@ -499,6 +509,7 @@ def revoke_tenant_invitation(tenant_id: str, invitation_id: str, user: User = De
     if invitation.status != INVITATION_PENDING:
         raise HTTPException(status_code=409, detail="该邀请已不可撤销。")
     invitation.status = "revoked"
+    record_audit_event(db, tenant_id=tenant_id, actor_user_id=user.id, event_type="invitation.revoked", target_type="invitation", target_id=invitation.id)
     db.commit()
     return Response(status_code=204)
 
@@ -507,6 +518,7 @@ def revoke_tenant_invitation(tenant_id: str, invitation_id: str, user: User = De
 def accept_tenant_invitation(token: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
     try:
         invitation = accept_invitation(db, token=token, user=user)
+        record_audit_event(db, tenant_id=invitation.tenant_id, actor_user_id=user.id, event_type="invitation.accepted", target_type="membership", target_id=user.id)
         db.commit()
         return {"status": "accepted", "membership": membership_public_dict(db.scalar(select(TenantMembership).where(TenantMembership.tenant_id == invitation.tenant_id, TenantMembership.user_id == user.id)))}
     except PermissionError as exc:
@@ -515,6 +527,64 @@ def accept_tenant_invitation(token: str, user: User = Depends(get_current_user),
     except ValueError as exc:
         db.commit() if "expired" in str(exc) else db.rollback()
         raise HTTPException(status_code=409, detail="邀请无效、已使用、已撤销或已过期。") from exc
+
+
+@app.patch("/tenants/{tenant_id}")
+def update_tenant_settings(tenant_id: str, payload: dict[str, object] = Body(...), user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
+    context = resolve_tenant_context(db, user, tenant_id); require_owner_governance(context)
+    name = payload.get("display_name", payload.get("name"))
+    if not isinstance(name, str) or not (clean := name.strip()) or len(clean) > 300: raise HTTPException(status_code=422, detail="Workspace 名称不能为空且不能超过 300 字符。")
+    context.tenant.name = clean
+    record_audit_event(db, tenant_id=tenant_id, actor_user_id=user.id, event_type="tenant.settings_updated", target_type="tenant", target_id=tenant_id, metadata={"display_name": clean})
+    db.commit(); db.refresh(context.tenant)
+    return {"id": context.tenant.id, "tenant_id": context.tenant.id, "name": context.tenant.name, "updated_at": context.tenant.updated_at}
+
+
+@app.post("/tenants/{tenant_id}/ownership-transfer", status_code=201)
+def begin_ownership_transfer(tenant_id: str, payload: dict[str, object] = Body(...), user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
+    context = resolve_tenant_context(db, user, tenant_id); require_owner_governance(context)
+    to_user_id = str(payload.get("to_user_id") or "")
+    try:
+        transfer, token = create_transfer(db, tenant_id=tenant_id, actor=context.membership, to_user_id=to_user_id); db.commit(); db.refresh(transfer)
+    except ValueError as exc:
+        db.rollback(); raise HTTPException(status_code=409, detail=str(exc)) from exc
+    result = transfer_public_dict(transfer); result["token"] = token; result["accept_url"] = f"/ownership-transfer?token={token}"; return result
+
+
+@app.get("/tenants/{tenant_id}/ownership-transfer")
+def get_pending_ownership_transfer(tenant_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object] | None:
+    context = resolve_tenant_context(db, user, tenant_id); require_owner_governance(context); expire_pending_transfers(db, tenant_id); db.commit()
+    transfer = db.scalar(select(TenantOwnershipTransfer).where(TenantOwnershipTransfer.tenant_id == tenant_id, TenantOwnershipTransfer.status == TRANSFER_PENDING))
+    return transfer_public_dict(transfer) if transfer else None
+
+
+@app.delete("/tenants/{tenant_id}/ownership-transfer/{transfer_id}", status_code=204)
+def cancel_ownership_transfer(tenant_id: str, transfer_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Response:
+    context = resolve_tenant_context(db, user, tenant_id); require_owner_governance(context)
+    transfer = db.scalar(select(TenantOwnershipTransfer).where(TenantOwnershipTransfer.id == transfer_id, TenantOwnershipTransfer.tenant_id == tenant_id).with_for_update())
+    if transfer is None: raise HTTPException(status_code=404, detail="没有找到 ownership transfer。")
+    if transfer.status != TRANSFER_PENDING or transfer.from_user_id != user.id: raise HTTPException(status_code=409, detail="该 transfer 已不可取消。")
+    transfer.status = TRANSFER_CANCELLED; transfer.cancelled_at = datetime.utcnow(); record_audit_event(db, tenant_id=tenant_id, actor_user_id=user.id, event_type="ownership_transfer.cancelled", target_type="ownership_transfer", target_id=transfer.id); db.commit(); return Response(status_code=204)
+
+
+@app.post("/tenant-ownership-transfers/{token}/accept")
+def accept_ownership_transfer(token: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
+    try:
+        transfer = accept_transfer(db, token=token, user=user); db.commit()
+        return {"status": TRANSFER_ACCEPTED, "tenant_id": transfer.tenant_id}
+    except PermissionError as exc:
+        db.rollback(); raise HTTPException(status_code=403, detail="当前用户不是该 ownership transfer 的目标成员。") from exc
+    except ValueError as exc:
+        db.rollback(); raise HTTPException(status_code=409, detail="ownership transfer 无效、已结束或参与者状态已变化。") from exc
+
+
+@app.get("/tenants/{tenant_id}/audit-events")
+def list_audit_events(tenant_id: str, limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), event_type: str | None = Query(None), user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, object]:
+    context = resolve_tenant_context(db, user, tenant_id); require_permission(context, AUDIT_READ)
+    statement = select(TenantAuditEvent).where(TenantAuditEvent.tenant_id == tenant_id).order_by(TenantAuditEvent.created_at.desc()).offset(offset).limit(limit)
+    if event_type: statement = statement.where(TenantAuditEvent.event_type == event_type)
+    events = db.scalars(statement).all()
+    return {"events": [{"id": item.id, "actor_user_id": item.actor_user_id, "event_type": item.event_type, "target_type": item.target_type, "target_id": item.target_id, "metadata": item.metadata_json, "created_at": item.created_at} for item in events], "offset": offset, "limit": limit}
 
 
 def require_user_if_enabled(user: User | None = Depends(get_optional_current_user)) -> User | None:

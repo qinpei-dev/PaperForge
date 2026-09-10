@@ -40,6 +40,8 @@ class Tenant(Base):
 
     memberships: Mapped[list[TenantMembership]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
     invitations: Mapped[list[TenantInvitation]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
+    ownership_transfers: Mapped[list[TenantOwnershipTransfer]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
+    audit_events: Mapped[list[TenantAuditEvent]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
     templates: Mapped[list[Template]] = relationship(back_populates="tenant")
     tasks: Mapped[list[Task]] = relationship(back_populates="tenant")
 
@@ -86,6 +88,40 @@ class TenantInvitation(Base):
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     tenant: Mapped[Tenant] = relationship(back_populates="invitations")
+
+
+class TenantOwnershipTransfer(Base):
+    __tablename__ = "tenant_ownership_transfers"
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'accepted', 'cancelled', 'expired')", name="ck_tenant_ownership_transfers_status"),
+        UniqueConstraint("token_hash", name="uq_tenant_ownership_transfers_token_hash"),
+        Index("uq_tenant_ownership_transfers_pending", "tenant_id", unique=True, sqlite_where=text("status = 'pending'"), postgresql_where=text("status = 'pending'")),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True, nullable=False)
+    from_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    to_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending", index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    tenant: Mapped[Tenant] = relationship(back_populates="ownership_transfers")
+
+
+class TenantAuditEvent(Base):
+    __tablename__ = "tenant_audit_events"
+    __table_args__ = (Index("ix_tenant_audit_events_tenant_created", "tenant_id", "created_at"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True, nullable=False)
+    actor_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    target_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    target_id: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    tenant: Mapped[Tenant] = relationship(back_populates="audit_events")
 
 
 class Workspace(Base):
