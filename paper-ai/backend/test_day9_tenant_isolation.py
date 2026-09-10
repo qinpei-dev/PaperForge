@@ -237,7 +237,7 @@ def test_task_state_records_tenant_user_and_template_provenance(tmp_path: Path, 
     assert state["template"]["scope"] == "platform"
 
 
-def test_0004_to_0005_migration_backfills_without_changing_template_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_0004_to_0006_migration_backfills_without_changing_template_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     database = tmp_path / "migration.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{database.as_posix()}")
     config = Config("alembic.ini")
@@ -254,7 +254,7 @@ def test_0004_to_0005_migration_backfills_without_changing_template_identity(tmp
                 text("INSERT INTO templates (id, template_id, version, name, school, document_type, status, source, template_path, metadata) VALUES (:id, :template_id, :version, :name, :school, :document_type, :status, :source, :template_path, :metadata)"),
                 {"id": f"template-{index}", "template_id": definition.template_id, "version": definition.version, "name": definition.name, "school": definition.school, "document_type": definition.document_type, "status": definition.status, "source": definition.source, "template_path": str(definition.template_path) if definition.template_path else None, "metadata": json.dumps(definition.metadata)},
             )
-    command.upgrade(config, "0005_day9_tenant_isolation")
+    command.upgrade(config, "0006_day9_tenant_template_management")
     with engine.connect() as connection:
         templates = connection.execute(text("SELECT template_id, version, scope, tenant_id FROM templates ORDER BY id")).mappings().all()
         assert {(item["template_id"], item["version"]) for item in templates} == {(item.template_id, item.version) for item in BUILTIN_TEMPLATE_DEFINITIONS}

@@ -132,6 +132,7 @@ def test_templates_api_and_task_routes_use_persisted_registry(monkeypatch: pytes
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    monkeypatch.setattr("main.SessionLocal", sessions)
     monkeypatch.setattr("main.run_agent_pipeline", lambda **_: {"status": "ok", "agent_trace": []})
     try:
         with TestClient(app) as client:

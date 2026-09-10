@@ -30,6 +30,7 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Generator[tuple[TestCli
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    monkeypatch.setattr("main.SessionLocal", sessions)
     worker = TaskWorker()
     monkeypatch.setattr("main.task_worker", worker)
     with TestClient(app) as test_client:

@@ -37,7 +37,7 @@ def file_hashes(directory: Path) -> dict[str, str]:
     }
 
 
-def test_route_request_isolation() -> None:
+def test_route_request_isolation(monkeypatch) -> None:
     captured: list[tuple[Path, Path | None]] = []
     original_pipeline = api_main.run_agent_pipeline
     existing_request_dirs = {path for path in api_main.UPLOAD_DIR.iterdir() if path.is_dir()}
@@ -51,6 +51,7 @@ def test_route_request_isolation() -> None:
         }
 
     api_main.run_agent_pipeline = fake_pipeline
+    monkeypatch.setattr(api_main, "bootstrap_template_registry", lambda db: 0)
     try:
         client = TestClient(api_main.app)
         for _ in range(2):

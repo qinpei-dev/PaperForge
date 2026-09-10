@@ -157,7 +157,9 @@ def test_create_task_runs_pipeline_and_persists_artifacts(
     task = detail.json()
     assert task["status"] == "completed"
     assert task["score"] == 94.0
-    assert task["trace"] == [{"step": "format", "status": "ok"}]
+    assert task["trace"][0]["step"] == "resolve_template"
+    assert task["trace"][0]["template_id"] == "paperforge-general-academic"
+    assert task["trace"][1:] == [{"step": "format", "status": "ok"}]
     assert {artifact["file_type"] for artifact in task["artifacts"]} == {"docx", "report"}
 
     db = testing_session()

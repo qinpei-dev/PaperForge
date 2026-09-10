@@ -967,3 +967,12 @@
 目标：完成 P1 阶段级执行可信闭环，不再拆分单点 P1.x 任务。
 
 状态：已完成。新增轻量 Plan normalization、稳定 execution ordering、重复 PlanStep 去重、同 target 同 field 冲突审计；Executor 在冲突字段上阻断自动执行并记录 provenance。Verifier 输出真实 target verification summary，Decision 优先消费 target failed / unsupported / conflict evidence；HITL 记录具体 target、字段、原因、expected/actual 或候选值。Runtime、task state 和前端补充 execution / conflict / verification summary 与最多 5 条 HITL evidence。新增 `test_p1_execution_closure.py`，真实 DOCX manifest 回归 10/10 PASS。P1 可正式结束，下一阶段仅进入 P2 方向规划。
+## [DONE] PaperForge Day9-P3 — Tenant Template Management & Storage
+
+目标：登录用户可上传、持久化、管理并安全使用 tenant-scoped DOCX Template Resource，同时保持 legacy task upload 为临时语义。
+
+完成：新增 `LocalTemplateStorage` 与稳定 storage locator；模板文件按 tenant/resource/version 隔离。新增 `0006_day9_tenant_template_management`，持久化 locator、原始文件名、大小、content type、checksum、uploaded_by。新增 `POST /templates`、`GET /templates/{id}`、`PATCH /templates/{id}`、`GET /templates/{id}/file`、`DELETE /templates/{id}`；上传会做 DOCX/大小/安全名/SHA-256/Template Intelligence 验证，并对 storage/DB 失败清理补偿。跨 tenant 资源访问隐藏为 404；平台模板不可被普通 tenant 修改或删除；历史 Task 使用过的 tenant template 不允许物理删除。前端首页已补最小“我的模板”上传与选择。Registry 创建/更新/删除即时刷新，任务 trace 保存模板 provenance。
+
+验收：backend pytest 62 passed；Day9-P3 专项 3 passed；compileall、Alembic fresh upgrade、Alembic `0005→0006`、frontend production build、git diff check 全部 PASS。
+
+下一步：等待 Day9-P3 用户验收；本轮不 commit、不 push、不创建 tag。

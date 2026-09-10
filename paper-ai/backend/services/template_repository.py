@@ -14,12 +14,13 @@ class TemplateRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def create(self, *, template_id: str, version: str, name: str, school: str, document_type: str, status: str, source: str, template_path: str | None, metadata: dict[str, Any], scope: str = "platform", tenant_id: str | None = None) -> Template:
+    def create(self, *, template_id: str, version: str, name: str, school: str, document_type: str, status: str, source: str, template_path: str | None, metadata: dict[str, Any], scope: str = "platform", tenant_id: str | None = None, resource_id: str | None = None, storage_locator: str | None = None, original_filename: str | None = None, file_size: int | None = None, content_type: str | None = None, checksum: str | None = None, uploaded_by: str | None = None) -> Template:
         if scope not in {"platform", "tenant"}:
             raise ValueError("scope must be platform or tenant")
         if (scope == "platform") != (tenant_id is None):
             raise ValueError("platform templates require tenant_id=None and tenant templates require tenant_id")
         template = Template(
+            **({"id": resource_id} if resource_id else {}),
             scope=scope,
             tenant_id=tenant_id,
             template_id=template_id,
@@ -29,12 +30,31 @@ class TemplateRepository:
             document_type=document_type,
             status=status,
             source=source,
+            storage_locator=storage_locator,
             template_path=template_path,
+            original_filename=original_filename,
+            file_size=file_size,
+            content_type=content_type,
+            checksum=checksum,
+            uploaded_by=uploaded_by,
             template_metadata=metadata,
         )
         self.session.add(template)
         self.session.flush()
         return template
+
+    def get_resource(self, resource_id: str) -> Template | None:
+        return self.session.get(Template, resource_id)
+
+    def get_visible_resource(self, tenant_id: str | None, resource_id: str) -> Template | None:
+        item = self.get_resource(resource_id)
+        if item is None or (item.scope == "tenant" and item.tenant_id != tenant_id):
+            return None
+        return item
+
+    def delete(self, template: Template) -> None:
+        self.session.delete(template)
+        self.session.flush()
 
     def get_by_id_and_version(self, template_id: str, version: str, *, scope: str = "platform", tenant_id: str | None = None) -> Template | None:
         return self.session.scalar(

@@ -125,7 +125,7 @@ type Provenance = { changes?: ProvenanceChange[]; summary?: { planned_steps?: nu
 type ContentIssue = { issue_id?: string; paragraph_index?: number; issue_type?: string; original_text?: string; suggested_text?: string; reason?: string; action_policy?: string; source?: string; verification_status?: string; status?: string };
 type ContentReview = { issues?: ContentIssue[]; counts?: { AUTO_FIX?: number; SUGGEST_ONLY?: number; HITL_REQUIRED?: number }; provenance?: { auto_fixes?: ContentIssue[]; suggestions?: ContentIssue[]; accepted?: ContentIssue[]; hitl?: ContentIssue[] }; verification?: { total?: number; verified?: number; failed?: number } };
 type ReviewSummary = { formatting?: Record<string, number>; content?: Record<string, number>; overall?: Record<string, number> };
-type TemplateOption = { template_id: string; name: string; school: string; document_type: string; version: string; status: string };
+type TemplateOption = { id?: string; template_id: string; name: string; school: string; document_type: string; version: string; status: string; scope?: string; original_filename?: string | null };
 type TemplateIdentity = { id: string; version: string; name: string; school?: string; document_type?: string };
 type AgentResult = {
   status: "ok" | "requires_confirmation";
@@ -219,6 +219,12 @@ export default function Home() {
   const [templateFilename, setTemplateFilename] = useState("");
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [templateId, setTemplateId] = useState("");
+  const [managedTemplateFile, setManagedTemplateFile] = useState<File | null>(null);
+  const [managedTemplateName, setManagedTemplateName] = useState("");
+  const [managedTemplateVersion, setManagedTemplateVersion] = useState("1.0");
+  const [managedTemplateSchool, setManagedTemplateSchool] = useState("通用");
+  const [managedTemplateType, setManagedTemplateType] = useState("academic_paper");
+  const [uploadingTemplate, setUploadingTemplate] = useState(false);
   const [agentMode, setAgentMode] = useState<"local" | "ai">("ai");
   const [classification, setClassification] = useState<Classification | null>(null);
   const [confirmedNonPaper, setConfirmedNonPaper] = useState(false);
@@ -247,7 +253,7 @@ export default function Home() {
     let cancelled = false;
     async function loadTemplates() {
       try {
-        const response = await fetch(apiUrl("/templates"), { cache: "no-store" });
+        const response = await fetch(apiUrl("/templates"), { cache: "no-store", headers: authorizationHeaders() });
         const data = await readResponseData(response);
         if (!response.ok || cancelled) return;
         const options = Array.isArray(data.templates) ? data.templates as TemplateOption[] : [];
@@ -281,6 +287,32 @@ export default function Home() {
   function onTemplateChange(file: File | null) {
     setTemplateFile(file);
     setTemplateFilename(file?.name ?? "");
+  }
+
+  async function uploadManagedTemplate() {
+    if (!managedTemplateFile || !managedTemplateName.trim() || !managedTemplateVersion.trim()) {
+      setMessage("请选择模板文件，并填写模板名称和版本。");
+      return;
+    }
+    const formData = new FormData();
+    formData.append("file", managedTemplateFile);
+    formData.append("name", managedTemplateName.trim());
+    formData.append("version", managedTemplateVersion.trim());
+    formData.append("school", managedTemplateSchool.trim() || "通用");
+    formData.append("document_type", managedTemplateType.trim() || "academic_paper");
+    setUploadingTemplate(true);
+    try {
+      const response = await fetch(apiUrl("/templates"), { method: "POST", headers: authorizationHeaders(), body: formData });
+      const data = await readResponseData(response);
+      if (!response.ok) { setMessage(apiErrorMessage(data, "模板上传失败。")); return; }
+      const created = data as unknown as TemplateOption;
+      setTemplates((current) => [...current.filter((item) => item.id !== created.id), created]);
+      setTemplateId(`${created.template_id}@@${created.version}`);
+      setManagedTemplateFile(null);
+      setMessage("我的模板已上传、完成规则解析并加入 Registry。");
+    } catch (error) {
+      setMessage(networkErrorMessage(error, "模板上传失败", apiUrl("/templates")));
+    } finally { setUploadingTemplate(false); }
   }
 
   async function classifyFile(file: File) {
@@ -486,10 +518,21 @@ export default function Home() {
             <label className="template-selector">
               <span>系统模板</span>
               <select value={templateId} disabled={Boolean(templateFile)} onChange={(event) => setTemplateId(event.target.value)}>
-                {templates.map((item) => <option key={`${item.template_id}-${item.version}`} value={`${item.template_id}@@${item.version}`}>{item.name} · {item.school} · {item.document_type} · v{item.version}</option>)}
+                {templates.map((item) => <option key={item.id ?? `${item.scope ?? "platform"}-${item.template_id}-${item.version}`} value={`${item.template_id}@@${item.version}`}>{item.scope === "tenant" ? "我的模板 · " : "平台模板 · "}{item.name} · {item.school} · v{item.version}</option>)}
               </select>
               <small>{templateFile ? "已上传兼容模板，本次优先使用上传文件。" : "选择 Registry 中的模板；默认保持通用论文规则。"}</small>
             </label>
+
+            <details className="template-selector">
+              <summary>我的模板：上传并保存到当前租户</summary>
+              <p>仅接受 DOCX；上传后会校验模板结构并保存为可复用的版本化资源。</p>
+              <input accept=".docx" type="file" onChange={(event) => setManagedTemplateFile(event.target.files?.[0] ?? null)} />
+              <input value={managedTemplateName} placeholder="模板名称" onChange={(event) => setManagedTemplateName(event.target.value)} />
+              <input value={managedTemplateVersion} placeholder="版本，例如 1.0" onChange={(event) => setManagedTemplateVersion(event.target.value)} />
+              <input value={managedTemplateSchool} placeholder="学校" onChange={(event) => setManagedTemplateSchool(event.target.value)} />
+              <input value={managedTemplateType} placeholder="文档类型" onChange={(event) => setManagedTemplateType(event.target.value)} />
+              <button className="secondary-button" type="button" disabled={uploadingTemplate} onClick={uploadManagedTemplate}>{uploadingTemplate ? "上传并解析中…" : "保存我的模板"}</button>
+            </details>
 
             <section className="mode-switch" aria-label="Agent 模式">
               <button className={agentMode === "local" ? "active" : ""} onClick={() => setAgentMode("local")} type="button">

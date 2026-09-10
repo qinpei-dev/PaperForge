@@ -6,7 +6,9 @@
 
 中文定位：**学术文档可信智能处理 Agent**
 
-当前阶段：**Day9-P2 Tenant Context & Resource Isolation 完成，等待用户验收**
+当前阶段：**Day9-P3 Tenant Template Management & Storage 完成，等待用户验收**
+
+Day9-P3 最新增量：**Tenant Template Management & Storage 已完成**。新增 `LocalTemplateStorage`，托管模板数据库只保存稳定 `local://tenant-templates/...` locator，不保存本地绝对路径；文件按 tenant/resource/version 隔离，并具备安全 locator 解析、删除和本地处理边界。`Template` 新增 storage locator、原始文件名、文件大小、content type、SHA-256、uploaded_by 等正式字段，Alembic `0006` 从 `0005` 升级。登录用户可通过 `POST /templates` 上传合法 DOCX，系统完成空文件/扩展名/大小/ZIP DOCX 校验和 Template Intelligence 解析后才创建 tenant-scoped 资源；失败会回滚 DB 并清理已写文件。新增 tenant-aware detail、patch、原始文件下载和受 provenance 保护的 delete；已被 Task 使用的模板只能 disabled，不能物理删除。Registry 在创建、更新、删除后立即刷新，版本身份不可静默覆盖；Task trace 保留实际模板快照。首页新增最小“我的模板”上传与选择入口，legacy 临时模板上传仍保持 ephemeral。验收结果：后端 pytest 62 passed，Day9-P3 专项 3 passed，Python compileall、Alembic fresh/`0005→0006`、frontend build、git diff check PASS。
 
 Day9-P2 最新增量：**Tenant Context & Resource Isolation 已完成**。新增 Tenant、TenantMembership、统一 personal Tenant Context，以及 Task 的 `tenant_id/user_id` provenance；Template 扩展为 platform/tenant scope，Registry、Repository、`GET /templates`、`POST /tasks`、`POST /agent/run` 全部按 tenant 可见集合解析。Task 列表、详情、SSE、Artifact、文件名下载/预览和确认版输出均按 tenant 隔离，越权统一隐藏为 404；匿名兼容仅可使用平台模板且不能读取持久化 tenant 产物。Alembic `0005` 可从 `0004` 原地 backfill 既有用户 personal tenant、membership、平台模板和历史 Task。数据库唯一性采用 tenant identity unique constraint + platform partial unique index，允许不同 tenant 使用相同 template_id/version。验收结果：后端 pytest 59 passed，Day9-P2 专项 7 passed，Python compileall、Alembic upgrade 至 0005、frontend build、git diff check PASS。
 

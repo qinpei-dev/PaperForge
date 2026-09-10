@@ -4,15 +4,18 @@ import os
 import json
 import shutil
 import logging
+import hashlib
+import re
+import zipfile
 from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from services.document_classifier import classify_document
 from services.agent_pipeline import run_agent_pipeline
@@ -21,7 +24,7 @@ from services.storage import LocalStorage
 from services.content_review import apply_content_suggestion
 from services.review_evidence import aggregate_review_evidence, content_score_summary
 from auth import auth_is_required, create_access_token, get_current_user, get_optional_current_user, hash_password, validate_email, verify_password
-from db.models import Artifact, Project, Task, User, Workspace
+from db.models import Artifact, Project, Task, Template, User, Workspace
 from db.session import SessionLocal, get_db, init_db
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
 from services.task_worker import task_worker
@@ -34,7 +37,9 @@ from services.template_registry import (
     resolve_template_request,
     template_registry,
 )
-from services.template_persistence import bootstrap_template_registry
+from services.template_persistence import bootstrap_template_registry, refresh_template_registry, template_storage
+from services.template_repository import TemplateRepository
+from services.template_intelligence import analyze_template
 from services.tenant_context import TenantContext, bootstrap_personal_tenants, ensure_personal_tenant, get_current_tenant, resolve_tenant_context
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -46,6 +51,8 @@ STORAGE = LocalStorage(BASE_DIR)
 UPLOAD_DIR = STORAGE.path_for("uploads")
 TEMPLATE_DIR = BASE_DIR / "templates"
 OUTPUT_DIR = STORAGE.path_for("outputs")
+MANAGED_TEMPLATE_STORAGE = template_storage()
+MAX_TEMPLATE_UPLOAD_BYTES = int(os.getenv("MAX_TEMPLATE_UPLOAD_BYTES", str(20 * 1024 * 1024)))
 LOGGER = logging.getLogger(__name__)
 
 for directory in (UPLOAD_DIR, TEMPLATE_DIR, OUTPUT_DIR):
@@ -117,15 +124,177 @@ def list_templates(
     if status is not None and status not in TEMPLATE_STATUSES:
         raise HTTPException(status_code=422, detail="status 必须是 active、deprecated 或 disabled。")
     bootstrap_template_registry(db)
-    persisted_registry = template_registry
     tenant_id = resolve_tenant_context(db, user).tenant_id if user is not None else None
-    templates = persisted_registry.list(school=school, document_type=document_type, status=status, tenant_id=tenant_id)
-    default_template = persisted_registry.resolve(tenant_id=tenant_id)
+    repository = TemplateRepository(db)
+    templates = repository.list_visible(tenant_id, school=school, document_type=document_type, status=status)
+    default_template = template_registry.resolve(tenant_id=tenant_id)
     return {
-        "default_template_id": persisted_registry.default_template_id,
+        "default_template_id": template_registry.default_template_id,
         "default_template_version": default_template.definition.version,
-        "templates": [item.public_dict() for item in templates],
+        "templates": [template_public_dict(item) for item in templates],
     }
+
+
+@app.post("/templates", status_code=201)
+def create_managed_template(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    version: str = Form(...),
+    school: str = Form("通用"),
+    document_type: str = Form("academic_paper"),
+    template_id: str | None = Form(None),
+    context: TenantContext = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    original_filename, file_size, checksum = validate_managed_template_upload(file)
+    clean_name = require_template_text(name, "name", 300)
+    clean_version = require_template_text(version, "version", 100)
+    clean_school = require_template_text(school, "school", 200)
+    clean_document_type = require_template_text(document_type, "document_type", 100)
+    clean_template_id = normalize_template_id(template_id or clean_name)
+    repository = TemplateRepository(db)
+    if repository.exists(clean_template_id, clean_version, scope="tenant", tenant_id=context.tenant_id):
+        raise HTTPException(status_code=409, detail="当前 tenant 中该 template_id 与 version 已存在，不能覆盖已有模板。")
+    resource_id = str(uuid4())
+    locator: str | None = None
+    try:
+        file.file.seek(0)
+        locator = MANAGED_TEMPLATE_STORAGE.save(context.tenant_id, resource_id, clean_version, file.file)
+        local_path = MANAGED_TEMPLATE_STORAGE.resolve_local_path(locator)
+        intelligence = analyze_template(local_path).to_dict()
+        repository.create(
+            resource_id=resource_id, template_id=clean_template_id, version=clean_version, name=clean_name,
+            school=clean_school, document_type=clean_document_type, status="active", source="tenant_upload",
+            scope="tenant", tenant_id=context.tenant_id, template_path=None, storage_locator=locator,
+            original_filename=original_filename, file_size=file_size, content_type=file.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            checksum=checksum, uploaded_by=context.current_user.id,
+            metadata={"intelligence_summary": {"rule_count": len(intelligence.get("rules", [])), "protected_region_count": len(intelligence.get("protected_regions", []))}},
+        )
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        if locator:
+            MANAGED_TEMPLATE_STORAGE.delete(locator)
+        raise
+    except Exception as exc:
+        db.rollback()
+        if locator:
+            MANAGED_TEMPLATE_STORAGE.delete(locator)
+        LOGGER.exception("Managed template creation failed")
+        raise HTTPException(status_code=422, detail="模板无法被解析为有效 DOCX，资源未创建。") from exc
+    refresh_template_registry(db)
+    created = repository.get_resource(resource_id)
+    return template_public_dict(created) if created else {"id": resource_id}
+
+
+@app.get("/templates/{resource_id}")
+def get_template_detail(resource_id: str, context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> dict[str, object]:
+    item = TemplateRepository(db).get_visible_resource(context.tenant_id, resource_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="没有找到模板。")
+    return template_public_dict(item)
+
+
+@app.patch("/templates/{resource_id}")
+def update_managed_template(resource_id: str, payload: dict[str, object] = Body(...), context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> dict[str, object]:
+    repository = TemplateRepository(db)
+    item = repository.get_visible_resource(context.tenant_id, resource_id)
+    if item is None or item.scope != "tenant" or item.tenant_id != context.tenant_id:
+        raise HTTPException(status_code=404, detail="没有找到可修改的模板。")
+    allowed = {"name": 300, "school": 200, "document_type": 100, "status": 50}
+    unexpected = set(payload) - set(allowed)
+    if unexpected:
+        raise HTTPException(status_code=422, detail="只允许修改 name、school、document_type、status。")
+    for field, maximum in allowed.items():
+        if field not in payload:
+            continue
+        value = require_template_text(payload[field], field, maximum)
+        if field == "status" and value not in TEMPLATE_STATUSES:
+            raise HTTPException(status_code=422, detail="status 必须是 active、deprecated 或 disabled。")
+        setattr(item, field, value)
+    db.commit()
+    refresh_template_registry(db)
+    return template_public_dict(item)
+
+
+@app.get("/templates/{resource_id}/file")
+def download_template_file(resource_id: str, context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> FileResponse:
+    item = TemplateRepository(db).get_visible_resource(context.tenant_id, resource_id)
+    if item is None or not item.storage_locator or not MANAGED_TEMPLATE_STORAGE.exists(item.storage_locator):
+        raise HTTPException(status_code=404, detail="没有找到模板文件。")
+    return FileResponse(MANAGED_TEMPLATE_STORAGE.resolve_local_path(item.storage_locator), filename=safe_upload_filename(item.original_filename or f"{item.template_id}.docx"), media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+
+@app.delete("/templates/{resource_id}", status_code=204)
+def delete_managed_template(resource_id: str, context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> Response:
+    repository = TemplateRepository(db)
+    item = repository.get_visible_resource(context.tenant_id, resource_id)
+    if item is None or item.scope != "tenant" or item.tenant_id != context.tenant_id:
+        raise HTTPException(status_code=404, detail="没有找到可删除的模板。")
+    if template_has_task_provenance(db, item):
+        raise HTTPException(status_code=409, detail="该模板已被历史任务使用，只能将 status 更新为 disabled。")
+    locator = item.storage_locator
+    repository.delete(item)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="模板删除失败，文件未删除。")
+    if locator:
+        try:
+            MANAGED_TEMPLATE_STORAGE.delete(locator)
+        except Exception:
+            LOGGER.exception("Template row deleted but storage cleanup failed: %s", resource_id)
+    refresh_template_registry(db)
+    return Response(status_code=204)
+
+
+def template_public_dict(item: Template) -> dict[str, object]:
+    return {"id": item.id, "template_id": item.template_id, "version": item.version, "name": item.name, "school": item.school, "document_type": item.document_type, "status": item.status, "source": item.source, "scope": item.scope, "tenant_id": item.tenant_id, "original_filename": item.original_filename, "file_size": item.file_size, "content_type": item.content_type, "checksum": item.checksum, "created_at": item.created_at, "updated_at": item.updated_at, "metadata": item.template_metadata or {}}
+
+
+def require_template_text(value: object, field: str, maximum: int) -> str:
+    if not isinstance(value, str) or not (clean := value.strip()) or len(clean) > maximum or any(ord(character) < 32 for character in clean):
+        raise HTTPException(status_code=422, detail=f"{field} 格式不正确。")
+    return clean
+
+
+def normalize_template_id(value: str) -> str:
+    base = value.strip().lower()
+    base = re.sub(r"[^a-z0-9]+", "-", base).strip("-")
+    if not base or len(base) > 200 or ".." in base:
+        raise HTTPException(status_code=422, detail="template_id 只允许小写字母、数字和连字符，长度不超过 200。")
+    return base
+
+
+def validate_managed_template_upload(file: UploadFile) -> tuple[str, int, str]:
+    filename = safe_upload_filename(file.filename)
+    file.file.seek(0, os.SEEK_END)
+    size = file.file.tell()
+    file.file.seek(0)
+    if size <= 0:
+        raise HTTPException(status_code=422, detail="模板文件不能为空。")
+    if size > MAX_TEMPLATE_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"模板文件不能超过 {MAX_TEMPLATE_UPLOAD_BYTES} 字节。")
+    digest = hashlib.sha256(file.file.read()).hexdigest()
+    file.file.seek(0)
+    try:
+        with zipfile.ZipFile(file.file) as archive:
+            if "[Content_Types].xml" not in archive.namelist() or "word/document.xml" not in archive.namelist():
+                raise ValueError("missing DOCX parts")
+    except (zipfile.BadZipFile, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="模板不是可读取的 DOCX 文件。") from exc
+    finally:
+        file.file.seek(0)
+    return filename, size, digest
+
+
+def template_has_task_provenance(db: Session, item: Template) -> bool:
+    for trace in db.scalars(select(Task.agent_trace).where(Task.tenant_id == item.tenant_id)).all():
+        serialized = json.dumps(trace, ensure_ascii=False, default=str)
+        if item.template_id in serialized and item.version in serialized:
+            return True
+    return False
 
 
 @app.post("/auth/register", response_model=AuthResponse, status_code=201)
@@ -436,7 +605,7 @@ def execute_persisted_task(
     result_trace = result.get("agent_trace")
     if not isinstance(result_trace, list):
         result_trace = []
-    task.agent_trace = result_trace
+    task.agent_trace = [template_trace_item(selected_template), *result_trace]
     task.before_score = result.get("before_score") if isinstance(result.get("before_score"), (int, float)) else None
     task.score = result.get("after_score") if isinstance(result.get("after_score"), (int, float)) else None
     result_status = str(result.get("status") or "error")

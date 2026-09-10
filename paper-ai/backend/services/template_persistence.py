@@ -8,6 +8,10 @@ from db.models import Template
 
 from .template_registry import BUILTIN_TEMPLATE_DEFINITIONS, TemplateDefinition, TemplateRegistry, template_registry
 from .template_repository import TemplateRepository
+from .storage import LocalTemplateStorage
+
+
+_TEMPLATE_STORAGE = LocalTemplateStorage(Path(__file__).resolve().parent.parent / "template_storage")
 
 
 def definition_from_model(model: Template) -> TemplateDefinition:
@@ -21,7 +25,7 @@ def definition_from_model(model: Template) -> TemplateDefinition:
         source=model.source,
         scope=model.scope,
         tenant_id=model.tenant_id,
-        template_path=Path(model.template_path) if model.template_path else None,
+        template_path=_TEMPLATE_STORAGE.resolve_local_path(model.storage_locator) if model.storage_locator else (Path(model.template_path) if model.template_path else None),
         metadata=model.template_metadata or {},
     )
 
@@ -67,3 +71,7 @@ def bootstrap_template_registry(session: Session) -> int:
 
 def refresh_template_registry(session: Session) -> TemplateRegistry:
     return TemplatePersistenceService(TemplateRepository(session)).refresh_registry()
+
+
+def template_storage() -> LocalTemplateStorage:
+    return _TEMPLATE_STORAGE

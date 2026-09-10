@@ -7,7 +7,11 @@ import pytest
 from docx import Document
 from docx.shared import Pt
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
+from db.base import Base
+from db.session import get_db
 from main import app
 from services.agent_pipeline import run_agent_pipeline
 from services.template_extractor import extract_template_profile
@@ -154,9 +158,24 @@ def test_pipeline_resolves_requested_version_to_its_own_locator(tmp_path: Path, 
     assert Path(captured["template_path"]).name == "template_sample.docx"
 
 
-def test_templates_api_lists_multiple_active_templates() -> None:
-    with TestClient(app) as client:
-        response = client.get("/templates")
+def test_templates_api_lists_multiple_active_templates(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    engine = create_engine(f"sqlite:///{(tmp_path / 'registry-api.db').as_posix()}")
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    monkeypatch.setattr("main.SessionLocal", sessions)
+    def override_get_db():
+        db = sessions()
+        try:
+            yield db
+        finally:
+            db.close()
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        with TestClient(app) as client:
+            response = client.get("/templates")
+    finally:
+        app.dependency_overrides.clear()
+    engine.dispose()
     assert response.status_code == 200
     payload = response.json()
     assert payload["default_template_id"] == "paperforge-general-academic"
