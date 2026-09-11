@@ -2,7 +2,7 @@
 
 ## [CURRENT] PaperForge P0 release remediation + repository-driven governance
 
-状态：**进行中；P0 代码、ACR immutable images、ECS runtime 发布和公开 smoke 已完成，最终登录后 E2E / tenant isolation 门禁待受控账号**。
+状态：**进行中；P0 代码、ACR immutable images、ECS runtime 发布和受控登录后业务 smoke 已完成，最终 Network/Artifact 原始响应审计仍阻断门禁**。
 
 已完成：
 
@@ -12,12 +12,12 @@
 - frontend production build、backend pytest、产物 API URL/loopback 静态扫描已完成；Docker Desktop 未运行不作为 production blocker。
 - canonical ACR run 已从 release commit 成功推送 backend/frontend；backend digest 为 `sha256:dd4cf884c553a7b06509d92c4d19fdca76d9fdc2b821ff9a9a2eb97ca98879f1`，frontend digest 为 `sha256:2fc634725e9f6814a57e2605f1d2f2d10c929caf8b4bb743673e73d2875265de`；前端生产 bundle layer scan PASS。
 - ECS 已在 `/opt/paperforge` 以上述 digest 更新 backend/frontend；保留原 PostgreSQL volume 和 data bind mounts；migration 为 `0012_day17_token_version (head)`；内部/公开 health、ready 和首页均 200；稳定后 JWT 已轮换。
-- 部署后浏览器公开 smoke PASS：首页、登录、注册、未登录 `/dashboard` 路由守卫；当前没有受控生产账号，未自动创建账号。
+- 2026-09-12 已创建明确标识的 production smoke test User A/B 账号；A Local 任务、B AI 任务、SSE 完成态、在线预览、模板上传和跨 tenant 任务/private-template 访问均完成浏览器验证，未发现 console error/warn。
 
 发布门禁剩余项：
 
-1. 提供/批准两个受控的生产 beta 测试账号或等价的已认证浏览器会话，执行登录后 upload paper、upload template、local/ai、Agent、preview、download、SSE 及 A/B tenant isolation；确认 A 无法读取 B 的 task、artifact、private template 或 SSE。不得自动创建账号。
-2. 完成上述受控验收后，更新最终门禁为 `PUBLIC BETA READY`；在此之前保持 `NOT READY`，不要把公开页面 smoke 当成完整业务验收。
+1. 在具备可导出认证 Network/response-header 和下载事件的浏览器审计环境中，补验 `X-Request-ID`、CORS、认证 artifact 直连下载与 A/B artifact/SSE 直连拒绝；当前环境只能确认 UI 结果和 console，不能独立暴露这些原始证据。
+2. 完成上述最后一项证据审计后，才可更新最终门禁为 `PUBLIC BETA READY`；在此之前保持 `NOT READY`。
 3. 后续发布必须继续使用 canonical workflow/script；历史 `ops/acr-build-v3.6` 只保留为历史记录，禁止误用。
 
 下方 `[DONE]` 条目保留各阶段的历史事实；本文件顶部 `[CURRENT]` 条目是下一步工作唯一依据。
