@@ -58,7 +58,7 @@ def validate_email(email: str) -> str:
     return normalized
 
 
-def create_access_token(user_id: str) -> str:
+def create_access_token(user_id: str, token_version: int = 0) -> str:
     try:
         lifetime_minutes = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
     except ValueError as exc:
@@ -66,7 +66,7 @@ def create_access_token(user_id: str) -> str:
     if not 5 <= lifetime_minutes <= 1440:
         raise RuntimeError("JWT_EXPIRE_MINUTES must be between 5 and 1440.")
     expires = datetime.now(timezone.utc) + timedelta(minutes=lifetime_minutes)
-    return jwt.encode({"sub": user_id, "exp": expires}, _jwt_secret(), algorithm=JWT_ALGORITHM)
+    return jwt.encode({"sub": user_id, "ver": token_version, "exp": expires}, _jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
 def get_current_user(token: str | None = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
@@ -75,13 +75,16 @@ def get_current_user(token: str | None = Depends(oauth2_scheme), db: Session = D
     try:
         payload = jwt.decode(token, _jwt_secret(), algorithms=[JWT_ALGORITHM])
         user_id = payload.get("sub")
-        if not isinstance(user_id, str):
-            raise ValueError("missing subject")
+        token_version = payload.get("ver")
+        if not isinstance(user_id, str) or not isinstance(token_version, int) or isinstance(token_version, bool):
+            raise ValueError("missing token claims")
     except (jwt.InvalidTokenError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录凭证无效或已过期。", headers={"WWW-Authenticate": "Bearer"})
     user = db.scalar(select(User).where(User.id == user_id))
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在。", headers={"WWW-Authenticate": "Bearer"})
+    if not hmac.compare_digest(str(token_version), str(user.token_version)):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录凭证已撤销，请重新登录。", headers={"WWW-Authenticate": "Bearer"})
     return user
 
 

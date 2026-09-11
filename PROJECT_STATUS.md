@@ -6,7 +6,9 @@
 
 中文定位：**学术文档可信智能处理 Agent**
 
-当前阶段：**Day15-P0 Production Hardening 已完成；等待真实生产环境验收**
+当前阶段：**Day17-P0 Security Hardening 已完成；Controlled Beta 代码发布门禁通过，等待目标环境验收**
+
+Day17-P0 最新增量：**Security Hardening 已完成**。JWT 现携带并校验用户持久化 `token_version`；`POST /auth/revoke-sessions` 原子递增该版本，使当前用户的所有旧 bearer token 立即失效，后续登录签发新版本 token。公开 Nginx 示例补充严格 CSP、每 IP `60r/m` 边缘限流（burst 20、429）及 SSE 兼容代理设置。`docker-compose.yml` 现明确是 development-only stack（`paperforge-dev`）；生产仍只能使用 `docker-compose.prod.yml` 与受审查的 public edge。新增 Day17 专项测试；未修改 TaskWorker 或 Agent 业务逻辑。真实域名/TLS、image digest、数据库备份恢复和目标环境 smoke 仍是部署门禁。
 
 Day12-P1 最新增量：**Observability Foundation 已完成**。每个 HTTP 请求现在生成 UUID request ID，并通过 `X-Request-ID` 返回；请求完成/失败日志采用 JSON 结构，含 timestamp、level、request_id、tenant/user/task（可用时）、event 与 duration，敏感字段（JWT、password、API key、论文/文件正文）会被排除或脱敏。既有 durable `task_events` 继续作为 task execution history authority，同时新增 task created/claimed/started/stage changed/completed/failed 的关联结构化诊断日志，可按 task_id 查询一次执行过程。`/health` 仅表示进程存活；新增 `/ready` 以轻量 `SELECT 1` 验证数据库可达。HTTP 错误现返回 `error.code`、`error.message`、`request_id`，分类为 AUTH_ERROR、VALIDATION_ERROR、TASK_ERROR、STORAGE_ERROR 或 INTERNAL_ERROR。未引入 Prometheus/Grafana/ELK/OpenTelemetry 或改变业务 Agent 行为。
 

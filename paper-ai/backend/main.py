@@ -410,7 +410,7 @@ def register_user(payload: RegisterRequest, request: Request, db: Session = Depe
         raise HTTPException(status_code=409, detail="该邮箱已经注册。")
     db.refresh(user)
     workspace = user.workspaces[0]
-    return AuthResponse(access_token=create_access_token(user.id), user=UserResponse(id=user.id, email=user.email, is_admin=is_platform_admin(user)), workspace_id=workspace.id, workspace_name=workspace.name)
+    return AuthResponse(access_token=create_access_token(user.id, user.token_version), user=UserResponse(id=user.id, email=user.email, is_admin=is_platform_admin(user)), workspace_id=workspace.id, workspace_name=workspace.name)
 
 
 @app.post("/auth/login", response_model=AuthResponse)
@@ -428,12 +428,20 @@ def login_user(payload: LoginRequest, request: Request, db: Session = Depends(ge
         db.flush()
     db.commit()
     db.refresh(workspace)
-    return AuthResponse(access_token=create_access_token(user.id), user=UserResponse(id=user.id, email=user.email, is_admin=is_platform_admin(user)), workspace_id=workspace.id, workspace_name=workspace.name)
+    return AuthResponse(access_token=create_access_token(user.id, user.token_version), user=UserResponse(id=user.id, email=user.email, is_admin=is_platform_admin(user)), workspace_id=workspace.id, workspace_name=workspace.name)
 
 
 @app.get("/auth/me", response_model=UserResponse)
 def current_user(user: User = Depends(get_current_user)) -> UserResponse:
     return UserResponse(id=user.id, email=user.email, is_admin=is_platform_admin(user))
+
+
+@app.post("/auth/revoke-sessions")
+def revoke_sessions(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, bool]:
+    """Invalidate every existing bearer token for the authenticated user."""
+    user.token_version += 1
+    db.commit()
+    return {"revoked": True}
 
 
 def require_permission(context: TenantContext, permission: str) -> None:

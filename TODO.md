@@ -1,5 +1,17 @@
 # TODO
 
+## [DONE] PaperForge Day17-P0 — Security Hardening
+
+完成：
+
+- Day13–Day16 release scope 已审阅、回归并提交。
+- JWT 加入持久化 `token_version` claim 校验，`POST /auth/revoke-sessions` 可撤销用户所有既有 bearer token。
+- 公共 Nginx 示例新增 CSP 与 per-IP edge rate limiting；SSE 代理行为保持不变。
+- `docker-compose.yml` 明确为 development-only，生产入口保持 `docker-compose.prod.yml`。
+- 新增 Day17 专项测试，覆盖 token 撤销和边缘/Compose 配置。
+
+验收：Day17 专项、Day13–Day16 安全回归、Python compile、Alembic upgrade、Compose config、frontend build 与 `git diff --check` 均需 PASS。真实 TLS、WAF/DDoS 压测、production migration/restore 和目标环境 smoke 仍须在发布环境执行。
+
 ## [DONE] PaperForge Day12-P1 — Observability Foundation
 
 完成：

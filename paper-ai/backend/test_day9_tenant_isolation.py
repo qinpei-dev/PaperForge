@@ -275,7 +275,7 @@ def test_0004_to_0007_migration_backfills_without_changing_template_identity(tmp
     # The running application now maps Day11 columns; historical
     # backfill assertions above intentionally stop at 0007, then bring
     # the fixture to the current runtime schema before starting FastAPI.
-    command.upgrade(config, "0010_day11_durable_task_runtime")
+    command.upgrade(config, "head")
     sessions = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
     def override_get_db() -> Generator[Session, None, None]:
