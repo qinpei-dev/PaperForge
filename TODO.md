@@ -1,5 +1,17 @@
 # TODO
 
+## [DONE] PaperForge Landing Page — Product Homepage
+
+完成：基于 PaperForge Brand Visual System 实现真实用户首页，包含 Hero、PaperForge App Preview、Workflow、Verification Result 和 CTA。采用暖白背景、黑色文字、品牌蓝强调与产品窗口优先布局；不展示 Brand Guideline、Logo 介绍、字体说明或品牌理念。
+
+状态文案已改为真实流程状态：`Template parsed`、`Changes verified`、`Report generated`、`Preview available`。移除虚假评分数字与分数对比；未修改后端 API、上传流程或 Agent 主链路。
+
+## [DONE] PaperForge Brand Visual System — Canva
+
+完成：创建 PaperForge 品牌视觉板并导入 Canva，包含 4 页可编辑内容：Logo System、Type & Color、Landing Hero、Brand Principles。方向采用字标优先、可选 PF 图形标志，使用 `#101214`、`#F7F7F5`、`#315EFB`、`#16794C` 四色体系，并明确“不只是修改论文，而是验证每一次修改”的产品价值主张。
+
+交付物：`brand/PaperForge-Brand-Visual-System.html`；Canva 设计标题：`PaperForge — Brand Visual System`。
+
 ## [DONE] PaperForge Day17-P0 — Security Hardening
 
 完成：
@@ -1144,6 +1156,18 @@
 完成：任务详情页重组为任务头部、结果概览、Workflow Timeline、Agent Execution 与 Artifacts；使用 V4 `Card/Badge/Button/Loading` 组件。保留认证 SSE、`Last-Event-ID` 重连、2 秒轮询 fallback、Artifact 下载、DOCX 在线预览、失败重试与 Trace 数据；开发级 Trace 默认折叠，并展示当前阶段和 fallback 状态。修改数量通过既有报告 Artifact 下载接口读取，读取失败时安全降级，不扩展 API。页面样式全部迁移到 CSS Module，未增加 `globals.css`。
 
 验收：frontend `npm run build` PASS；`git diff --check` PASS；后端目录无本轮变更，API contract 未修改。
+
+## [DONE] PaperForge Auth Experience Release Candidate
+
+完成：Login / Register 共用正式 Auth Layout，桌面端采用品牌产品区域 + 认证表单区域，移除旧版孤立深色大卡片与异常巨型认证标题；移动端在 390/360 下退化为单列布局，保证输入框、登录/注册按钮和互链可用。保留原有认证 API、JWT、Preview Auto Login、redirect、workspace 与 auth guard。
+
+验收：`/login`、`/register` 桌面端实际渲染检查通过；移动端响应式断点与溢出规则检查通过；frontend `npm run build` PASS；`git diff --check` PASS。
+
+## [DONE] PaperForge Frontend Final Release Sweep
+
+完成：覆盖 Landing → Auth → Dashboard → New Task → Template → Task Detail → Result / Report / Preview / Download，以及 Sidebar、Topbar、Workspace、Loading、Empty、Error、Modal、表单、响应式和基础 Console 检查。最小修复底层网络错误暴露、模板/设置入口回 Landing、任务中心缺少 Loading/Retry、产物下载异常未捕获和 390px 顶栏徽标裁切；未扩展后端或 API contract。
+
+验收：Frontend P0=0、P1=0；`npm run build` PASS；`git diff --check` PASS；隔离 SQLite 真实 local 任务 smoke PASS（running → completed、验证 112/112、DOCX/报告产物、在线预览与下载）；正式 commit/push 后结束 Frontend Productization 阶段。
 
 ## [DONE] PaperForge V4-P1.6 — Local Preview 自动登录
 

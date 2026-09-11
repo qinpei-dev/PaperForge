@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { userFacingError } from "../../lib/error-messages";
 
 type TaskStats = { total: number; status_summary: Record<string, number> };
 type AdminStats = {
@@ -58,7 +59,7 @@ function errorMessage(data: Record<string, unknown>, fallback: string) {
     const message = (envelope as Record<string, unknown>).message;
     if (typeof message === "string") return message;
   }
-  return typeof data.detail === "string" ? data.detail : fallback;
+  return typeof data.detail === "string" ? userFacingError(data.detail, fallback) : fallback;
 }
 
 function formatDate(value: string) {

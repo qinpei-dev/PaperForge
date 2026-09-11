@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Badge, Button, Card, Loading } from "../../../../components";
 import { apiUrl } from "../../../../lib/api-client";
 import { authorizationHeaders } from "../../../../lib/auth";
+import { userFacingError } from "../../../../lib/error-messages";
 import { taskStatusLabel, workflowStatusLabel } from "../../../../lib/status-labels";
 import styles from "./page.module.css";
 
@@ -129,17 +130,21 @@ export default function TaskDetailPage() {
   const [retrying, setRetrying] = useState(false);
 
   async function downloadArtifact(artifact: Artifact) {
-    const response = await fetch(apiUrl(artifact.download_url || `/artifacts/${encodeURIComponent(artifact.id)}/download`), { headers: authorizationHeaders() });
-    if (!response.ok) {
-      setError("产物下载失败，请稍后重试。");
-      return;
+    try {
+      const response = await fetch(apiUrl(artifact.download_url || `/artifacts/${encodeURIComponent(artifact.id)}/download`), { headers: authorizationHeaders() });
+      if (!response.ok) {
+        setError("产物下载失败，请稍后重试。");
+        return;
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = artifactName(artifact);
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) {
+      setError(userFacingError(reason, "产物下载暂时不可用，请稍后重试。"));
     }
-    const url = URL.createObjectURL(await response.blob());
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = artifactName(artifact);
-    link.click();
-    URL.revokeObjectURL(url);
   }
 
   async function previewArtifact(artifact: Artifact) {
@@ -149,11 +154,11 @@ export default function TaskDetailPage() {
     try {
       const response = await fetch(apiUrl(artifact.preview_url || `/preview/${encodeURIComponent(filename)}`), { headers: authorizationHeaders(), cache: "no-store" });
       const data = await response.json() as { html?: string; title?: string; detail?: string };
-      if (!response.ok) throw new Error(data.detail || "在线预览失败");
+      if (!response.ok) throw new Error(userFacingError(data.detail, "在线预览失败，请稍后重试。"));
       setPreviewHtml(String(data.html || ""));
       setPreviewTitle(String(data.title || filename));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "在线预览失败");
+      setError(userFacingError(reason, "在线预览失败，请稍后重试。"));
     } finally {
       setPreviewLoading(false);
     }
@@ -165,10 +170,10 @@ export default function TaskDetailPage() {
     try {
       const response = await fetch(apiUrl(`/tasks/${encodeURIComponent(taskId)}/retry`), { method: "POST", headers: authorizationHeaders() });
       const data = await response.json() as { detail?: string };
-      if (!response.ok) throw new Error(data.detail || "任务重试失败");
+      if (!response.ok) throw new Error(userFacingError(data.detail, "任务重试失败，请稍后重试。"));
       window.location.reload();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "任务重试失败");
+      setError(userFacingError(reason, "任务重试失败，请稍后重试。"));
       setRetrying(false);
     }
   }
@@ -201,7 +206,7 @@ export default function TaskDetailPage() {
       try {
         const response = await fetch(apiUrl(`/tasks/${encodeURIComponent(taskId)}`), { headers, cache: "no-store", signal: taskController.signal });
         const data = await response.json() as Task & { detail?: string };
-        if (!response.ok) throw new Error(data.detail || "任务加载失败");
+        if (!response.ok) throw new Error(userFacingError(data.detail, "任务详情暂时无法加载，请稍后重试。"));
         if (stopped) return;
         setError("");
         setTask(data);
@@ -214,7 +219,7 @@ export default function TaskDetailPage() {
         if (scheduleNext && pollingActive) timer = setTimeout(() => void loadTask(true), 2000);
       } catch (reason) {
         if (!stopped && reason instanceof Error && reason.name !== "AbortError") {
-          setError(reason.message || "任务加载失败");
+          setError(userFacingError(reason, "任务详情暂时无法加载，请稍后重试。"));
           if (scheduleNext && pollingActive) timer = setTimeout(() => void loadTask(true), 2000);
         }
       }

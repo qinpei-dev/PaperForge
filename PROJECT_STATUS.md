@@ -8,6 +8,10 @@
 
 当前阶段：**Day17-P0 Security Hardening 已完成；Controlled Beta 代码发布门禁通过，等待目标环境验收**
 
+品牌视觉增量：**PaperForge Brand Visual System 已完成**。已生成并导入 Canva 可编辑品牌板，包含字标优先 Logo / PF 图形方向、字体与色彩系统、Landing Page Hero 软件窗口概念及品牌定位边界；不修改 Agent 主链路。
+
+Landing Page 增量：**真实用户首页已完成**。首页现以产品窗口为主视觉，包含 Hero、PaperForge App Preview、Workflow、Verification Result 与 CTA；移除品牌规范展示和虚假评分，统一使用 `Template parsed`、`Changes verified`、`Report generated`、`Preview available` 等真实状态文案。未修改后端 API 或 Agent 主链路。
+
 Day17-P0 最新增量：**Security Hardening 已完成**。JWT 现携带并校验用户持久化 `token_version`；`POST /auth/revoke-sessions` 原子递增该版本，使当前用户的所有旧 bearer token 立即失效，后续登录签发新版本 token。公开 Nginx 示例补充严格 CSP、每 IP `60r/m` 边缘限流（burst 20、429）及 SSE 兼容代理设置。`docker-compose.yml` 现明确是 development-only stack（`paperforge-dev`）；生产仍只能使用 `docker-compose.prod.yml` 与受审查的 public edge。新增 Day17 专项测试；未修改 TaskWorker 或 Agent 业务逻辑。真实域名/TLS、image digest、数据库备份恢复和目标环境 smoke 仍是部署门禁。
 
 Day12-P1 最新增量：**Observability Foundation 已完成**。每个 HTTP 请求现在生成 UUID request ID，并通过 `X-Request-ID` 返回；请求完成/失败日志采用 JSON 结构，含 timestamp、level、request_id、tenant/user/task（可用时）、event 与 duration，敏感字段（JWT、password、API key、论文/文件正文）会被排除或脱敏。既有 durable `task_events` 继续作为 task execution history authority，同时新增 task created/claimed/started/stage changed/completed/failed 的关联结构化诊断日志，可按 task_id 查询一次执行过程。`/health` 仅表示进程存活；新增 `/ready` 以轻量 `SELECT 1` 验证数据库可达。HTTP 错误现返回 `error.code`、`error.message`、`request_id`，分类为 AUTH_ERROR、VALIDATION_ERROR、TASK_ERROR、STORAGE_ERROR 或 INTERNAL_ERROR。未引入 Prometheus/Grafana/ELK/OpenTelemetry 或改变业务 Agent 行为。
@@ -563,6 +567,18 @@ Current Bottleneck：
 验收：Day16 专项 4 passed；后端全量 pytest 102 passed；frontend `npm run build` PASS；Python compile PASS；Compose config PASS；`git diff --check` PASS；smoke/cleanup 脚本 `--help` PASS。真实公网 TLS、registry image pull、真实 PostgreSQL restore 和 WAF 仍未在目标环境执行。
 
 当前状态：**Controlled Beta Ready（受控测试就绪，待 commit/release tag 与目标环境 smoke）**。
+
+## PaperForge Auth Experience Release Candidate
+
+已完成：Login / Register 统一升级为 PaperForge SaaS Auth Layout。桌面端采用左侧品牌与真实能力说明、右侧认证表单；移动端收拢为单列表单并保留可滚动输入体验。未修改 Login/Register API、JWT、Preview Auto Login、redirect、workspace 或 auth guard。
+
+验收：`/login`、`/register` 桌面端实际渲染检查通过；移动端 390/360 响应式断点与溢出规则检查通过；frontend `npm run build` PASS；`git diff --check` PASS。
+
+## PaperForge Frontend Final Release Sweep
+
+已完成：覆盖 Landing、Auth、Dashboard、New Task、模板选择、Task Detail、结果、预览、下载、Sidebar、Topbar、Workspace、Empty/Loading/Error 状态与 1920/1440/1280/1024/768/390/360 响应式检查。最小修复网络错误文案、模板/设置入口、任务中心 Loading/Retry、产物下载异常保护和移动端 Preview 徽标裁切；未修改后端 API、数据库或 Agent 主链路。
+
+验收：Frontend P0=0、P1=0；`npm run build` PASS；`git diff --check` PASS；隔离 SQLite 真实 local 任务 smoke PASS（running → completed、验证 112/112、DOCX/报告产物、在线预览与下载）；主要页面 Console error/warn=0。正式 commit/push 后，Frontend Productization 阶段结束。
 # PaperForge V4 前端产品化第一阶段
 
 状态：已完成。新增 SaaS 前端基础目录 `components/`、`lib/`、`types/` 和 `styles/tokens.css`；提供 Button、Card、Badge、Input、EmptyState、Loading 基础组件，并抽离公共 API URL、认证请求头/会话读写和任务状态标签。既有页面、后端 API 与上传、模板、local/ai、Agent、预览、下载业务流均保持兼容。前端 `npm run build` 已通过。

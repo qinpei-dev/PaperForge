@@ -5,7 +5,9 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiUrl } from "../../lib/api-client";
 import { isPreviewAutoLoginEnabled, storeAuthSession, tryPreviewAutoLogin } from "../../lib/auth";
-
+import { userFacingError } from "../../lib/error-messages";
+import { AuthLayout } from "../../components/auth/AuthLayout";
+import styles from "../../components/auth/AuthLayout.module.css";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,15 +35,53 @@ export default function LoginPage() {
     try {
       const response = await fetch(apiUrl("/auth/login"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "登录失败");
+      if (!response.ok) throw new Error(userFacingError(data.detail, "登录失败，请检查账号信息后重试。"));
       storeAuthSession(data.access_token, data.user, { id: data.workspace_id, name: data.workspace_name });
       router.push("/dashboard");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "登录失败");
+      setError(userFacingError(reason, "登录暂时不可用，请稍后重试。"));
     } finally {
       setLoading(false);
     }
   }
 
-  return <main className="auth-page"><section className="auth-card"><p className="eyebrow">PAPERFORGE SaaS</p><h1>登录 PaperForge</h1><p className="muted">进入你的论文处理工作空间。</p><form onSubmit={submit} className="auth-form"><label>邮箱<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label>密码<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{error && <p className="error-text">{error}</p>}<button type="submit" disabled={loading}>{loading ? "登录中…" : "登录"}</button></form><p className="auth-switch">还没有账号？ <Link href="/register">注册</Link></p></section></main>;
+  return (
+    <AuthLayout
+      eyebrow="欢迎回来"
+      title="登录 PaperForge"
+      description="继续进入你的论文处理工作空间。"
+      switchPrompt="没有账号？"
+      switchLabel="注册"
+      switchHref="/register"
+    >
+      <form onSubmit={submit} className={styles.form}>
+        <label className={styles.field}>
+          邮箱
+          <input
+            className={styles.input}
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            autoComplete="email"
+            required
+          />
+        </label>
+        <label className={styles.field}>
+          密码
+          <input
+            className={styles.input}
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="current-password"
+            required
+          />
+        </label>
+        {error && <p className={styles.error} role="alert">{error}</p>}
+        <button className={styles.submitButton} type="submit" disabled={loading}>
+          {loading ? "登录中…" : "登录"}
+        </button>
+      </form>
+    </AuthLayout>
+  );
 }

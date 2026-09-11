@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -7,11 +8,85 @@ import { getStoredAuthUser } from "../lib/auth";
 type AuthUser = { email: string };
 
 const workflowSteps = [
-  { number: "01", label: "上传论文", detail: "论文 DOCX", tone: "blue" },
-  { number: "02", label: "模板解析", detail: "识别格式规则", tone: "violet" },
-  { number: "03", label: "AI Agent 处理", detail: "规划 · 执行 · 验证", tone: "amber" },
-  { number: "04", label: "验证完成", detail: "报告与最终文档", tone: "green" },
+  { number: "01", title: "上传论文", detail: "把 DOCX 文件放进工作流", tone: "blue" },
+  { number: "02", title: "解析模板", detail: "识别格式规则与文档结构", tone: "slate" },
+  { number: "03", title: "处理并验证", detail: "智能处理并复查结果", tone: "blue" },
+  { number: "04", title: "生成报告", detail: "预览、复核，然后下载", tone: "green" },
 ] as const;
+
+const verificationRows = [
+  { label: "模板解析完成", detail: "Template parsed · 格式规则已识别", status: "已完成", tone: "blue" },
+  { label: "修改已验证", detail: "Changes verified · 修改已重新读取并确认", status: "已验证", tone: "green" },
+  { label: "报告已生成", detail: "Report generated · 修改报告已准备完成", status: "已就绪", tone: "blue" },
+  { label: "在线预览可用", detail: "Preview available · 可以在线查看最终文档", status: "已就绪", tone: "green" },
+] as const;
+
+function ProductWindow({ detailed = false }: { detailed?: boolean }) {
+  return (
+    <div className={`product-window ${detailed ? "product-window-detailed" : "product-window-hero"}`}>
+      <div className="product-window-bar">
+        <div className="window-dots" aria-hidden="true"><i /><i /><i /></div>
+        <span className="window-title">paperforge / 当前任务</span>
+        <span className="window-mode">LOCAL + AI</span>
+      </div>
+      <div className="product-window-layout">
+        <aside className="product-window-sidebar">
+          <div className="product-window-brand"><span className="product-window-mark">PF</span><span>PaperForge</span></div>
+          <nav aria-label="产品窗口导航">
+            <span className="product-window-nav active">概览 · Overview</span>
+            <span className="product-window-nav">文档 · Documents</span>
+            <span className="product-window-nav">模板 · Templates</span>
+            <span className="product-window-nav">报告 · Reports</span>
+          </nav>
+          <p className="product-window-side-note">Every change stays visible.</p>
+        </aside>
+
+        <div className="product-window-main">
+          <div className="product-window-heading">
+            <div>
+              <span className="product-window-kicker">论文处理工作流 · DOCUMENT WORKFLOW</span>
+              <h3>处理已完成 · Analysis complete</h3>
+            </div>
+            <span className="verified-pill"><span /> VERIFIED</span>
+          </div>
+
+          <div className="document-card">
+            <span className="document-icon">DOCX</span>
+            <div><strong>当前论文.docx</strong><small>已关联所选模板.docx</small></div>
+            <span className="document-check" aria-label="文件已处理">✓</span>
+          </div>
+
+          <div className="product-status-grid">
+            {verificationRows.map((row) => (
+              <div className={`product-status-card ${row.tone}`} key={row.label}>
+                <span className="product-status-mark">✓</span>
+                <strong>{row.label}</strong>
+                <small>{row.status}</small>
+              </div>
+            ))}
+          </div>
+
+          {detailed ? (
+            <div className="product-report-panel">
+              <div className="product-report-heading"><span>验证结果 · Verification result</span><span className="report-ready">报告已就绪 · REPORT READY</span></div>
+              <div className="product-report-rows">
+                {verificationRows.map((row) => (
+                  <div className="product-report-row" key={`${row.label}-report`}>
+                    <div><span className={`report-dot ${row.tone}`} /><strong>{row.label}</strong></div>
+                    <span>{row.detail}</span>
+                    <b>{row.status}</b>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="product-window-footer"><span>报告已生成 · Report generated · 在线预览可用 · Preview available</span><span aria-hidden="true">↗</span></div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -27,14 +102,14 @@ export default function Home() {
     <main className="landing-page">
       <header className="landing-nav">
         <Link className="landing-brand" href="/" aria-label="PaperForge 首页">
-          <span className="landing-brand-mark" aria-hidden="true">P</span>
+          <span className="landing-brand-mark" aria-hidden="true">PF</span>
           <span>PaperForge</span>
         </Link>
 
         <nav className="landing-nav-links" aria-label="主导航">
+          <a href="#app-preview">产品预览</a>
           <a href="#workflow">工作流程</a>
-          <a href="#capabilities">产品能力</a>
-          {authUser ? <Link href="/dashboard">工作台</Link> : <Link href="/login">登录</Link>}
+          <a href="#verification">验证结果</a>
         </nav>
 
         <div className="landing-nav-actions">
@@ -45,103 +120,80 @@ export default function Home() {
 
       <section className="landing-hero" aria-labelledby="hero-title">
         <div className="landing-hero-copy">
-          <p className="landing-eyebrow"><span aria-hidden="true" />学术文档智能处理</p>
-          <h1 id="hero-title">让论文格式修改<br /><em>从上传到验证，一次完成。</em></h1>
-          <p className="landing-hero-lead">
-            上传论文和格式模板，PaperForge 自动完成规则分析、文档处理、修改验证，并生成可下载报告。
-          </p>
+          <p className="landing-eyebrow"><span aria-hidden="true" />可信学术文档处理 · Verified academic document workflow</p>
+          <h1 id="hero-title">不只是修改论文，<br /><em>而是验证每一次修改。</em></h1>
+          <p className="landing-hero-lead">上传论文和模板，让 PaperForge 智能处理文档、验证修改，并把结果整理成一份可复核的报告。</p>
           <div className="landing-hero-actions">
             <Link className="landing-primary-button" href={taskHref}>开始处理 <span aria-hidden="true">→</span></Link>
             <a className="landing-secondary-button" href="#workflow">查看工作流程 <span aria-hidden="true">↓</span></a>
           </div>
-          <p className="landing-hero-note"><span aria-hidden="true">✓</span> 支持 DOCX · 可选格式模板 · 每一步都有验证</p>
+          <p className="landing-hero-note"><span aria-hidden="true">✓</span> DOCX 工作流 · 模板解析 · 修改验证 · 在线预览</p>
         </div>
 
-        <div className="product-preview-wrap" aria-label="PaperForge 产品流程示意">
-          <div className="product-preview-label"><span className="preview-dot" />产品界面预览 <span>示意结构</span></div>
-          <div className="product-preview">
-            <div className="preview-window-bar">
-              <div className="preview-window-dots" aria-hidden="true"><i /><i /><i /></div>
-              <span>新建论文任务</span>
-              <span className="preview-window-status">工作流</span>
-            </div>
-            <div className="preview-window-content">
-              <div className="preview-window-heading">
-                <div>
-                  <span className="preview-kicker">PAPERFORGE WORKFLOW</span>
-                  <h2>从上传到验证</h2>
-                </div>
-                <span className="preview-structure-tag">界面结构示意</span>
-              </div>
-              <div className="preview-file-row">
-                <span className="preview-file-icon" aria-hidden="true">DOC</span>
-                <div><strong>你的论文文件</strong><small>上传后开始识别与处理</small></div>
-                <span className="preview-file-action">上传</span>
-              </div>
-              <div className="preview-flow-list">
-                {workflowSteps.map((step, index) => (
-                  <div className="preview-flow-step" key={step.number}>
-                    <div className={`preview-step-marker ${step.tone}`}><span>{step.number}</span></div>
-                    <div className="preview-step-copy"><strong>{step.label}</strong><small>{step.detail}</small></div>
-                    <span className={`preview-step-state ${index === 0 ? "current" : ""}`}>{index === 0 ? "待开始" : "后续步骤"}</span>
-                    {index < workflowSteps.length - 1 ? <span className="preview-flow-line" aria-hidden="true" /> : null}
-                  </div>
-                ))}
-              </div>
-              <div className="preview-footer-row"><span>完成后可查看修改报告与最终文档</span><span className="preview-footer-arrow" aria-hidden="true">↗</span></div>
-            </div>
+        <div className="hero-product-frame" aria-label="PaperForge 产品窗口预览">
+          <div className="hero-product-label"><span className="preview-dot" />产品实时预览 · LIVE PRODUCT PREVIEW</div>
+          <ProductWindow />
+        </div>
+      </section>
+
+      <section className="landing-product-section" id="app-preview" aria-labelledby="app-preview-title">
+        <div className="landing-section-heading product-section-heading">
+          <p className="landing-eyebrow">PAPERFORGE 产品预览 · INSIDE PAPERFORGE</p>
+          <h2 id="app-preview-title">从文件到报告，<br />每一步都留在同一个窗口里。</h2>
+          <p>不是一个只会输出答案的工具。PaperForge 把输入、处理、验证和交付放进一条能被查看的工作流。</p>
+        </div>
+        <div className="product-showcase">
+          <ProductWindow detailed />
+          <div className="showcase-notes">
+            <div className="showcase-note"><span>01</span><div><strong>模板先被解析</strong><p>先确认文档规则，再开始处理，避免结果脱离模板要求。</p></div></div>
+            <div className="showcase-note"><span>02</span><div><strong>修改后重新读取</strong><p>每个关键步骤都会回到输出文件复查，而不是只依赖过程日志。</p></div></div>
+            <div className="showcase-note"><span>03</span><div><strong>结果可预览、可下载</strong><p>报告和最终文档一起交付，方便你继续复核或直接使用。</p></div></div>
           </div>
         </div>
       </section>
 
       <section className="landing-workflow" id="workflow" aria-labelledby="workflow-title">
         <div className="landing-section-heading">
-          <p className="landing-eyebrow">A CLEARER WAY TO WORK</p>
-          <h2 id="workflow-title">把复杂的论文处理，<br />变成一条清晰的路径。</h2>
-          <p>从文件进入系统的那一刻起，你始终知道正在发生什么、下一步是什么。</p>
+          <p className="landing-eyebrow">论文处理工作流 · THE WORKFLOW</p>
+          <h2 id="workflow-title">一条清楚的路径，<br />从上传走到交付。</h2>
+          <p>你不需要猜处理进行到哪一步。每一步都有明确的输入、状态和下一步。</p>
         </div>
         <div className="workflow-rail">
           {workflowSteps.map((step, index) => (
             <article className="workflow-rail-item" key={step.number}>
               <span className={`workflow-rail-number ${step.tone}`}>{step.number}</span>
-              <div><h3>{step.label}</h3><p>{step.detail}</p></div>
+              <div><h3>{step.title}</h3><p>{step.detail}</p></div>
               {index < workflowSteps.length - 1 ? <span className="workflow-rail-arrow" aria-hidden="true">→</span> : null}
             </article>
           ))}
         </div>
       </section>
 
-      <section className="landing-capabilities" id="capabilities" aria-labelledby="capabilities-title">
-        <div className="landing-section-heading compact">
-          <p className="landing-eyebrow">BUILT FOR CAREFUL WORK</p>
-          <h2 id="capabilities-title">每一次修改，都值得被认真对待。</h2>
+      <section className="landing-verification" id="verification" aria-labelledby="verification-title">
+        <div className="verification-copy">
+          <p className="landing-eyebrow">验证结果 · VERIFICATION RESULT</p>
+          <h2 id="verification-title">结果不是一句“完成了”。</h2>
+          <p>PaperForge 用真实状态告诉你：模板是否解析、修改是否验证、报告是否生成、预览是否可用。</p>
+          <Link className="landing-inline-link" href={taskHref}>开始一个真实任务 <span aria-hidden="true">→</span></Link>
         </div>
-        <div className="capability-grid">
-          <article className="capability-card">
-            <span className="capability-index">01</span>
-            <div className="capability-icon icon-document" aria-hidden="true"><i /><i /><i /></div>
-            <h3>智能模板解析</h3>
-            <p>自动识别学校、学院或期刊模板中的格式规范，减少手动对照和反复调整。</p>
-          </article>
-          <article className="capability-card">
-            <span className="capability-index">02</span>
-            <div className="capability-icon icon-agent" aria-hidden="true"><i /><i /><i /></div>
-            <h3>AI Agent 自动处理</h3>
-            <p>规划、执行、验证完整流程，让论文处理从一组零散操作变成连续的工作流。</p>
-          </article>
-          <article className="capability-card">
-            <span className="capability-index">03</span>
-            <div className="capability-icon icon-proof" aria-hidden="true"><i /></div>
-            <h3>修改过程可追溯</h3>
-            <p>保留处理轨迹、修改报告与最终文档，重要变化清楚可见，方便复核和交付。</p>
-          </article>
+        <div className="verification-panel">
+          <div className="verification-panel-top"><div><span className="verification-panel-kicker">任务结果 · TASK RESULT</span><h3>当前论文.docx</h3></div><span className="verified-pill"><span /> VERIFIED</span></div>
+          <div className="verification-list">
+            {verificationRows.map((row) => (
+              <div className="verification-list-row" key={`result-${row.label}`}>
+                <div className="verification-list-name"><span className={`report-dot ${row.tone}`} /><div><strong>{row.label}</strong><small>{row.detail}</small></div></div>
+                <b>{row.status}</b>
+              </div>
+            ))}
+          </div>
+          <div className="verification-panel-footer"><span>可开始复核 · Ready for review</span><span>打开报告 · Open report ↗</span></div>
         </div>
       </section>
 
       <section className="landing-final-cta" aria-labelledby="final-cta-title">
         <div>
-          <p className="landing-eyebrow">READY WHEN YOU ARE</p>
-          <h2 id="final-cta-title">从下一版论文开始，<br />让格式修改更有把握。</h2>
+          <p className="landing-eyebrow">准备开始复核 · READY TO REVIEW</p>
+          <h2 id="final-cta-title">把下一次论文处理，<br />交给一条可验证的工作流。</h2>
         </div>
         <div className="landing-final-actions">
           <Link className="landing-primary-button" href={taskHref}>上传论文开始处理 <span aria-hidden="true">→</span></Link>
@@ -150,8 +202,8 @@ export default function Home() {
       </section>
 
       <footer className="landing-footer">
-        <Link className="landing-brand" href="/"><span className="landing-brand-mark" aria-hidden="true">P</span><span>PaperForge</span></Link>
-        <span>让认真完成的论文，拥有同样认真的呈现。</span>
+        <Link className="landing-brand" href="/"><span className="landing-brand-mark" aria-hidden="true">PF</span><span>PaperForge</span></Link>
+        <span>可信学术文档处理工作流 · Verified academic document workflow.</span>
       </footer>
     </main>
   );

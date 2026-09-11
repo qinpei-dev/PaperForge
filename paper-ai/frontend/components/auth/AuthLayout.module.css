@@ -1,0 +1,349 @@
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: clamp(28px, 5vw, 72px) clamp(20px, 5vw, 84px);
+  background: #f7f7f5;
+  color: #101214;
+  font-family: Inter, "Helvetica Neue", Arial, "Microsoft YaHei", sans-serif;
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(390px, .72fr);
+  align-items: center;
+  gap: clamp(44px, 8vw, 112px);
+  width: min(100%, 1180px);
+}
+
+.brandPanel {
+  display: flex;
+  min-height: 550px;
+  flex-direction: column;
+  padding: 8px 0;
+}
+
+.brandLink,
+.mobileBrandLink {
+  width: fit-content;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #101214;
+  font-size: 17px;
+  font-weight: 780;
+  letter-spacing: -.045em;
+}
+
+.brandMark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: #101214;
+  color: #f7f7f5;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: -.12em;
+}
+
+.brandCopy {
+  max-width: 560px;
+  margin-top: clamp(70px, 8vw, 108px);
+}
+
+.brandKicker,
+.authEyebrow {
+  margin: 0;
+  color: #315efb;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .13em;
+  line-height: 1.3;
+}
+
+.brandCopy h1 {
+  max-width: 530px;
+  margin: 19px 0 0;
+  color: #101214;
+  font-size: clamp(38px, 4.25vw, 58px);
+  font-weight: 780;
+  letter-spacing: -.08em;
+  line-height: 1.06;
+}
+
+.brandDescription {
+  max-width: 505px;
+  margin: 25px 0 0;
+  color: #646b65;
+  font-size: 16px;
+  line-height: 1.85;
+}
+
+.capabilities {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 26px;
+  max-width: 570px;
+  margin: 46px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.capability {
+  display: grid;
+  grid-template-columns: 29px minmax(0, 1fr);
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid #dfe1dc;
+}
+
+.capabilityIndex {
+  color: #315efb;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .05em;
+}
+
+.capability strong,
+.capability small {
+  display: block;
+}
+
+.capability strong {
+  color: #343a36;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.capability small {
+  margin-top: 6px;
+  color: #8b928c;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.brandFoot {
+  margin: auto 0 0;
+  color: #929991;
+  font-size: 11px;
+}
+
+.authPanel {
+  width: 100%;
+  max-width: 440px;
+  justify-self: end;
+  padding: clamp(30px, 4vw, 44px);
+  border: 1px solid #d9dcd6;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(16, 18, 20, .08), 0 3px 10px rgba(16, 18, 20, .03);
+}
+
+.mobileBrandLink {
+  display: none;
+}
+
+.authHeader h2 {
+  margin: 11px 0 0;
+  color: #101214;
+  font-size: clamp(30px, 3.2vw, 40px);
+  font-weight: 780;
+  letter-spacing: -.065em;
+  line-height: 1.14;
+}
+
+.authDescription {
+  margin: 12px 0 0;
+  color: #68706a;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.form {
+  display: grid;
+  gap: 19px;
+  margin-top: 29px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  color: #343a36;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.input {
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 13px;
+  border: 1px solid #cfd5cf;
+  border-radius: 9px;
+  outline: 0;
+  background: #fbfcfa;
+  color: #101214;
+  font-size: 15px;
+  box-shadow: inset 0 1px 2px rgba(16, 18, 20, .03);
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+.input::placeholder {
+  color: #9aa19b;
+}
+
+.input:focus {
+  border-color: #315efb;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(49, 94, 251, .13);
+}
+
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #101214;
+  -webkit-box-shadow: 0 0 0 1000px #fbfcfa inset;
+  caret-color: #315efb;
+}
+
+.error {
+  margin: -2px 0 0;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.submitButton {
+  width: 100%;
+  min-height: 49px;
+  margin-top: 3px;
+  border: 1px solid #315efb;
+  border-radius: 9px;
+  background: #315efb;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.submitButton:hover:not(:disabled) {
+  border-color: #2349d0;
+  background: #2349d0;
+  transform: translateY(-1px);
+}
+
+.submitButton:focus-visible,
+.authSwitch a:focus-visible,
+.brandLink:focus-visible,
+.mobileBrandLink:focus-visible {
+  outline: 3px solid rgba(49, 94, 251, .25);
+  outline-offset: 3px;
+}
+
+.submitButton:disabled {
+  cursor: wait;
+  opacity: .62;
+}
+
+.authSwitch {
+  margin: 22px 0 0;
+  color: #68706a;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.authSwitch a {
+  color: #315efb;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.authSwitch a:hover {
+  color: #2349d0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.authFoot {
+  margin: 23px 0 0;
+  padding-top: 17px;
+  border-top: 1px solid #eef0ec;
+  color: #a0a7a1;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+@media (max-width: 980px) {
+  .frame {
+    gap: 52px;
+  }
+
+  .brandCopy h1 {
+    font-size: clamp(36px, 4.8vw, 50px);
+  }
+
+  .capabilities {
+    gap: 12px 16px;
+  }
+}
+
+@media (max-width: 780px) {
+  .page {
+    place-items: start center;
+    padding: 22px 16px 32px;
+  }
+
+  .frame {
+    grid-template-columns: 1fr;
+    gap: 0;
+    width: min(100%, 520px);
+  }
+
+  .brandPanel {
+    display: none;
+  }
+
+  .authPanel {
+    max-width: none;
+    justify-self: stretch;
+    padding: 27px 22px 25px;
+    border-radius: 16px;
+  }
+
+  .mobileBrandLink {
+    display: inline-flex;
+    margin-bottom: 34px;
+  }
+
+  .mobileBrand {
+    font-size: 16px;
+  }
+
+  .mobileBrand .brandMark {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+@media (max-width: 380px) {
+  .page {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .authPanel {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+}

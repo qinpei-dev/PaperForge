@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>PaperForge — Brand Visual System</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #deded9; }
+    body { font-family: Inter, "Helvetica Neue", Arial, sans-serif; color: #101214; }
+    .page { width: 1600px; height: 1000px; position: relative; overflow: hidden; padding: 68px 82px; }
+    .page + .page { page-break-before: always; }
+    .dark { background: #101214; color: #f7f7f5; }
+    .warm { background: #f7f7f5; color: #101214; }
+    .muted { color: #747873; }
+    .micro { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; }
+    .label { font-size: 14px; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; }
+    .rule { height: 1px; background: currentColor; opacity: .18; }
+    .tiny-rule { width: 42px; height: 4px; background: #315efb; }
+    .blue { color: #315efb; }
+    .green { color: #16794c; }
+    .green-bg { background: #16794c; }
+    .blue-bg { background: #315efb; }
+    .rounded { border-radius: 18px; }
+    .shadow { box-shadow: 0 22px 60px rgba(16,18,20,.16); }
+    .wordmark { font-size: 72px; line-height: .98; font-weight: 750; letter-spacing: -.075em; }
+    .wordmark .accent { color: #315efb; }
+    .bodycopy { font-size: 22px; line-height: 1.45; letter-spacing: -.02em; }
+    .h1 { font-size: 78px; line-height: .98; letter-spacing: -.075em; font-weight: 760; }
+    .h2 { font-size: 42px; line-height: 1.02; letter-spacing: -.06em; font-weight: 740; }
+    .mono { font-family: "SFMono-Regular", Consolas, monospace; }
+    .pill { display: inline-flex; align-items: center; padding: 10px 16px; border: 1px solid rgba(16,18,20,.16); border-radius: 999px; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .pill.dark-pill { color: #f7f7f5; border-color: rgba(247,247,245,.25); }
+    .pf-mark { width: 154px; height: 154px; background: #315efb; border-radius: 34px; display: flex; align-items: center; justify-content: center; color: #f7f7f5; font-weight: 800; font-size: 62px; letter-spacing: -.14em; padding-right: 9px; }
+    .pf-mark.small { width: 42px; height: 42px; border-radius: 10px; font-size: 18px; padding-right: 3px; }
+    .pf-mark.darkmark { background: #101214; border: 1px solid rgba(247,247,245,.22); }
+    .monogram-line { position: absolute; width: 4px; height: 78px; background: #16794c; left: 22px; top: 38px; }
+    .candidate { border: 1px solid rgba(247,247,245,.18); border-radius: 20px; padding: 26px; min-height: 202px; }
+    .candidate .name { font-size: 14px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #9da39e; }
+    .candidate .sample { margin-top: 34px; font-size: 44px; line-height: 1; font-weight: 720; letter-spacing: -.07em; }
+    .candidate.recommended { border-color: #315efb; background: rgba(49,94,251,.08); }
+    .candidate.recommended .name { color: #7f9aff; }
+    .grid-2 { display: grid; grid-template-columns: 1.1fr .9fr; gap: 64px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .page-number { position: absolute; right: 82px; top: 68px; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; opacity: .62; }
+    .topline { display: flex; justify-content: space-between; align-items: center; }
+    .lockup { display: flex; align-items: center; gap: 22px; }
+    .lockup .wordmark { font-size: 46px; }
+    .lockup .descriptor { border-left: 1px solid rgba(247,247,245,.28); padding-left: 22px; font-size: 14px; line-height: 1.35; color: #9da39e; }
+    .hero-lockup { display: flex; align-items: center; gap: 14px; }
+    .hero-lockup .wordmark { font-size: 28px; }
+    .swatches { display: flex; gap: 12px; margin-top: 24px; }
+    .swatch { width: 126px; height: 116px; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; justify-content: flex-end; font-size: 12px; font-weight: 700; }
+    .swatch.dark-swatch { background: #101214; color: #f7f7f5; border: 1px solid rgba(247,247,245,.18); }
+    .swatch.warm-swatch { background: #f7f7f5; border: 1px solid rgba(16,18,20,.18); }
+    .swatch.blue-swatch { background: #315efb; color: #f7f7f5; }
+    .swatch.green-swatch { background: #16794c; color: #f7f7f5; }
+    .type-row { display: flex; align-items: baseline; gap: 26px; padding: 23px 0; border-bottom: 1px solid rgba(16,18,20,.15); }
+    .type-meta { width: 154px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: #747873; }
+    .type-display { font-size: 50px; font-weight: 760; letter-spacing: -.075em; }
+    .type-ui { font-size: 22px; font-weight: 650; letter-spacing: -.035em; }
+    .type-body { font-size: 18px; line-height: 1.45; letter-spacing: -.02em; }
+    .hero-copy { padding-top: 118px; }
+    .hero-copy .eyebrow { color: #315efb; font-size: 14px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 32px; }
+    .hero-copy .headline { max-width: 600px; font-size: 66px; line-height: 1.05; letter-spacing: -.065em; font-weight: 760; }
+    .hero-copy .sub { max-width: 500px; margin-top: 26px; font-size: 20px; color: #606660; line-height: 1.55; }
+    .hero-actions { display: flex; gap: 12px; margin-top: 34px; }
+    .button { padding: 15px 22px; border-radius: 11px; font-size: 15px; font-weight: 750; }
+    .button.primary { background: #101214; color: #f7f7f5; }
+    .button.secondary { border: 1px solid rgba(16,18,20,.18); color: #101214; }
+    .product-window { margin-top: 84px; margin-left: 20px; width: 710px; height: 594px; background: #fff; border: 1px solid #d8dad5; border-radius: 18px; overflow: hidden; box-shadow: 0 30px 70px rgba(16,18,20,.18); }
+    .window-bar { height: 46px; background: #101214; color: #f7f7f5; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; }
+    .window-dots { display: flex; gap: 7px; }
+    .window-dots i { width: 8px; height: 8px; border-radius: 50%; display: block; background: #606660; }
+    .window-title { font-size: 12px; letter-spacing: .08em; color: #b7bcb6; }
+    .window-body { display: grid; grid-template-columns: 180px 1fr; height: 548px; }
+    .window-side { background: #f4f5f1; border-right: 1px solid #e0e3dc; padding: 24px 18px; }
+    .side-logo { display: flex; align-items: center; gap: 8px; margin-bottom: 32px; font-size: 15px; font-weight: 760; letter-spacing: -.04em; }
+    .nav-item { color: #7b817a; font-size: 12px; padding: 12px 10px; border-radius: 8px; margin: 4px 0; }
+    .nav-item.active { background: #e9ecff; color: #315efb; font-weight: 700; }
+    .window-main { padding: 28px 30px; }
+    .main-top { display: flex; align-items: center; justify-content: space-between; }
+    .main-title { font-size: 23px; font-weight: 760; letter-spacing: -.04em; }
+    .status { font-size: 11px; color: #16794c; background: #e6f3ec; border-radius: 999px; padding: 8px 11px; font-weight: 750; }
+    .file-card { margin-top: 25px; border: 1px solid #e3e6e0; border-radius: 12px; padding: 15px; display: flex; align-items: center; gap: 13px; }
+    .file-icon { width: 38px; height: 46px; border: 2px solid #315efb; border-radius: 6px; color: #315efb; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; }
+    .file-name { font-size: 13px; font-weight: 700; }
+    .file-meta { color: #878e87; font-size: 11px; margin-top: 4px; }
+    .score-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+    .score { background: #f7f8f5; border: 1px solid #e7e9e4; border-radius: 11px; padding: 15px; }
+    .score .num { font-size: 28px; font-weight: 760; letter-spacing: -.06em; }
+    .score .caption { color: #878e87; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; margin-top: 4px; }
+    .score.blue-score .num { color: #315efb; }
+    .score.green-score .num { color: #16794c; }
+    .checks { margin-top: 22px; border-top: 1px solid #e7e9e4; }
+    .check { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid #e7e9e4; font-size: 12px; }
+    .check-left { display: flex; align-items: center; gap: 10px; }
+    .checkmark { width: 18px; height: 18px; border-radius: 50%; background: #e6f3ec; color: #16794c; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; }
+    .check-state { color: #16794c; font-weight: 750; font-size: 11px; }
+    .trustbar { margin-top: 20px; padding: 14px; border-radius: 10px; background: #101214; color: #f7f7f5; display: flex; justify-content: space-between; align-items: center; }
+    .trustbar .trust-title { font-size: 11px; letter-spacing: .11em; text-transform: uppercase; color: #aeb4ae; }
+    .trustbar .trust-value { font-size: 18px; font-weight: 760; color: #7fdaa9; }
+    .principle { border-top: 1px solid rgba(247,247,245,.18); padding: 22px 0; display: grid; grid-template-columns: 250px 1fr; gap: 20px; }
+    .principle .p-title { font-size: 22px; font-weight: 750; letter-spacing: -.04em; }
+    .principle .p-copy { font-size: 18px; line-height: 1.5; color: #b5bbb5; max-width: 650px; }
+    .dont { color: #a9afa9; border: 1px solid rgba(247,247,245,.15); border-radius: 14px; padding: 22px; min-height: 164px; }
+    .dont .x { color: #d87979; font-size: 18px; font-weight: 800; }
+    .do { color: #f7f7f5; border: 1px solid rgba(49,94,251,.6); border-radius: 14px; padding: 22px; min-height: 164px; background: rgba(49,94,251,.08); }
+    .do .checkmark { display: inline-flex; margin-right: 8px; }
+  </style>
+</head>
+<body>
+  <section class="page dark" data-document-role="page" data-label="01 Logo System">
+    <div class="page-number">01 / 04 · Logo System</div>
+    <div class="topline">
+      <div class="label">PaperForge / Brand Visual System</div>
+      <div class="micro muted">Precision · Verification · Trust</div>
+    </div>
+    <div class="rule" style="margin-top:28px;"></div>
+    <div style="display:grid;grid-template-columns:1fr 330px;gap:70px;margin-top:80px;">
+      <div>
+        <div class="micro blue">Recommended direction</div>
+        <div class="wordmark" style="font-size:118px;margin-top:28px;">Paper<span class="accent">Forge</span></div>
+        <div style="display:flex;align-items:center;gap:18px;margin-top:26px;">
+          <div class="tiny-rule"></div>
+          <div style="font-size:19px;color:#b3b9b3;letter-spacing:-.02em;">Verified Academic Document Agent</div>
+        </div>
+        <div style="max-width:610px;font-size:22px;line-height:1.45;color:#aeb4ae;margin-top:96px;">字标优先，让 PaperForge 像成熟的软件公司产品。用定制字距和 P / F 的结构差异建立识别度，再用 PF 图形作为产品图标与 favicon。</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;position:relative;">
+        <div class="pf-mark"><span>PF</span><span class="monogram-line"></span></div>
+      </div>
+    </div>
+    <div style="margin-top:92px;">
+      <div class="micro muted" style="margin-bottom:17px;">Wordmark explorations</div>
+      <div class="grid-3">
+        <div class="candidate recommended"><div class="name">A / Precision wordmark</div><div class="sample">PaperForge</div><div style="color:#9da39e;font-size:13px;margin-top:22px;">tight tracking · open counters</div></div>
+        <div class="candidate"><div class="name">B / Editorial software</div><div class="sample" style="font-weight:620;">PaperForge</div><div style="color:#9da39e;font-size:13px;margin-top:22px;">quiet authority · low contrast</div></div>
+        <div class="candidate"><div class="name">C / PF product mark</div><div style="display:flex;align-items:center;gap:18px;margin-top:24px;"><div class="pf-mark small"><span>PF</span></div><div class="sample" style="font-size:31px;">PaperForge</div></div><div style="color:#9da39e;font-size:13px;margin-top:22px;">app icon · favicon · avatar</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="page warm" data-document-role="page" data-label="02 Type and Color">
+    <div class="page-number">02 / 04 · Type &amp; Color</div>
+    <div class="topline"><div class="label">PaperForge</div><div class="micro muted">A restrained product language</div></div>
+    <div class="rule" style="margin-top:28px;"></div>
+    <div class="grid-2" style="margin-top:82px;">
+      <div>
+        <div class="micro blue">Typography direction</div>
+        <div class="h2" style="margin-top:22px;max-width:510px;">几何无衬线，<br>但不显得冷。</div>
+        <div style="margin-top:34px;max-width:520px;color:#606660;font-size:18px;line-height:1.55;">优先探索 Söhne / Manrope / Inter 这一类具有几何骨架、但阅读感稳定的字体。品牌字标需要比产品 UI 更紧，P 的内腔保持开放，F 的中横略短，形成可识别的节奏。</div>
+        <div style="margin-top:42px;">
+          <div class="type-row"><div class="type-meta">Wordmark / tight</div><div class="type-display">PaperForge</div></div>
+          <div class="type-row"><div class="type-meta">Product / UI</div><div class="type-ui">Verified Academic Document Agent</div></div>
+          <div class="type-row"><div class="type-meta">Body / readable</div><div class="type-body">Upload a paper and a template. Let every change remain visible, explainable, and reviewable.</div></div>
+        </div>
+      </div>
+      <div style="padding-left:30px;">
+        <div class="micro blue">Core palette</div>
+        <div class="h2" style="margin-top:22px;max-width:400px;">克制颜色，<br>让验证状态发声。</div>
+        <div class="swatches">
+          <div class="swatch dark-swatch">#101214<br><span style="font-weight:500;opacity:.66;">Deep Black</span></div>
+          <div class="swatch warm-swatch">#F7F7F5<br><span style="font-weight:500;opacity:.66;">Warm White</span></div>
+          <div class="swatch blue-swatch">#315EFB<br><span style="font-weight:500;opacity:.82;">Brand Blue</span></div>
+          <div class="swatch green-swatch">#16794C<br><span style="font-weight:500;opacity:.82;">Verified Green</span></div>
+        </div>
+        <div style="margin-top:58px;border-left:4px solid #315efb;padding-left:24px;">
+          <div class="mono" style="font-size:15px;color:#315efb;">tracking: -0.075em</div>
+          <div style="font-size:32px;font-weight:760;letter-spacing:-.075em;margin-top:10px;">P / F = signature letters</div>
+          <div style="font-size:16px;line-height:1.5;color:#606660;margin-top:12px;max-width:390px;">品牌识别不依赖图标堆叠，而依赖字形、字距与状态颜色的一致性。</div>
+        </div>
+        <div style="margin-top:62px;background:#101214;color:#f7f7f5;border-radius:18px;padding:25px 28px;">
+          <div class="micro" style="color:#8c948d;">Brand voice</div>
+          <div style="font-size:27px;line-height:1.18;letter-spacing:-.05em;margin-top:16px;">Clear enough to trust.<br>Precise enough to ship.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="page warm" data-document-role="page" data-label="03 Landing Hero">
+    <div class="page-number">03 / 04 · Landing Hero</div>
+    <div class="topline"><div class="hero-lockup"><div class="pf-mark small"><span>PF</span></div><div class="wordmark">PaperForge</div></div><div class="micro muted">Product landing page concept</div></div>
+    <div class="grid-2" style="grid-template-columns:.92fr 1.08fr;gap:70px;">
+      <div class="hero-copy">
+        <div class="eyebrow">Verified Academic Document Agent</div>
+        <div class="hero-lockup" style="gap:0;"><div class="wordmark" style="font-size:47px;">Paper<span class="blue">Forge</span></div></div>
+        <div class="headline" style="margin-top:28px;">不只是修改论文，<br>而是验证每一次修改。</div>
+        <div class="sub">上传论文与模板，让 AI Agent 处理文档、验证修改，并生成一份清晰、可追溯的报告。</div>
+        <div class="hero-actions"><div class="button primary">Start with a document →</div><div class="button secondary">See how it works</div></div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:42px;color:#747873;font-size:13px;"><div class="checkmark">✓</div>Every change remains visible and reviewable.</div>
+      </div>
+      <div>
+        <div class="product-window">
+          <div class="window-bar"><div class="window-dots"><i></i><i></i><i></i></div><div class="window-title">paperforge / task_0148</div><div style="font-size:11px;color:#8f968f;">LOCAL + AI</div></div>
+          <div class="window-body">
+            <div class="window-side">
+              <div class="side-logo"><div class="pf-mark small"><span>PF</span></div>PaperForge</div>
+              <div class="nav-item active">Overview</div><div class="nav-item">Documents</div><div class="nav-item">Templates</div><div class="nav-item">Reports</div>
+              <div style="margin-top:164px;color:#9ba19a;font-size:10px;line-height:1.5;">AI is assistive.<br>Verification is visible.</div>
+            </div>
+            <div class="window-main">
+              <div class="main-top"><div class="main-title">Analysis complete</div><div class="status">● VERIFIED</div></div>
+              <div class="file-card"><div class="file-icon">DOCX</div><div><div class="file-name">research-methodology.docx</div><div class="file-meta">Uploaded with /template-2026.docx · 4.8 MB</div></div><div style="margin-left:auto;color:#16794c;font-size:17px;font-weight:800;">✓</div></div>
+              <div class="score-grid"><div class="score blue-score"><div class="num">98</div><div class="caption">Precision</div></div><div class="score green-score"><div class="num">12</div><div class="caption">Checks passed</div></div><div class="score"><div class="num">04</div><div class="caption">Review notes</div></div></div>
+              <div class="checks"><div class="check"><div class="check-left"><div class="checkmark">✓</div>Heading hierarchy</div><div class="check-state">Verified</div></div><div class="check"><div class="check-left"><div class="checkmark">✓</div>Template compliance</div><div class="check-state">Verified</div></div><div class="check"><div class="check-left"><div class="checkmark">✓</div>Similarity pre-check</div><div class="check-state">Low risk</div></div><div class="check"><div class="check-left"><div class="checkmark">✓</div>Modification report</div><div class="check-state">Ready</div></div></div>
+              <div class="trustbar"><div class="trust-title">Trust score / explainable output</div><div class="trust-value">100%</div></div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#9aa09a;margin:18px 0 0 22px;letter-spacing:.08em;text-transform:uppercase;">Real software window concept / verification-first UI</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="page dark" data-document-role="page" data-label="04 Brand Principles">
+    <div class="page-number">04 / 04 · Brand Principles</div>
+    <div class="topline"><div class="label">PaperForge</div><div class="micro muted">A product, not a prompt box</div></div>
+    <div class="rule" style="margin-top:28px;"></div>
+    <div style="margin-top:82px;display:grid;grid-template-columns:1.02fr .98fr;gap:80px;">
+      <div>
+        <div class="micro blue">The north star</div>
+        <div class="h1" style="font-size:92px;margin-top:26px;">Precision.<br>Verification.<br><span class="blue">Trust.</span></div>
+        <div style="font-size:24px;line-height:1.45;color:#aeb4ae;max-width:520px;margin-top:42px;">PaperForge 的视觉语言必须让人相信：每个动作都有依据，每次修改都能复核，每份结果都可以交付。</div>
+      </div>
+      <div style="padding-top:18px;">
+        <div class="principle"><div class="p-title">1 / Precision</div><div class="p-copy">用明确的结构、紧凑的字距和高对比的信息层级，传达精确而不嘈杂的工作流。</div></div>
+        <div class="principle"><div class="p-title">2 / Verification</div><div class="p-copy">把蓝色用于行动，把绿色用于通过。让状态本身成为品牌资产，而不是装饰。</div></div>
+        <div class="principle"><div class="p-title">3 / Trust</div><div class="p-copy">报告、证据、可追溯性都需要在界面中被看见。专业感来自透明，而不是夸张。</div></div>
+      </div>
+    </div>
+    <div style="margin-top:96px;">
+      <div class="micro muted" style="margin-bottom:16px;">Positioning guardrails</div>
+      <div class="grid-2" style="grid-template-columns:1fr 1fr;gap:18px;">
+        <div class="dont"><div class="x">× &nbsp;Do not look like</div><div style="font-size:24px;line-height:1.25;margin-top:22px;letter-spacing:-.04em;">AI 写作工具<br>论文代写工具<br>学生论文模板网站</div></div>
+        <div class="do"><div style="color:#7f9aff;font-size:14px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;"><span class="checkmark">✓</span>Look like</div><div style="font-size:24px;line-height:1.25;margin-top:22px;letter-spacing:-.04em;">一个专业的软件产品<br>处理、验证并生成报告<br>让每一次修改都可追溯</div></div>
+      </div>
+    </div>
+    <div style="position:absolute;bottom:62px;left:82px;right:82px;display:flex;justify-content:space-between;color:#8e958e;font-size:12px;letter-spacing:.1em;text-transform:uppercase;"><span>PaperForge / Verified Academic Document Agent</span><span>© 2026</span></div>
+  </section>
+</body>
+</html>

@@ -26,15 +26,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
+  const [workspaceLoadState, setWorkspaceLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [activeTenantId, setActiveTenantId] = useState("");
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     async function bootstrapAuthAndWorkspaces() {
+      setWorkspaceLoadState("loading");
       const previewLoggedIn = !getAccessToken() && await tryPreviewAutoLogin();
       if (!getAccessToken()) {
-        if (!cancelled) router.replace("/login");
+        if (!cancelled) {
+          setWorkspaceLoadState("error");
+          router.replace("/login");
+        }
         return;
       }
       if (!cancelled) setUser(getStoredAuthUser());
@@ -45,7 +50,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const response = await fetch(apiUrl("/workspaces"), { cache: "no-store", headers: authorizationHeaders() });
         const data: unknown = await response.json();
-        if (!response.ok || !Array.isArray(data) || cancelled) return;
+        if (!response.ok || !Array.isArray(data) || cancelled) {
+          if (!cancelled) {
+            setWorkspaceLoadState("error");
+            setWorkspaces([]);
+          }
+          return;
+        }
         const options = data.filter((item): item is WorkspaceOption => {
           if (!item || typeof item !== "object") return false;
           const record = item as Record<string, unknown>;
@@ -57,9 +68,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         if (!cancelled) {
           setWorkspaces(options);
           setActiveTenantId(nextTenantId);
+          setWorkspaceLoadState("ready");
         }
       } catch {
-        if (!cancelled) setWorkspaces([]);
+        if (!cancelled) {
+          setWorkspaces([]);
+          setWorkspaceLoadState("error");
+        }
       }
     }
     void bootstrapAuthAndWorkspaces();
@@ -106,7 +121,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="app-topbar-context"><span className="app-topbar-kicker">PAPERFORGE</span><strong>{activeWorkspace?.name || "我的工作空间"}</strong></div>
           <div className="app-topbar-actions">
             {isPreviewEnvironment() ? <span className="preview-environment-badge">Preview Environment</span> : null}
-            <label className="app-workspace-switcher"><span className="sr-only">切换工作空间</span><select aria-label="切换工作空间" value={activeTenantId} disabled={!workspaces.length} onChange={(event) => switchWorkspace(event.target.value)}>{workspaces.length ? workspaces.map((workspace) => <option value={workspace.tenant_id} key={workspace.tenant_id}>{workspace.name}</option>) : <option>加载工作空间…</option>}</select></label>
+            <label className="app-workspace-switcher"><span className="sr-only">切换工作空间</span><select aria-label="切换工作空间" value={activeTenantId} disabled={!workspaces.length} onChange={(event) => switchWorkspace(event.target.value)}>{workspaces.length ? workspaces.map((workspace) => <option value={workspace.tenant_id} key={workspace.tenant_id}>{workspace.name}</option>) : <option>{workspaceLoadState === "error" ? "工作区暂不可用" : workspaceLoadState === "ready" ? "暂无可用工作区" : "加载工作空间…"}</option>}</select></label>
             <div className="app-user-menu" ref={menuRef}><button className="app-user-trigger" type="button" aria-expanded={isUserMenuOpen} onClick={() => setIsUserMenuOpen((open) => !open)}><span className="app-avatar">{user?.email?.slice(0, 1).toUpperCase() || "P"}</span><span className="app-user-email">{user?.email || "账户"}</span><span aria-hidden="true">⌄</span></button>{isUserMenuOpen ? <div className="app-user-popover"><p>{user?.email || "当前账户"}</p><Link href="/settings" onClick={() => setIsUserMenuOpen(false)}>工作区设置</Link>{user?.is_admin ? <Link href="/admin">运营后台</Link> : null}<button type="button" onClick={logout}>退出登录</button></div> : null}</div>
           </div>
         </header>

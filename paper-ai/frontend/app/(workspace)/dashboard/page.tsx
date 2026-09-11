@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Badge, Button, Card, EmptyState, Loading } from "../../../components";
 import { apiUrl } from "../../../lib/api-client";
 import { authorizationHeaders, clearAuthSession, getAccessToken, isPreviewEnvironment, suppressPreviewAutoLogin, tryPreviewAutoLogin } from "../../../lib/auth";
+import { userFacingError } from "../../../lib/error-messages";
 import { taskStatusLabel, workflowStatusLabel } from "../../../lib/status-labels";
 import styles from "./page.module.css";
 
@@ -94,7 +95,7 @@ export default function DashboardPage() {
         const data: unknown = await response.json();
         if (!cancelled) setTasks(Array.isArray(data) ? data as Task[] : []);
       } catch (reason) {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "任务数据加载失败");
+        if (!cancelled) setError(userFacingError(reason, "任务数据暂时无法加载，请稍后重试。"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -115,7 +116,7 @@ export default function DashboardPage() {
           });
         }
       } catch (reason) {
-        if (!cancelled) setUsageError(reason instanceof Error ? reason.message : "本月额度暂时无法加载");
+        if (!cancelled) setUsageError(userFacingError(reason, "本月额度暂时无法加载，请稍后重试。"));
       } finally {
         if (!cancelled) setUsageLoading(false);
       }
