@@ -31,6 +31,7 @@ services:
       APP_ENV: production
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
       AUTH_REQUIRED: ${AUTH_REQUIRED:-true}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       AUTO_CREATE_DB: "false"
     ports:
       - "8000:8000"

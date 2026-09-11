@@ -1035,3 +1035,73 @@
 完成：生产启动强制 JWT 密钥质量、认证和显式 CORS；tenant-scoped SQL 覆盖 task/event/template/artifact 访问；文件名 download/preview/apply 路径不再先探测文件系统。上传加入大小、MIME、DOCX ZIP 结构和展开边界，保留 UUID 隔离和安全文件名。新增单进程、有限且如实记录边界的认证/上传/Agent 速率限制；新增 Day12 upload/secret tests。审计确认 Docker production Compose 不发布 PostgreSQL 端口，DATABASE_URL 与 secrets 来自环境变量，日志不主动记录 token/password/key/正文，preview renderer 对 DOCX 文本进行 HTML escape。
 
 仍未完成：WAF、DDoS protection、外部监控、独立渗透测试、enterprise SSO、httpOnly cookie session、分布式 rate limiting、对象存储及真实 production deployment。
+
+## [DONE] PaperForge Day13-P0 — Usage & Quota System
+
+目标：基于当前多 tenant、Task system、PostgreSQL 架构实现最小 SaaS 额度系统。
+
+完成：
+
+- 新增 `Quota` 与 `Usage` (`UsageRecord`) 数据模型及 `0011_day13_usage_quota` migration。
+- 额度按 tenant 的自然月 `agent_run` 次数统计，默认 100 次/月，可由 `DEFAULT_AGENT_RUN_QUOTA` 配置。
+- `services/quota.py` 提供周期计算、行锁额度检查、usage 流水写入和当前用量摘要。
+- `POST /agent/run` 在 Task 创建前检查额度；Task 与 usage 在同一数据库事务内提交。
+- 额度耗尽返回 429/`QUOTA_EXCEEDED`，不会新增 Task 或 usage。
+- 新增 tenant-scoped 只读 `GET /usage`。
+- 新增 `test_day13_quota.py`，覆盖初始额度、usage 记录、额度阻断和 tenant 隔离。
+
+验收：Day13 专项 4 passed；全量后端 pytest 90 passed；compileall、`git diff --check`、frontend build、Alembic migration roundtrip 均 PASS。
+
+范围边界：本轮不实现支付、会员、后台、充值、退款、计费或异步计量。
+
+## [DONE] PaperForge Day13-P1 — Quota UX
+
+目标：将 Day13-P0 Usage & Quota 能力接入首页前端。
+
+完成：
+
+- 首页通过现有 `authorizationHeaders()` 接入 `GET /usage`。
+- 新增 Usage/Quota 展示组件，显示 Monthly limit、Used、Remaining、进度和统计周期。
+- Workspace 切换、退出登录时清空旧 usage 状态，按当前 tenant 重新加载。
+- 优化 `QUOTA_EXCEEDED` 错误提示，展示已用/总额度与周期信息。
+- 保持已有认证、`X-Tenant-ID` 和 Workspace 逻辑不变。
+- 未新增支付、套餐、充值或后台逻辑。
+
+验收：frontend `npm run build` PASS；backend full pytest 90 passed；compileall、`git diff --check` PASS。
+
+## [DONE] PaperForge Day14-P0 — Admin Dashboard
+
+目标：基于当前 PaperForge SaaS 架构增加最小运营后台，不扩展支付、用户管理或复杂权限管理。
+
+完成：
+
+- 新增 `ADMIN_EMAILS` 平台管理员 allowlist，admin-only API `GET /admin/stats` 强制 JWT 与管理员校验。
+- 返回 tenant count、user count、task count、task status summary，以及当前周期/历史 Agent-run usage 与额度聚合；不返回租户、用户或任务明细，保持现有 tenant isolation 边界。
+- 新增前端 `/admin` Admin Dashboard，包含核心指标卡、任务状态分布、Usage/Quota 摘要和非管理员拒绝态。
+- `/auth/register`、`/auth/login`、`/auth/me` 的用户响应增加只读 `is_admin`，首页仅对管理员显示运营后台入口。
+- 未新增数据库迁移、支付、用户管理、充值、退款或复杂权限模型。
+
+验收：Day14 专项 2 passed；后端全量 pytest 92 passed；Python compile、frontend `npm run build`、`git diff --check` PASS。
+
+## [DONE] PaperForge Day15-P0 — Production Hardening
+
+目标：将 PaperForge 从可运行 SaaS 提升为可测试生产版本，保持 JWT、tenant isolation、quota 和 admin dashboard，不新增支付、会员、复杂权限或 AI 功能。
+
+完成：
+
+- 全 API 基础限流与健康探针豁免。
+- user/tenant 活跃任务并发限制，默认 `2/4`，超限不创建任务。
+- DOCX 请求体、ZIP 展开、压缩比、重复条目、危险路径/符号链接、文件名和临时文件失败清理保护。
+- PostgreSQL 连接池、请求异常 rollback、生产 Alembic-only schema 启动约束。
+- PostgreSQL dump 完整性验证、五类 Docker 文件卷备份/恢复脚本和隔离恢复 runbook。
+- 黑盒 `scripts/production_smoke_test.py`。
+
+验收：Day15 专项 6 passed；后端全量 pytest 98 passed；临时数据库 Alembic `0001→0011` PASS；独立 smoke PASS；Python compile、PowerShell parse、Compose config、frontend build、`git diff --check` 全部 PASS。真实公网部署、真实生产备份恢复、WAF/DDoS 实测仍待目标生产环境执行。
+
+## [DONE] PaperForge Day16-P0 — Production Release Closure
+
+完成：生产版本一致性核对；Compose release label 与 PostgreSQL 镜像入口；生产 migration 统一到 `0011_day13_usage_quota`；Nginx HTTPS/SSE 配置；Task Detail artifact preview/download/verification summary；Bearer artifact download 回归；failed/interrupted retry API 与按钮；分类临时文件自动删除；正式 Artifact 保护型 orphan cleanup command；retention 配置；production smoke 扩展到 task event 与 artifact download。
+
+验收：Day16 专项 4 passed；后端全量 pytest 102 passed；frontend build、Python compile、Compose config、`git diff --check` PASS。
+
+剩余发布动作：审阅并提交 Day13-Day16 release scope；在目标环境执行 migration head、真实备份恢复演练和 `scripts/production_smoke_test.py`；确认 image digest、域名/TLS、reverse proxy 和密钥后再创建 release tag。

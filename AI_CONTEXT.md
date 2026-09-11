@@ -161,6 +161,14 @@ paper-ai/
 - `after_analysis`: 最终分析结果
 - `modification_report`: 修改报告
 
+## GET `/usage`
+
+登录后读取当前 `X-Tenant-ID`（未传时使用个人 tenant）的自然月 Agent 运行额度。返回 `tenant_id`、`period_start`、`period_end`、`quota.limit`、`usage.used` 和 `remaining`；额度按 tenant 统计，默认 100 次/月，可由 `DEFAULT_AGENT_RUN_QUOTA` 配置。
+
+## GET `/admin/stats`
+
+平台管理员专用的聚合运营统计接口。除 JWT 认证外，用户邮箱必须命中部署环境的 `ADMIN_EMAILS` allowlist；返回 tenant/user/task 总数、task status summary，以及当前周期/历史 `agent_run` usage 和额度汇总，不返回租户、用户或任务明细。tenant 内的 `admin` 角色不会自动获得该平台权限。
+
 ## GET `/preview/{filename}`
 
 读取 `backend/outputs/{filename}` 并返回 HTML 预览。
@@ -294,3 +302,20 @@ paper-ai/
   - 未自动处理问题
 - 在线预览中展示修改前后对照。
 - 最终目标是让 Agent 不仅“排版正确”，还能够实质性提升论文语言、逻辑和学术表达质量。
+
+# Day15-P0 Production Hardening
+
+- 全 API 增加进程内基础限流；`/health` 和 `/ready` 豁免，生产仍必须在 reverse proxy/WAF 配置分布式限流。
+- `pending` 与 `running` 任务按 user 和 tenant 实施并发上限，默认分别为 2 和 4；现有 quota 行锁用于 PostgreSQL admission check 的事务协调。
+- DOCX 上传增加请求体上限、分块 SHA-256、压缩比、重复 ZIP 条目、危险路径/符号链接和文件名长度保护。
+- 生产数据库由 Alembic 管理，应用强制 `AUTO_CREATE_DB=false`；连接池和请求异常 rollback 有显式配置。
+- 备份/恢复入口包括 PostgreSQL dump 完整性验证、五类 Docker 文件卷归档/恢复和隔离环境 smoke rehearsal。
+- `scripts/production_smoke_test.py` 覆盖 health/readiness、登录、分类、local Agent、usage、预览和下载，并校验 local `ai_score=null`、`ai_used=false`。
+
+# Day16-P0 Production Release Closure
+
+- 当前 `main` 与 `origin/main` 的 HEAD 均为 `3bce4e0`；Day13-Day15 变更仍在未提交工作树，release 前必须统一审阅并 commit。
+- 生产 Compose release version 通过 `PAPERFORGE_RELEASE_VERSION` 标记 backend/frontend/postgres；Alembic production head 为 `0011_day13_usage_quota`。
+- Task Detail 支持 verification summary、认证 artifact download、DOCX preview、failed/interrupted 说明和 retry；旧任务缺少新 result metadata 时安全降级。
+- 分类上传临时文件会在请求结束删除；`scripts/cleanup_orphan_files.py` 默认 dry-run，`--apply` 才执行删除，且保护 Task/Artifact 引用文件。保留期由 `PAPERFORGE_RETENTION_DAYS` 配置。
+- `deploy/nginx/paperforge.conf` 仅提供可复现 public-edge 配置，不代表已经部署；真实 TLS、registry、备份恢复、WAF 和生产 smoke 仍待目标环境验收。

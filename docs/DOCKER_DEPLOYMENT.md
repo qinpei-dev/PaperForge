@@ -108,6 +108,8 @@ docker compose up -d
 
 后端默认 CORS 白名单包含 `localhost:3000` 和 `127.0.0.1:3000`。服务器 IP 或域名部署时，在 `paper-ai/backend/.env` 设置逗号分隔的 `CORS_ORIGINS`，例如 `CORS_ORIGINS=https://paperforge.example.com`，然后重启后端容器。
 
-### 输出文件在删除容器后丢失
+### 生产启动和持久化
 
-当前 Compose 保持最小部署配置，没有默认挂载持久化卷。上传、输出和 task state 位于容器可写层，删除容器时会一并删除。
+生产 Compose 使用 named volumes 保存 PostgreSQL、上传、输出、模板、task state 和 bundled templates。生产 backend 通过 `alembic upgrade head` 管理 schema，并强制 `AUTO_CREATE_DB=false`；不要让应用进程在生产环境自动建表。公网 reverse proxy/WAF 还必须提供 TLS、分布式 API 限流和请求体限制，应用内限流是最后一道基础保护。
+
+发布后可用 `scripts/production_smoke_test.py --base-url ... --email ... --password ... --paper ...` 验证 `/health`、`/ready`、登录、分类、local Agent、usage、预览和下载。

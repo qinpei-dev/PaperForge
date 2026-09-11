@@ -93,3 +93,23 @@ def get_optional_current_user(token: str | None = Depends(oauth2_scheme), db: Se
 
 def auth_is_required() -> bool:
     return os.getenv("AUTH_REQUIRED", "false").strip().lower() == "true"
+
+
+def configured_admin_emails() -> frozenset[str]:
+    """Return the explicitly configured platform-admin email allowlist."""
+    return frozenset(
+        item.strip().lower()
+        for item in os.getenv("ADMIN_EMAILS", "").split(",")
+        if item.strip()
+    )
+
+
+def is_platform_admin(user: User) -> bool:
+    return user.email.strip().lower() in configured_admin_emails()
+
+
+def require_platform_admin(user: User = Depends(get_current_user)) -> User:
+    """Authenticate and authorize a platform-admin-only endpoint."""
+    if not is_platform_admin(user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要平台管理员权限。")
+    return user

@@ -25,6 +25,7 @@ class User(Base):
     workspaces: Mapped[list[Workspace]] = relationship(back_populates="owner", cascade="all, delete-orphan")
     tenant_memberships: Mapped[list[TenantMembership]] = relationship(back_populates="user", cascade="all, delete-orphan")
     tasks: Mapped[list[Task]] = relationship(back_populates="user")
+    usage_records: Mapped[list[Usage]] = relationship(back_populates="user")
 
 
 class Tenant(Base):
@@ -42,6 +43,8 @@ class Tenant(Base):
     invitations: Mapped[list[TenantInvitation]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
     ownership_transfers: Mapped[list[TenantOwnershipTransfer]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
     audit_events: Mapped[list[TenantAuditEvent]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
+    quota: Mapped[Quota | None] = relationship(back_populates="tenant", uselist=False, cascade="all, delete-orphan")
+    usage_records: Mapped[list[Usage]] = relationship(back_populates="tenant")
     templates: Mapped[list[Template]] = relationship(back_populates="tenant")
     tasks: Mapped[list[Task]] = relationship(back_populates="tenant")
     task_events: Mapped[list[TaskEvent]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
@@ -188,6 +191,7 @@ class Task(Base):
     user: Mapped[User] = relationship(back_populates="tasks")
     artifacts: Mapped[list[Artifact]] = relationship(back_populates="task", cascade="all, delete-orphan")
     events: Mapped[list[TaskEvent]] = relationship(back_populates="task", cascade="all, delete-orphan")
+    usage_records: Mapped[list[Usage]] = relationship(back_populates="task")
 
 
 class TaskEvent(Base):
@@ -224,6 +228,71 @@ class Artifact(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     task: Mapped[Task] = relationship(back_populates="artifacts")
+
+
+class Quota(Base):
+    """Tenant-level monthly limits for the P0 usage system."""
+
+    __tablename__ = "quotas"
+    __table_args__ = (
+        CheckConstraint("monthly_limit >= 0", name="ck_quotas_monthly_limit_nonnegative"),
+        UniqueConstraint("tenant_id", name="uq_quotas_tenant"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    monthly_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    tenant: Mapped[Tenant] = relationship(back_populates="quota")
+
+    @property
+    def agent_run_limit(self) -> int:
+        """Compatibility name for the single P0 quota metric."""
+        return self.monthly_limit
+
+    @agent_run_limit.setter
+    def agent_run_limit(self, value: int) -> None:
+        self.monthly_limit = value
+
+    @property
+    def limit(self) -> int:
+        return self.monthly_limit
+
+    @limit.setter
+    def limit(self, value: int) -> None:
+        self.monthly_limit = value
+
+
+class Usage(Base):
+    """Append-only tenant usage ledger; one agent-run entry per task."""
+
+    __tablename__ = "usage_records"
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_usage_records_quantity_positive"),
+        UniqueConstraint("task_id", "metric", name="uq_usage_records_task_metric"),
+        Index("ix_usage_records_tenant_period", "tenant_id", "period_start"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id", ondelete="RESTRICT"), nullable=False, index=True)
+    metric: Mapped[str] = mapped_column(String(100), nullable=False, default="agent_run", server_default="agent_run")
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    tenant: Mapped[Tenant] = relationship(back_populates="usage_records")
+    user: Mapped[User] = relationship(back_populates="usage_records")
+    task: Mapped[Task] = relationship(back_populates="usage_records")
+
+
+# Keep the longer domain name available to callers without introducing a
+# second table or a second usage vocabulary in the P0 API.
+UsageRecord = Usage
 
 
 class Template(Base):

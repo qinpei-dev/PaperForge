@@ -2,7 +2,9 @@ name: paperforge-prod
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: ${PAPERFORGE_POSTGRES_IMAGE:-postgres:16.4-alpine}
+    labels:
+      com.paperforge.release: ${PAPERFORGE_RELEASE_VERSION:?Set PAPERFORGE_RELEASE_VERSION, for example v3.7.2}
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in the production environment}
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in the production environment}
@@ -19,12 +21,29 @@ services:
 
   backend:
     image: ${PAPERFORGE_BACKEND_IMAGE:?Set an immutable backend image, for example registry/paperforge-backend:v3.7.2}
+    labels:
+      com.paperforge.release: ${PAPERFORGE_RELEASE_VERSION:?Set PAPERFORGE_RELEASE_VERSION, for example v3.7.2}
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in the production environment}
       APP_ENV: production
       AUTH_REQUIRED: "true"
+      AUTO_CREATE_DB: "false"
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       CORS_ORIGINS: ${CORS_ORIGINS:?Set the public HTTPS origin}
+      API_RATE_LIMIT_PER_MINUTE: ${API_RATE_LIMIT_PER_MINUTE:-600}
+      MAX_ACTIVE_TASKS_PER_USER: ${MAX_ACTIVE_TASKS_PER_USER:-2}
+      MAX_ACTIVE_TASKS_PER_TENANT: ${MAX_ACTIVE_TASKS_PER_TENANT:-4}
+      MAX_DOCX_UNCOMPRESSED_BYTES: ${MAX_DOCX_UNCOMPRESSED_BYTES:-314572800}
+      MAX_DOCX_ARCHIVE_ENTRIES: ${MAX_DOCX_ARCHIVE_ENTRIES:-5000}
+      MAX_DOCX_COMPRESSION_RATIO: ${MAX_DOCX_COMPRESSION_RATIO:-200}
+      MAX_UPLOAD_FILENAME_LENGTH: ${MAX_UPLOAD_FILENAME_LENGTH:-320}
+      MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-251658240}
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-5}
+      DATABASE_MAX_OVERFLOW: ${DATABASE_MAX_OVERFLOW:-10}
+      DATABASE_POOL_TIMEOUT_SECONDS: ${DATABASE_POOL_TIMEOUT_SECONDS:-30}
+      DATABASE_POOL_RECYCLE_SECONDS: ${DATABASE_POOL_RECYCLE_SECONDS:-1800}
+      PAPERFORGE_RETENTION_DAYS: ${PAPERFORGE_RETENTION_DAYS:-30}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
@@ -49,6 +68,8 @@ services:
 
   frontend:
     image: ${PAPERFORGE_FRONTEND_IMAGE:?Set an immutable frontend image, for example registry/paperforge-frontend:v3.7.2}
+    labels:
+      com.paperforge.release: ${PAPERFORGE_RELEASE_VERSION:?Set PAPERFORGE_RELEASE_VERSION, for example v3.7.2}
     depends_on:
       backend:
         condition: service_healthy

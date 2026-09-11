@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import os
 import json
-import shutil
 import logging
 import hashlib
 import re
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from time import sleep
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,14 +24,16 @@ from services.preview_service import build_docx_preview
 from services.storage import LocalStorage
 from services.content_review import apply_content_suggestion
 from services.review_evidence import aggregate_review_evidence, content_score_summary
-from auth import auth_is_required, create_access_token, get_current_user, get_optional_current_user, hash_password, validate_email, verify_password
-from db.models import Artifact, Project, Task, TaskEvent, Template, Tenant, TenantAuditEvent, TenantInvitation, TenantMembership, TenantOwnershipTransfer, User, Workspace
+from auth import auth_is_required, create_access_token, get_current_user, get_optional_current_user, hash_password, is_platform_admin, require_platform_admin, validate_email, verify_password
+from db.models import Artifact, Project, Quota, Task, TaskEvent, Template, Tenant, TenantAuditEvent, TenantInvitation, TenantMembership, TenantOwnershipTransfer, Usage, User, Workspace
 from db.session import SessionLocal, get_db, init_db
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
 from services.task_worker import task_worker
 from services.durable_tasks import advance_running_task, claim_pending_task, finish_running_task, record_task_event, reconcile_orphaned_tasks
 from services.observability import bind_context, clear_context, configure_structured_logging, log_event
 from services.rate_limit import enforce_rate_limit
+from services.rate_limit import api_rate_limit_per_minute
+from services.concurrency import TaskConcurrencyExceededError, check_task_concurrency
 from services.template_registry import (
     TEMPLATE_STATUSES,
     ResolvedTemplate,
@@ -49,7 +50,8 @@ from services.rbac import AUDIT_READ, MEMBER_MANAGE, MEMBER_READ, ROLE_ADMIN, RO
 from services.tenant_invitations import INVITATION_PENDING, accept_invitation, create_invitation, expire_pending_invitations
 from services.tenant_audit import record_audit_event
 from services.ownership_transfers import ACCEPTED as TRANSFER_ACCEPTED, CANCELLED as TRANSFER_CANCELLED, PENDING as TRANSFER_PENDING, accept_transfer, create_transfer, expire_pending_transfers
-from sqlalchemy import inspect, select
+from services.quota import QuotaExceededError, check_quota, current_usage_period, get_or_create_quota, get_usage_snapshot, record_usage, usage_response
+from sqlalchemy import func, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -64,6 +66,9 @@ MAX_TEMPLATE_UPLOAD_BYTES = int(os.getenv("MAX_TEMPLATE_UPLOAD_BYTES", str(20 * 
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(100 * 1024 * 1024)))
 MAX_DOCX_UNCOMPRESSED_BYTES = int(os.getenv("MAX_DOCX_UNCOMPRESSED_BYTES", str(300 * 1024 * 1024)))
 MAX_DOCX_ARCHIVE_ENTRIES = int(os.getenv("MAX_DOCX_ARCHIVE_ENTRIES", "5000"))
+MAX_DOCX_COMPRESSION_RATIO = float(os.getenv("MAX_DOCX_COMPRESSION_RATIO", "200"))
+MAX_UPLOAD_FILENAME_LENGTH = int(os.getenv("MAX_UPLOAD_FILENAME_LENGTH", "320"))
+MAX_REQUEST_BODY_BYTES = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(240 * 1024 * 1024)))
 LOGGER = logging.getLogger(__name__)
 configure_structured_logging()
 
@@ -101,7 +106,19 @@ async def request_diagnostics(request: Request, call_next):
     started = datetime.now().timestamp(); request_id = uuid4().hex
     request.state.request_id = request_id; bind_context(request_id=request_id)
     try:
+        content_length = request.headers.get("content-length")
+        if request.method in {"POST", "PUT", "PATCH"} and content_length:
+            try:
+                request_size = int(content_length)
+            except ValueError:
+                request_size = MAX_REQUEST_BODY_BYTES + 1
+            if request_size > MAX_REQUEST_BODY_BYTES:
+                raise HTTPException(status_code=413, detail="请求体超过生产资源保护上限。")
+        if request.url.path not in {"/health", "/ready"}:
+            enforce_rate_limit(request, bucket="api", limit=api_rate_limit_per_minute())
         response = await call_next(request)
+    except HTTPException as exc:
+        response = error_response(request, status_code=exc.status_code, message=exc.detail, headers=exc.headers)
     except Exception:
         duration = round((datetime.now().timestamp() - started) * 1000)
         log_event(LOGGER, logging.ERROR, "http_request_failed", duration_ms=duration, method=request.method, path=request.url.path, status_code=500, error_code="INTERNAL_ERROR")
@@ -159,10 +176,14 @@ def startup_database() -> None:
             raise RuntimeError("AUTH_REQUIRED=true is required in production.")
         if not configured_cors_origins():
             raise RuntimeError("CORS_ORIGINS must contain the public HTTPS origin in production.")
-    if os.getenv("AUTO_CREATE_DB", "true").strip().lower() == "true":
+    auto_create_db = os.getenv("AUTO_CREATE_DB", "true").strip().lower() == "true"
+    if environment in {"production", "prod"} and auto_create_db:
+        raise RuntimeError("AUTO_CREATE_DB=false is required in production; run Alembic before startup.")
+    if auto_create_db:
         init_db()
     db = SessionLocal()
     try:
+        db.execute(select(1))
         bootstrap_personal_tenants(db)
         bootstrap_template_registry(db)
         # Alembic is authoritative in production.  The guard keeps historical
@@ -380,7 +401,8 @@ def register_user(payload: RegisterRequest, request: Request, db: Session = Depe
     user.workspaces.append(Workspace(name=workspace_name))
     db.add(user)
     db.flush()
-    ensure_personal_tenant(db, user)
+    personal_membership = ensure_personal_tenant(db, user)
+    get_or_create_quota(db, personal_membership.tenant_id)
     try:
         db.commit()
     except IntegrityError:
@@ -388,7 +410,7 @@ def register_user(payload: RegisterRequest, request: Request, db: Session = Depe
         raise HTTPException(status_code=409, detail="该邮箱已经注册。")
     db.refresh(user)
     workspace = user.workspaces[0]
-    return AuthResponse(access_token=create_access_token(user.id), user=UserResponse(id=user.id, email=user.email), workspace_id=workspace.id, workspace_name=workspace.name)
+    return AuthResponse(access_token=create_access_token(user.id), user=UserResponse(id=user.id, email=user.email, is_admin=is_platform_admin(user)), workspace_id=workspace.id, workspace_name=workspace.name)
 
 
 @app.post("/auth/login", response_model=AuthResponse)
@@ -406,12 +428,12 @@ def login_user(payload: LoginRequest, request: Request, db: Session = Depends(ge
         db.flush()
     db.commit()
     db.refresh(workspace)
-    return AuthResponse(access_token=create_access_token(user.id), user=UserResponse(id=user.id, email=user.email), workspace_id=workspace.id, workspace_name=workspace.name)
+    return AuthResponse(access_token=create_access_token(user.id), user=UserResponse(id=user.id, email=user.email, is_admin=is_platform_admin(user)), workspace_id=workspace.id, workspace_name=workspace.name)
 
 
 @app.get("/auth/me", response_model=UserResponse)
 def current_user(user: User = Depends(get_current_user)) -> UserResponse:
-    return UserResponse(id=user.id, email=user.email)
+    return UserResponse(id=user.id, email=user.email, is_admin=is_platform_admin(user))
 
 
 def require_permission(context: TenantContext, permission: str) -> None:
@@ -680,7 +702,7 @@ def list_tasks(context: TenantContext = Depends(get_current_tenant), db: Session
     require_permission(context, TASK_READ)
     statement = select(Task).where(Task.tenant_id == context.tenant_id).order_by(Task.created_at.desc())
     tasks = db.scalars(statement).all()
-    return [{"id": item.id, "project_id": item.project_id, "tenant_id": item.tenant_id, "user_id": item.user_id, "status": item.status, "workflow_stage": item.workflow_stage, "progress": item.progress, "score": item.score, "created_at": item.created_at, "title": item.paper_name or item.project.title} for item in tasks]
+    return [{"id": item.id, "project_id": item.project_id, "tenant_id": item.tenant_id, "user_id": item.user_id, "status": item.status, "workflow_stage": item.workflow_stage, "progress": item.progress, "score": item.score, "created_at": item.created_at, "title": item.paper_name or item.project.title, "status_explanation": task_status_explanation(item.status)} for item in tasks]
 
 
 @app.get("/tasks/{task_id}")
@@ -690,7 +712,52 @@ def get_task(task_id: str, context: TenantContext = Depends(get_current_tenant),
     task = db.scalar(statement)
     if task is None:
         raise HTTPException(status_code=404, detail="没有找到该任务。")
-    return {"id": task.id, "task_id": task.id, "project_id": task.project_id, "tenant_id": task.tenant_id, "user_id": task.user_id, "status": task.status, "workflow_stage": task.workflow_stage, "progress": task.progress, "current_stage": task.current_stage, "started_at": task.started_at, "finished_at": task.finished_at, "updated_at": task.updated_at, "error_code": task.error_code, "error_message": task.error_message, "attempt_count": task.attempt_count, "paper_name": task.paper_name or task.project.title, "uploaded_file": task.uploaded_file, "template": template_from_trace(task.agent_trace), "trace": task.agent_trace, "agent_trace": task.agent_trace, "workflow_steps": build_workflow_steps(task.agent_trace, task.workflow_stage, task.status), "score_history": {"before": task.before_score, "after": task.score}, "score": task.score, "created_at": task.created_at, "artifacts": [{"id": item.id, "file_path": item.file_path, "file_type": item.file_type, "download_url": f"/artifacts/{item.id}/download"} for item in task.artifacts]}
+    result_metadata = task.result_metadata if isinstance(task.result_metadata, dict) else {}
+    return {"id": task.id, "task_id": task.id, "project_id": task.project_id, "tenant_id": task.tenant_id, "user_id": task.user_id, "status": task.status, "workflow_stage": task.workflow_stage, "progress": task.progress, "current_stage": task.current_stage, "started_at": task.started_at, "finished_at": task.finished_at, "updated_at": task.updated_at, "error_code": task.error_code, "error_message": task.error_message, "attempt_count": task.attempt_count, "paper_name": task.paper_name or task.project.title, "uploaded_file": task.uploaded_file, "template": template_from_trace(task.agent_trace), "trace": task.agent_trace, "agent_trace": task.agent_trace, "workflow_steps": build_workflow_steps(task.agent_trace, task.workflow_stage, task.status), "score_history": {"before": task.before_score, "after": task.score}, "score": task.score, "created_at": task.created_at, "status_explanation": task_status_explanation(task.status), "retry_available": task.status in {"failed", "interrupted"} and stored_input_file(task.uploaded_file) is not None, "score_breakdown": result_metadata.get("score_breakdown"), "verification": result_metadata.get("verification"), "verification_summary": result_metadata.get("verification_summary"), "artifacts": [{"id": item.id, "file_path": item.file_path, "file_type": item.file_type, "download_url": f"/artifacts/{item.id}/download", "preview_url": f"/preview/{Path(item.file_path).name}" if item.file_type == "docx" else None} for item in task.artifacts]}
+
+
+@app.post("/tasks/{task_id}/retry")
+def retry_task(task_id: str, context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> dict[str, object]:
+    """Requeue a failed/interrupted task using its original uploaded input."""
+    require_permission(context, TASK_CREATE)
+    task = db.scalar(select(Task).where(Task.id == task_id, Task.tenant_id == context.tenant_id))
+    if task is None:
+        raise HTTPException(status_code=404, detail="没有找到该任务。")
+    if task.user_id != context.current_user.id:
+        require_permission(context, TASK_MANAGE)
+    if task.status not in {"failed", "interrupted"}:
+        raise HTTPException(status_code=409, detail="只有失败或中断任务可以重试。")
+    paper_path = stored_input_file(task.uploaded_file)
+    if paper_path is None:
+        raise HTTPException(status_code=409, detail="原始上传文件已不可用，无法重试。")
+    try:
+        check_task_concurrency(db, context.tenant_id, context.current_user.id)
+    except TaskConcurrencyExceededError as exc:
+        db.rollback()
+        raise HTTPException(status_code=429, detail={"code": "TASK_CONCURRENCY_LIMIT", "message": "当前活跃任务数已达到并发上限，请稍后重试。", "scope": exc.scope, "concurrency": exc.snapshot.as_dict()}) from exc
+
+    metadata = task.input_metadata if isinstance(task.input_metadata, dict) else {}
+    template_meta = metadata.get("template") if isinstance(metadata.get("template"), dict) else {}
+    template_path = stored_input_file(metadata.get("template_upload_path"))
+    template_upload = StoredUpload(template_path, template_path.name) if template_path else None
+    selected_template = resolve_template_or_422(db, template_upload, None if template_path else str(template_meta.get("id") or "") or None, None if template_path else str(template_meta.get("version") or "") or None, context.tenant_id)
+    previous_status = task.status
+    task.status = "pending"
+    task.workflow_stage = None
+    task.current_stage = None
+    task.progress = 0
+    task.started_at = None
+    task.finished_at = None
+    task.worker_run_id = None
+    task.error_code = None
+    task.error_message = None
+    task.recovery_metadata = {"reason": "user_retry", "retried_at": datetime.now(timezone.utc).isoformat(), "previous_status": previous_status}
+    task.state_version += 1
+    db.commit()
+    db.refresh(task)
+    publish_task_event(task.id, "task_retry_requested", db=db, status="pending", progress=0, message="用户已请求重新执行任务。")
+    task_worker.submit(run_task_in_worker, task.id, StoredUpload(paper_path, task.paper_name or paper_path.name), template_upload, bool(metadata.get("allow_non_paper", False)), str(metadata.get("mode") or "ai"), selected_template, sessionmaker(bind=db.get_bind(), autoflush=False, expire_on_commit=False))
+    return {"task_id": task.id, "status": "pending", "retry_started": True}
 
 
 @app.get("/tasks/{task_id}/events")
@@ -757,15 +824,37 @@ async def create_task(
     enforce_rate_limit(request, bucket=f"task-create:{context.current_user.id}", limit=20)
     if mode not in {"local", "ai"}:
         raise HTTPException(status_code=422, detail="mode 必须是 local 或 ai。")
+    try:
+        check_task_concurrency(db, context.tenant_id, context.current_user.id)
+    except TaskConcurrencyExceededError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "TASK_CONCURRENCY_LIMIT",
+                "message": "当前用户或 tenant 的活跃任务数已达到并发上限，请等待已有任务完成。",
+                "scope": exc.scope,
+                "concurrency": exc.snapshot.as_dict(),
+            },
+        ) from exc
     request_id = uuid4()
-    paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
-    template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
-    selected_template = resolve_template_or_422(db, template_upload, template_id, template_version, context.tenant_id)
-    project = get_or_create_default_project(db, context.current_user)
-    task = Task(project_id=project.id, tenant_id=context.tenant_id, user_id=context.current_user.id, status="pending", progress=0, paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path), agent_trace=[template_trace_item(selected_template)], input_metadata={"mode": mode, "allow_non_paper": allow_non_paper, "template": selected_template.provenance(), "original_paper_name": paper_upload.original_filename})
-    db.add(task)
-    db.commit()
-    db.refresh(task)
+    paper_upload: StoredUpload | None = None
+    template_upload: StoredUpload | None = None
+    try:
+        paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
+        template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
+        selected_template = resolve_template_or_422(db, template_upload, template_id, template_version, context.tenant_id)
+        project = get_or_create_default_project(db, context.current_user)
+        task = Task(project_id=project.id, tenant_id=context.tenant_id, user_id=context.current_user.id, status="pending", progress=0, paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path), agent_trace=[template_trace_item(selected_template)], input_metadata={"mode": mode, "allow_non_paper": allow_non_paper, "template": selected_template.provenance(), "template_upload_path": str(template_upload.path) if template_upload else None, "original_paper_name": paper_upload.original_filename})
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+    except Exception:
+        db.rollback()
+        for upload in (paper_upload, template_upload):
+            if upload is not None:
+                upload.path.unlink(missing_ok=True)
+        raise
     bind_context(tenant_id=task.tenant_id, user_id=task.user_id, task_id=task.id)
     log_event(LOGGER, logging.INFO, "task_created")
     publish_task_event(task.id, "task_created", db=db, status="pending", progress=0, message="任务已创建，等待 Agent 启动。", template=selected_template.provenance())
@@ -786,9 +875,74 @@ async def create_task(
 async def classify_uploaded_document(request: Request, paper: UploadFile = File(...), user: User | None = Depends(require_user_if_enabled)) -> dict[str, object]:
     enforce_rate_limit(request, bucket="document-classify", limit=30)
     upload = save_docx(paper, UPLOAD_DIR, uuid4())
-    result = classify_document(upload.path)
-    result["filename"] = upload.original_filename
-    return result
+    try:
+        result = classify_document(upload.path)
+        result["filename"] = upload.original_filename
+        return result
+    finally:
+        upload.path.unlink(missing_ok=True)
+        try:
+            upload.path.parent.rmdir()
+        except OSError:
+            pass
+
+
+@app.get("/usage")
+def get_usage(context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> dict[str, object]:
+    """Return the current tenant's monthly Agent-run quota and usage."""
+    snapshot = get_usage_snapshot(db, context.tenant_id)
+    db.commit()
+    return usage_response(snapshot)
+
+
+@app.get("/admin/stats")
+def admin_stats(_admin: User = Depends(require_platform_admin), db: Session = Depends(get_db)) -> dict[str, object]:
+    """Return aggregate operational metrics for explicitly configured admins."""
+    period = current_usage_period()
+    tenant_total = int(db.scalar(select(func.count()).select_from(Tenant)) or 0)
+    active_tenant_total = int(
+        db.scalar(select(func.count()).select_from(Tenant).where(Tenant.status == "active")) or 0
+    )
+    user_total = int(db.scalar(select(func.count()).select_from(User)) or 0)
+    task_total = int(db.scalar(select(func.count()).select_from(Task)) or 0)
+    task_status_summary = {
+        str(status): int(count)
+        for status, count in db.execute(
+            select(Task.status, func.count()).group_by(Task.status).order_by(Task.status)
+        ).all()
+    }
+    current_usage = int(
+        db.scalar(
+            select(func.coalesce(func.sum(Usage.quantity), 0)).where(
+                Usage.metric == "agent_run",
+                Usage.period_start >= period.start,
+                Usage.period_start < period.end,
+            )
+        )
+        or 0
+    )
+    all_time_usage = int(
+        db.scalar(
+            select(func.coalesce(func.sum(Usage.quantity), 0)).where(Usage.metric == "agent_run")
+        )
+        or 0
+    )
+    quota_limit = int(db.scalar(select(func.coalesce(func.sum(Quota.monthly_limit), 0))) or 0)
+    return {
+        "generated_at": datetime.now(timezone.utc),
+        "tenants": {"total": tenant_total, "active": active_tenant_total},
+        "users": {"total": user_total},
+        "tasks": {"total": task_total, "status_summary": task_status_summary},
+        "usage": {
+            "metric": "agent_run",
+            "period_start": period.start,
+            "period_end": period.end,
+            "used": current_usage,
+            "all_time_used": all_time_usage,
+            "monthly_quota_total": quota_limit,
+            "monthly_quota_remaining": max(0, quota_limit - current_usage),
+        },
+    }
 
 
 @app.post("/agent/run")
@@ -805,18 +959,55 @@ async def run_agent(
     requested_tenant_id: str | None = Header(None, alias="X-Tenant-ID"),
 ) -> dict[str, object]:
     enforce_rate_limit(request, bucket=f"agent-run:{user.id if user else 'anonymous'}", limit=10)
-    request_id = uuid4()
-    paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
-    template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
+    if mode not in {"local", "ai"}:
+        raise HTTPException(status_code=422, detail="mode 必须是 local 或 ai。")
     context = resolve_tenant_context(db, user, requested_tenant_id) if user is not None else None
     if context is not None:
         require_permission(context, TASK_CREATE)
-    selected_template = resolve_template_or_422(db, template_upload, template_id, template_version, context.tenant_id if context else None)
+        try:
+            quota_snapshot = check_quota(db, context.tenant_id)
+            check_task_concurrency(db, context.tenant_id, context.current_user.id)
+        except QuotaExceededError as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": "QUOTA_EXCEEDED",
+                    "message": "当前 tenant 的本月 Agent 运行额度已用尽。",
+                    "usage": usage_response(exc.snapshot),
+                },
+            ) from exc
+        except TaskConcurrencyExceededError as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": "TASK_CONCURRENCY_LIMIT",
+                    "message": "当前用户或 tenant 的活跃任务数已达到并发上限，请等待已有任务完成。",
+                    "scope": exc.scope,
+                    "concurrency": exc.snapshot.as_dict(),
+                },
+            ) from exc
+    request_id = uuid4()
+    paper_upload: StoredUpload | None = None
+    template_upload: StoredUpload | None = None
+    try:
+        paper_upload = save_docx(paper, UPLOAD_DIR, request_id)
+        template_upload = save_docx(template, UPLOAD_DIR, request_id) if template and template.filename else None
+        selected_template = resolve_template_or_422(db, template_upload, template_id, template_version, context.tenant_id if context else None)
+    except Exception:
+        db.rollback()
+        for upload in (paper_upload, template_upload):
+            if upload is not None:
+                upload.path.unlink(missing_ok=True)
+        raise
     task = None
     if context is not None:
         project = get_or_create_default_project(db, context.current_user)
-        task = Task(project_id=project.id, tenant_id=context.tenant_id, user_id=context.current_user.id, status="pending", progress=0, paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path), input_metadata={"mode": mode, "allow_non_paper": allow_non_paper, "template": selected_template.provenance(), "original_paper_name": paper_upload.original_filename})
+        task = Task(project_id=project.id, tenant_id=context.tenant_id, user_id=context.current_user.id, status="pending", progress=0, paper_name=paper_upload.original_filename, uploaded_file=str(paper_upload.path), input_metadata={"mode": mode, "allow_non_paper": allow_non_paper, "template": selected_template.provenance(), "template_upload_path": str(template_upload.path) if template_upload else None, "original_paper_name": paper_upload.original_filename})
         db.add(task)
+        db.flush()
+        record_usage(db, tenant_id=context.tenant_id, user_id=context.current_user.id, task_id=task.id, period=quota_snapshot.period)
         db.commit()
         db.refresh(task)
         bind_context(tenant_id=task.tenant_id, user_id=task.user_id, task_id=task.id)
@@ -976,10 +1167,12 @@ def execute_persisted_task(
         artifact_count += 1
     db.commit()
     db.refresh(task)
+    verification = result.get("verification") if isinstance(result.get("verification"), dict) else None
+    verification_summary = verification_summary_from_result(result)
     if artifact_count:
         publish_task_event(task.id, "artifact_created", db=db, status="running", workflow_stage="verifying", progress=80, message="处理产物已生成。", artifact_count=artifact_count)
     if result_status == "ok":
-        finish_running_task(db, task, run_id, status="completed", stage="completed", progress=100, result_metadata={"filename": result.get("filename"), "artifact_count": artifact_count})
+        finish_running_task(db, task, run_id, status="completed", stage="completed", progress=100, result_metadata={"filename": result.get("filename"), "artifact_count": artifact_count, "score_breakdown": result.get("score_breakdown"), "verification": verification, "verification_summary": verification_summary})
         publish_task_event(task.id, "task_completed", db=db, status="completed", workflow_stage="completed", progress=100, message="任务已完成。")
         log_event(LOGGER, logging.INFO, "task_completed")
     elif result_status == "requires_confirmation":
@@ -1037,6 +1230,40 @@ def workflow_progress(workflow_stage: str | None, status: str) -> int:
     if status == "failed" or workflow_stage == "failed":
         return 0
     return {"analyzing": 20, "planning": 40, "executing": 60, "verifying": 80, "completed": 100}.get(workflow_stage or "", 0)
+
+
+def task_status_explanation(status: str | None) -> str | None:
+    return {
+        "failed": "任务执行失败，原始上传文件仍保留，可以点击重试。",
+        "interrupted": "后端重启中断了任务，系统不会伪造断点续跑，可以点击重试。",
+        "completed": "任务已完成，结果已经过验证并可预览或下载。",
+    }.get(status)
+
+
+def stored_input_file(value: object) -> Path | None:
+    """Resolve a retryable input only inside the managed uploads directory."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    candidate = Path(value).resolve()
+    upload_root = UPLOAD_DIR.resolve()
+    if upload_root not in candidate.parents or not candidate.is_file():
+        return None
+    return candidate
+
+
+def verification_summary_from_result(result: dict[str, object]) -> dict[str, object] | None:
+    verification = result.get("verification")
+    if not isinstance(verification, dict):
+        return None
+    summary = verification.get("verification_summary")
+    if isinstance(summary, dict):
+        return summary
+    provenance = result.get("provenance")
+    if isinstance(provenance, dict):
+        nested = provenance.get("summary")
+        if isinstance(nested, dict) and isinstance(nested.get("verification"), dict):
+            return nested["verification"]
+    return None
 
 
 def template_from_trace(trace: object) -> dict[str, object] | None:
@@ -1201,8 +1428,17 @@ def save_docx(file: UploadFile, directory: Path, request_id: UUID) -> StoredUplo
     request_dir.mkdir(parents=True, exist_ok=True)
 
     target = request_dir / f"{uuid4().hex}.docx"
-    with target.open("xb") as destination:
-        shutil.copyfileobj(file.file, destination)
+    try:
+        with target.open("xb") as destination:
+            copied = 0
+            while chunk := file.file.read(1024 * 1024):
+                copied += len(chunk)
+                if copied > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail=f"论文文件不能超过 {MAX_UPLOAD_BYTES} 字节。")
+                destination.write(chunk)
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
     return StoredUpload(path=target, original_filename=original_filename)
 
 
@@ -1219,13 +1455,29 @@ def validate_docx_upload(file: UploadFile, *, maximum_size: int, label: str) -> 
         raise HTTPException(status_code=422, detail=f"{label}文件不能为空。")
     if size > maximum_size:
         raise HTTPException(status_code=413, detail=f"{label}文件不能超过 {maximum_size} 字节。")
-    digest = hashlib.sha256(file.file.read()).hexdigest()
+    hasher = hashlib.sha256()
+    while chunk := file.file.read(1024 * 1024):
+        hasher.update(chunk)
+    digest = hasher.hexdigest()
     file.file.seek(0)
     try:
         with zipfile.ZipFile(file.file) as archive:
             members = archive.infolist()
+            names = [member.filename.replace("\\", "/") for member in members]
             total_uncompressed = sum(member.file_size for member in members)
-            if len(members) > MAX_DOCX_ARCHIVE_ENTRIES or total_uncompressed > MAX_DOCX_UNCOMPRESSED_BYTES:
+            total_compressed = sum(max(0, member.compress_size) for member in members)
+            unsafe_member = any(
+                name.startswith("/") or ".." in Path(name).parts or (member.external_attr >> 16) & 0o170000 == 0o120000
+                for name, member in zip(names, members, strict=True)
+            )
+            ratio = total_uncompressed / max(1, total_compressed)
+            if (
+                len(members) > MAX_DOCX_ARCHIVE_ENTRIES
+                or len(set(names)) != len(names)
+                or unsafe_member
+                or total_uncompressed > MAX_DOCX_UNCOMPRESSED_BYTES
+                or ratio > MAX_DOCX_COMPRESSION_RATIO
+            ):
                 raise ValueError("archive expansion exceeds limit")
             if "[Content_Types].xml" not in archive.namelist() or "word/document.xml" not in archive.namelist():
                 raise ValueError("missing DOCX parts")
@@ -1244,6 +1496,7 @@ def safe_upload_filename(filename: str | None) -> str:
     safe_name = Path(raw_filename.replace("\\", "/")).name
     if (
         not safe_name
+        or len(safe_name) > MAX_UPLOAD_FILENAME_LENGTH
         or any(ord(character) < 32 for character in safe_name)
         or Path(safe_name).suffix.lower() != ".docx"
     ):

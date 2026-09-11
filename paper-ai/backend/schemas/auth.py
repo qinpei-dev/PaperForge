@@ -21,6 +21,7 @@ class TokenResponse(BaseModel):
 class UserResponse(BaseModel):
     id: str
     email: str
+    is_admin: bool = False
 
 
 class AuthResponse(TokenResponse):

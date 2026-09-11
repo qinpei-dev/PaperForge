@@ -162,13 +162,22 @@ type AgentResult = {
   template?: TemplateIdentity;
 };
 type PreviewResult = { title: string; html: string };
-type AuthUser = { email: string };
+type AuthUser = { email: string; is_admin?: boolean };
 type MembershipInfo = { tenant_id: string; role: "owner" | "admin" | "member"; permissions: string[] };
 type WorkspaceOption = { tenant_id: string; name: string; role: "owner" | "admin" | "member" };
 type TenantMember = { user_id: string; email: string; role: "owner" | "admin" | "member" };
 type TenantInvitation = { id: string; email: string; role: "admin" | "member"; status: string; expires_at: string };
 type OwnershipTransfer = { id: string; to_user_id: string; status: string; expires_at: string; accept_url?: string };
 type AuditEvent = { id: string; event_type: string; target_id?: string; created_at: string; metadata?: Record<string, unknown> };
+type UsageSummary = {
+  tenant_id: string;
+  metric: string;
+  period_start: string;
+  period_end: string;
+  quota: { limit: number };
+  usage: { used: number };
+  remaining: number;
+};
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, "");
@@ -189,7 +198,7 @@ function storedAuthUser(): AuthUser | null {
     const rawUser = localStorage.getItem("paperforge_user");
     if (!rawUser) return null;
     const user = JSON.parse(rawUser) as unknown;
-    return isRecord(user) && typeof user.email === "string" && user.email.trim() ? { email: user.email } : null;
+    return isRecord(user) && typeof user.email === "string" && user.email.trim() ? { email: user.email, is_admin: user.is_admin === true } : null;
   } catch {
     return null;
   }
@@ -214,6 +223,22 @@ async function readResponseData(response: Response): Promise<Record<string, unkn
 }
 
 function apiErrorMessage(data: Record<string, unknown>, fallback: string) {
+  const envelopeError = isRecord(data.error) ? data.error : null;
+  const envelopeMessage = envelopeError && isRecord(envelopeError.message) ? envelopeError.message : null;
+  const detailRecord = isRecord(data.detail) ? data.detail : null;
+  const quotaError = envelopeMessage?.code === "QUOTA_EXCEEDED" ? envelopeMessage : detailRecord?.code === "QUOTA_EXCEEDED" ? detailRecord : null;
+  if (quotaError) {
+    const usage = isRecord(quotaError.usage) ? quotaError.usage : null;
+    const quota = usage && isRecord(usage.quota) ? usage.quota : null;
+    const current = usage && isRecord(usage.usage) ? usage.usage : null;
+    const limit = typeof quota?.limit === "number" ? quota.limit : null;
+    const used = typeof current?.used === "number" ? current.used : null;
+    const remaining = usage && typeof usage.remaining === "number" ? usage.remaining : null;
+    const periodEnd = usage && typeof usage.period_end === "string" ? usage.period_end : "";
+    const resetHint = periodEnd ? `，本周期将于 ${new Date(periodEnd).toLocaleDateString("zh-CN")} 结束` : "";
+    if (limit !== null && used !== null) return `本月 Agent 运行额度已用尽（${used}/${limit}），剩余 ${remaining ?? 0} 次${resetHint}。`;
+    return "本月 Agent 运行额度已用尽，请稍后再试。";
+  }
   const detail = data.detail;
   if (typeof detail === "string") return detail;
   if (isRecord(detail)) {
@@ -225,6 +250,15 @@ function apiErrorMessage(data: Record<string, unknown>, fallback: string) {
   }
   const message = typeof data.message === "string" ? data.message : "";
   return message || fallback;
+}
+
+function parseUsageSummary(data: Record<string, unknown>): UsageSummary | null {
+  const quota = isRecord(data.quota) ? data.quota : null;
+  const usage = isRecord(data.usage) ? data.usage : null;
+  const limit = typeof quota?.limit === "number" ? quota.limit : typeof quota?.agent_runs === "number" ? quota.agent_runs : null;
+  const used = typeof usage?.used === "number" ? usage.used : typeof usage?.agent_runs === "number" ? usage.agent_runs : null;
+  if (typeof data.tenant_id !== "string" || limit === null || used === null || typeof data.remaining !== "number" || typeof data.period_start !== "string" || typeof data.period_end !== "string") return null;
+  return { tenant_id: data.tenant_id, metric: typeof data.metric === "string" ? data.metric : "agent_run", period_start: data.period_start, period_end: data.period_end, quota: { limit }, usage: { used }, remaining: data.remaining };
 }
 
 function networkErrorMessage(error: unknown, fallback: string, requestUrl?: string) {
@@ -263,6 +297,9 @@ export default function Home() {
   const [membership, setMembership] = useState<MembershipInfo | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
   const [activeTenantId, setActiveTenantId] = useState("");
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usageError, setUsageError] = useState("");
   const [members, setMembers] = useState<TenantMember[]>([]);
   const [invitations, setInvitations] = useState<TenantInvitation[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -327,7 +364,7 @@ export default function Home() {
     }
     void loadMembership();
     return () => { cancelled = true; };
-  }, [authUser, activeTenantId]);
+  }, [authUser, activeTenantId, result]);
 
   useEffect(() => {
     let cancelled = false;
@@ -351,6 +388,48 @@ export default function Home() {
     void loadTemplates();
     return () => { cancelled = true; };
   }, [activeTenantId, authUser]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadUsage() {
+      if (!authUser || !activeTenantId) {
+        setUsage(null);
+        setUsageError("");
+        setUsageLoading(false);
+        return;
+      }
+      setUsageLoading(true);
+      setUsageError("");
+      try {
+        const requestUrl = apiUrl("/usage");
+        const response = await fetch(requestUrl, { cache: "no-store", headers: authorizationHeaders() });
+        const data = await readResponseData(response);
+        if (cancelled) return;
+        if (!response.ok) {
+          if (isAuthenticationFailure(response)) requireAuthentication();
+          setUsage(null);
+          setUsageError(apiErrorMessage(data, "Usage 数据暂时无法加载。"));
+          return;
+        }
+        const parsed = parseUsageSummary(data);
+        if (!parsed) {
+          setUsage(null);
+          setUsageError("Usage 数据格式异常，请稍后重试。");
+          return;
+        }
+        setUsage(parsed);
+      } catch (error) {
+        if (!cancelled) {
+          setUsage(null);
+          setUsageError(networkErrorMessage(error, "Usage 数据暂时无法加载", apiUrl("/usage")));
+        }
+      } finally {
+        if (!cancelled) setUsageLoading(false);
+      }
+    }
+    void loadUsage();
+    return () => { cancelled = true; };
+  }, [authUser, activeTenantId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -389,6 +468,8 @@ export default function Home() {
     localStorage.removeItem("paperforge_active_tenant");
     setAuthUser(null);
     setMembership(null);
+    setUsage(null);
+    setUsageError("");
     setAuthenticationRequired(false);
     setMessage("已退出登录。");
   }
@@ -397,6 +478,7 @@ export default function Home() {
     localStorage.setItem("paperforge_active_tenant", tenantId);
     setActiveTenantId(tenantId);
     setMembership(null); setTemplates([]); setMembers([]); setInvitations([]); setInvitationLink(""); setOwnershipTransfer(null); setAuditEvents([]); setTenantName("");
+    setUsage(null); setUsageError("");
     setResult(null); setPreview(null); setClassification(null); setMessage("已切换 Workspace，正在加载该空间的数据。");
   }
 
@@ -526,6 +608,10 @@ export default function Home() {
       setMessage("该文档可能不是标准论文，必须勾选确认后才能继续。");
       return;
     }
+    if (usage && usage.remaining <= 0) {
+      setMessage(`本周期 Agent 运行额度已用尽（${usage.usage.used}/${usage.quota.limit}），请在额度周期结束后再试。`);
+      return;
+    }
 
     const formData = new FormData();
     const allowNonPaper = Boolean(confirmedNonPaper || !classification);
@@ -648,6 +734,7 @@ export default function Home() {
                   {workspaces.length ? <label className="workspace-switcher"><span className="sr-only">切换 Workspace</span><select value={activeTenantId} onChange={(event) => switchWorkspace(event.target.value)}>{workspaces.map((item) => <option key={item.tenant_id} value={item.tenant_id}>{item.name}</option>)}</select></label> : null}
                   {membership && <span className="tenant-role" title={`Workspace ${membership.tenant_id}`}>{membership.role === "owner" ? "Owner" : membership.role === "admin" ? "Admin" : "Member"}</span>}
                   <Link className="home-auth-link" href="/dashboard">工作台</Link>
+                  {authUser.is_admin ? <Link className="home-auth-link" href="/admin">运营后台</Link> : null}
                   <button className="home-auth-link logout-button" type="button" onClick={logout}>退出登录</button>
                 </> : <>
                   <Link className="home-auth-link" href="/login">登录</Link>
@@ -699,6 +786,8 @@ export default function Home() {
               </ol>
             </div>
           </header>
+
+          {authUser ? <UsageQuotaCard usage={usage} loading={usageLoading} error={usageError} /> : null}
 
           {authUser && !workspaces.length ? <section className="governance-panel empty-workspace"><h2>没有可用 Workspace</h2><p>当前账号没有有效 Workspace。请联系空间 Owner 获取邀请后刷新页面。</p></section> : null}
           {authUser && membership?.role === "owner" ? <section className="governance-panel" aria-label="成员与邀请管理">
@@ -769,7 +858,7 @@ export default function Home() {
 
         {classification ? <ClassificationCard classification={classification} confirmed={confirmedNonPaper} onConfirm={setConfirmedNonPaper} /> : null}
 
-        {message ? <p className={message.includes("失败") || message.includes("必须") ? "message error" : "message"}>{message}</p> : null}
+        {message ? <p className={/失败|必须|额度|用尽|无法/.test(message) ? "message error" : "message"}>{message}</p> : null}
         {authenticationRequired ? <section className="auth-required" aria-label="登录后继续">
           <strong>请先登录后再继续。</strong>
           <span>登录后可保存我的模板、创建受保护任务并继续处理。</span>
@@ -886,6 +975,35 @@ function ContentReviewPanel({ review, summary, onApply }: { review?: ContentRevi
         {item.action_policy === "SUGGEST_ONLY" && item.status !== "accepted" && item.issue_id ? <button className="secondary-button compact" type="button" onClick={() => onApply?.(item)}>采纳此建议</button> : null}
         {item.action_policy === "HITL_REQUIRED" ? <small>该项涉及高风险内容，不能通过此按钮自动写回。</small> : null}
       </li>)}</ul> : <p>未发现需要处理的段落级内容问题。</p>}
+    </section>
+  );
+}
+
+function UsageQuotaCard({ usage, loading, error }: { usage: UsageSummary | null; loading: boolean; error: string }) {
+  if (loading && !usage) {
+    return <section className="usage-quota-panel" aria-label="Usage 与 Quota"><div className="usage-quota-heading"><div><span className="card-label">USAGE / QUOTA</span><h2>本月使用额度</h2></div><span className="usage-loading">加载中…</span></div></section>;
+  }
+  if (!usage) {
+    return <section className="usage-quota-panel usage-quota-unavailable" aria-label="Usage 与 Quota"><div className="usage-quota-heading"><div><span className="card-label">USAGE / QUOTA</span><h2>本月使用额度</h2></div></div><p>{error || "登录后即可查看当前 Workspace 的使用额度。"}</p></section>;
+  }
+  const limit = usage.quota.limit;
+  const used = usage.usage.used;
+  const remaining = usage.remaining;
+  const progress = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  return (
+    <section className="usage-quota-panel" aria-label="Usage 与 Quota">
+      <div className="usage-quota-heading">
+        <div><span className="card-label">USAGE / QUOTA</span><h2>本月使用额度</h2><p>当前 Workspace 的 Agent 运行额度</p></div>
+        <span className={`usage-status ${remaining === 0 ? "exhausted" : ""}`}>{remaining === 0 ? "额度已用尽" : "额度可用"}</span>
+      </div>
+      <div className="usage-quota-grid">
+        <div className="usage-stat"><span>Monthly limit</span><strong>{limit}</strong><small>次 / 月</small></div>
+        <div className="usage-stat"><span>Used</span><strong>{used}</strong><small>本周期已使用</small></div>
+        <div className="usage-stat"><span>Remaining</span><strong>{remaining}</strong><small>本周期剩余</small></div>
+      </div>
+      <div className="usage-progress" aria-label={`已使用 ${progress}%`}><span style={{ width: `${progress}%` }} /></div>
+      <p className="usage-period">统计周期：{new Date(usage.period_start).toLocaleDateString("zh-CN")} – {new Date(usage.period_end).toLocaleDateString("zh-CN")} · 数据按 tenant 隔离</p>
+      {error ? <p className="usage-inline-error">{error}</p> : null}
     </section>
   );
 }

@@ -11,6 +11,24 @@ from fastapi import HTTPException, Request
 
 _hits: dict[str, deque[float]] = defaultdict(deque)
 _lock = Lock()
+DEFAULT_API_RATE_LIMIT_PER_MINUTE = 600
+
+
+def api_rate_limit_per_minute() -> int:
+    """Return the process-local baseline limit; edge infrastructure remains required."""
+    import os
+
+    raw = os.getenv("API_RATE_LIMIT_PER_MINUTE", str(DEFAULT_API_RATE_LIMIT_PER_MINUTE)).strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return DEFAULT_API_RATE_LIMIT_PER_MINUTE
+
+
+def reset_rate_limits() -> None:
+    """Clear in-process state for deterministic tests and local rehearsal."""
+    with _lock:
+        _hits.clear()
 
 
 def enforce_rate_limit(request: Request, *, bucket: str, limit: int, window_seconds: int = 60) -> None:
