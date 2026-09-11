@@ -1,5 +1,38 @@
 # Production deployment runbook
 
+## Current release facts
+
+This is the production source of truth for deployment facts. As of 2026-09-12,
+the target public frontend is `https://aetherislab.xyz` and the browser API base
+is `https://aetherislab.xyz/api`. The current P0 release candidate is `v3.7.3`;
+the release commit, image digests, ECS deployment time, migration result and
+readiness result must be written here after the release is actually performed.
+Until those fields are recorded from the target runtime, do not describe the
+candidate as deployed or production-ready.
+
+The production runtime is Aliyun ECS Docker/Compose. Local Docker Desktop is
+only a developer image-build/validation environment. A stopped local Docker
+Desktop is not a production incident and must not trigger production Docker
+configuration changes.
+
+The historical `ops/acr-build-v3.6` branch/workflow is retired. It checks out an
+old commit/IP and omits required frontend public build arguments. Do not reuse
+it. Use the canonical `.github/workflows/acr-build-paperforge.yml` or the
+equivalent `scripts/build_and_push_acr.ps1` runner.
+
+Before a frontend image can be published, the build log/configuration must show
+all three build-time arguments:
+
+```text
+NEXT_PUBLIC_API_BASE_URL=https://aetherislab.xyz/api
+NEXT_PUBLIC_PAPERFORGE_PREVIEW_AUTO_LOGIN=false
+NEXT_PUBLIC_PAPERFORGE_APP_ENV=production
+```
+
+The frontend image must be inspected for the production API URL and absence of
+`http://localhost:8000` before ECS pulls it. `docker-compose.prod.yml` consumes
+prebuilt images and intentionally does not inject `NEXT_PUBLIC_*` at runtime.
+
 This runbook deploys immutable images through `docker-compose.prod.yml`; it does not use local build context or `latest` as a release source.
 
 1. On the production host, check out the intended release runbook and create a protected environment file from `.env.production.example` outside Git.
@@ -16,6 +49,10 @@ The public edge must supply TLS, a public frontend domain, a backend API route, 
 
 The environment contract is intentionally split: PostgreSQL credentials (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`) construct the backend `DATABASE_URL` inside Compose; `JWT_SECRET_KEY`, `APP_ENV=production`, `AUTH_REQUIRED=true`, `CORS_ORIGINS`, and optional `DEEPSEEK_*` configure the backend. `PAPERFORGE_RELEASE_VERSION` must match the backend/frontend image tag and is applied as a label to all three services; `PAPERFORGE_*_IMAGE` must be immutable image references. `NEXT_PUBLIC_API_BASE_URL` is a frontend **build-time** contract, and `CORS_ORIGINS` is the matching runtime browser-origin allowlist. Local filesystem storage paths remain `/app/uploads`, `/app/outputs`, `/app/template_storage`, `/app/task_states`, and `/app/templates`, each mounted to a named volume.
 
+Repository documents may record secret names, purposes and whether they are
+required. They must never record secret values, AccessKeys, passwords, tokens,
+JWT secret material, private keys or other production credentials.
+
 ## File lifecycle maintenance
 
 Classification uploads are deleted immediately after classification. Task input uploads are retained for retry compatibility and output files referenced by `Artifact` rows are formal deliverables. Run `python scripts/cleanup_orphan_files.py` as a dry-run maintenance check; review candidates and use `--apply` only in an approved maintenance window. The default retention is 30 days and is configurable with `PAPERFORGE_RETENTION_DAYS`. The command never deletes files referenced by a Task or Artifact row.
@@ -25,7 +62,7 @@ Classification uploads are deleted immediately after classification. Task input 
 
 On backend startup, every persisted `running` task is treated as orphaned because the in-process worker cannot safely resume DOCX execution. It is transitioned to `interrupted`, with a `backend_restart` reason, detection timestamp, and the prior worker run identity. This is intentional: PaperForge currently has no verified checkpoint/resume semantics.
 
-SSE clients may reconnect with `Last-Event-ID`; the server authorizes the task against the selected tenant and replays only later tenant-scoped rows from `task_events`. Production operators must run the current Alembic head `0011_day13_usage_quota` before deploying the backend image; it includes the durable runtime migrations.
+SSE clients may reconnect with `Last-Event-ID`; the server authorizes the task against the selected tenant and replays only later tenant-scoped rows from `task_events`. Production operators must run the current Alembic head `0012_day17_token_version` before deploying the backend image; it includes the durable runtime and token-version migrations.
 
 # Day12 Security Baseline
 

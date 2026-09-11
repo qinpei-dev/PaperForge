@@ -1,5 +1,27 @@
 # TODO
 
+## [CURRENT] PaperForge P0 release remediation + repository-driven governance
+
+状态：**进行中；P0 代码和本地可执行验证已完成，生产发布门禁尚未闭环**。
+
+已完成：
+
+- frontend Dockerfile 保留 local fallback；canonical ACR script/workflow 在 build 阶段显式传入 `NEXT_PUBLIC_API_BASE_URL`、`NEXT_PUBLIC_PAPERFORGE_PREVIEW_AUTO_LOGIN=false`、`NEXT_PUBLIC_PAPERFORGE_APP_ENV=production`。
+- Next.js 从 `15.1.4` 升级到 `15.5.24`；兼容的 `postcss` / `nanoid` 传递依赖覆盖已通过官方 npm audit。
+- `AGENTS.md`、`AI_CONTEXT.md`、`PROJECT_STATUS.md`、本文件和 `docs/REPOSITORY_GOVERNANCE.md` 已建立仓库驱动开发规则；旧 `ops/acr-build-v3.6` workflow 已明确废弃。
+- frontend production build、backend pytest、产物 API URL/loopback 静态扫描已完成；Docker Desktop 未运行不作为 production blocker。
+
+发布门禁剩余项：
+
+1. 提交并推送同一 release commit；记录 commit SHA 与 Next 版本。
+2. 仅使用 `.github/workflows/acr-build-paperforge.yml` 或 `scripts/build_and_push_acr.ps1` 构建/推送 immutable backend/frontend images；记录 tag 与 digest，并再次确认 frontend image 包含三个生产 build args。
+3. 在 Aliyun ECS 上执行备份检查、Alembic `upgrade head`、`docker compose pull/up -d` 和 `/api/health`、`/api/ready`；不清数据库、不删除 volume、不重建生产数据。
+4. 以脱敏样本执行公开浏览器 full E2E、console/network/SSE 检查和 A/B tenant isolation；确认 A 无法访问 B 的 task、artifact、private template 或 SSE。
+5. 稳定运行后按 secret 名称逐项完成 JWT 及其他可访问 secret 的轮换，绝不把值写入仓库或报告。
+6. 将真实 release/deploy/readiness/image facts 回写 `PROJECT_STATUS.md`、`TODO.md`、`AI_CONTEXT.md`（如长期规则变化）和 `docs/PRODUCTION_DEPLOYMENT.md`，再提交/推送状态同步。
+
+P1/P2 继续项：localStorage bearer token、WAF/分布式限流/外部监控、worker restart recovery、复杂 DOCX 和 AI 内容审校深度属于 P1；checkpoint/resume、分布式队列、对象存储、企业 IAM、计费和更深内容 Agent 属于 P2，均不得抢占当前 P0 发布顺序。
+
 ## [DONE] PaperForge Landing Page — Product Homepage
 
 完成：基于 PaperForge Brand Visual System 实现真实用户首页，包含 Hero、PaperForge App Preview、Workflow、Verification Result 和 CTA。采用暖白背景、黑色文字、品牌蓝强调与产品窗口优先布局；不展示 Brand Guideline、Logo 介绍、字体说明或品牌理念。
@@ -286,9 +308,9 @@
 
 当前限制：事件不落库，进程重启会丢失事件历史；跨实例部署未提供共享事件总线；终态历史会按 TTL / 上限删除；前端仅在 SSE 不可用时使用轮询 fallback。
 
-## [CURRENT] PaperForge Release Freeze
+## [HISTORICAL — SUPERSEDED] PaperForge Release Freeze
 
-当前公开版本：`v2.0-paperforge`。本轮仅进行公开包装、文档治理和低风险展示文案调整，不改变主链路。
+该 Release Freeze 属于旧的 `v2.0-paperforge` 阶段；当前工作以本文顶部的 P0 release remediation 条目为准。以下限制和历史记录保留用于追溯，不得覆盖当前生产发布门禁。
 
 仅允许：
 

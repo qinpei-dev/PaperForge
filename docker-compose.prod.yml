@@ -4,7 +4,7 @@ services:
   postgres:
     image: ${PAPERFORGE_POSTGRES_IMAGE:-postgres:16.4-alpine}
     labels:
-      com.paperforge.release: ${PAPERFORGE_RELEASE_VERSION:?Set PAPERFORGE_RELEASE_VERSION, for example v3.7.2}
+      com.paperforge.release: ${PAPERFORGE_RELEASE_VERSION:?Set PAPERFORGE_RELEASE_VERSION, for example v3.7.3}
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in the production environment}
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in the production environment}
@@ -20,9 +20,9 @@ services:
     networks: [paperforge-internal]
 
   backend:
-    image: ${PAPERFORGE_BACKEND_IMAGE:?Set an immutable backend image, for example registry/paperforge-backend:v3.7.2}
+    image: ${PAPERFORGE_BACKEND_IMAGE:?Set an immutable backend image, for example registry/paperforge-backend:v3.7.3}
     labels:
-      com.paperforge.release: ${PAPERFORGE_RELEASE_VERSION:?Set PAPERFORGE_RELEASE_VERSION, for example v3.7.2}
+      com.paperforge.release: ${PAPERFORGE_RELEASE_VERSION:?Set PAPERFORGE_RELEASE_VERSION, for example v3.7.3}
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in the production environment}
@@ -68,9 +68,11 @@ services:
     networks: [paperforge-internal]
 
   frontend:
-    image: ${PAPERFORGE_FRONTEND_IMAGE:?Set an immutable frontend image, for example registry/paperforge-frontend:v3.7.2}
+    # This service consumes a prebuilt image. NEXT_PUBLIC_* values belong to the
+    # frontend build stage and must not be treated as runtime configuration here.
+    image: ${PAPERFORGE_FRONTEND_IMAGE:?Set an immutable frontend image, for example registry/paperforge-frontend:v3.7.3}
     labels:
-      com.paperforge.release: ${PAPERFORGE_RELEASE_VERSION:?Set PAPERFORGE_RELEASE_VERSION, for example v3.7.2}
+      com.paperforge.release: ${PAPERFORGE_RELEASE_VERSION:?Set PAPERFORGE_RELEASE_VERSION, for example v3.7.3}
     depends_on:
       backend:
         condition: service_healthy

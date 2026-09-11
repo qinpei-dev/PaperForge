@@ -8,7 +8,7 @@
 
 PaperForge is a verified AI agent that transforms academic DOCX documents through **planning, execution, verification, and evidence reporting**. AI can assist with analysis and suggestions, but it is not treated as proof that a document was changed correctly: deterministic rules execute supported low-risk changes, the result is re-read, and every outcome remains traceable for human review.
 
-**Explore:** [30-second demo](docs/DEMO_GUIDE.md) · [Architecture](docs/ARCHITECTURE_OVERVIEW.md) · [Limitations](docs/LIMITATIONS.md)
+**Explore:** [30-second demo](docs/DEMO_GUIDE.md) · [Architecture](docs/ARCHITECTURE_OVERVIEW.md) · [Limitations](docs/LIMITATIONS.md) · [Repository governance](docs/REPOSITORY_GOVERNANCE.md)
 
 **Engineering focus:** Verified Agent Loop · Deterministic Execution · LLM Optional · Human-in-the-loop · Evidence & Trace
 
@@ -142,7 +142,7 @@ PaperForge is not a general Word automation system, a paper-writing tool, or an 
 - Expand safe, evidence-backed document checks before widening automated modifications.
 - Improve content-review quality while retaining policy gates, verification, and human confirmation.
 
-The project is currently in V2 Release Freeze; roadmap work does not imply that the listed capabilities are available today.
+The repository is currently in P0 release remediation and production validation; roadmap work does not imply that the listed capabilities are available today. Production deployment facts live in [the production runbook](docs/PRODUCTION_DEPLOYMENT.md), not in chat history.
 
 ## Quick start
 

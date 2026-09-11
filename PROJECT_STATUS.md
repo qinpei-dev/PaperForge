@@ -1,5 +1,17 @@
 # 项目状态
 
+## 当前权威状态（2026-09-12）
+
+- 项目：**PaperForge — Verified Academic Document Agent**；当前阶段：**P0 修复与生产发布闭环**。
+- Production 目标：前端 `https://aetherislab.xyz`；浏览器 API：`https://aetherislab.xyz/api`。真实 ECS runtime 版本、运行镜像 digest、migration/readiness 和最终部署时间必须在发布完成后回写本文件与 `docs/PRODUCTION_DEPLOYMENT.md`。
+- Release candidate：`v3.7.3`；本次源码目标为当前 `main` 的 P0 修复提交。最终 release commit SHA 以 Git history 为准，不能由聊天记录推断。
+- P0 源码状态：frontend Docker build 已保留 local loopback fallback，并要求生产 CI 显式传递三个 `NEXT_PUBLIC_*` build args；Next.js 已升级到 `15.5.24`，兼容传递依赖审计为 0 vulnerabilities。
+- 本地验证：frontend production `npm run build` **PASS**；backend 从 `paper-ai/backend` 执行 `pytest -q` 为 **107 passed**；`.next/server` 与 `.next/static` 未发现 `http://localhost:8000` 或 `http://127.0.0.1:8000`，并发现生产 API URL。Docker image build 尚未在本机执行；这只代表 local build 环境状态，不代表 production Docker 故障。
+- 发布状态：新的 canonical ACR pipeline 已加入；旧 `ops/acr-build-v3.6` workflow 已标记废弃，不得使用。ACR image tag/digest、ECS migration/deploy、`/api/health`、`/api/ready`、公开浏览器 E2E、A/B tenant isolation 和 secret rotation 尚待本轮发布闭环完成。
+- 当前 P1：localStorage bearer token 的 XSS 暴露面、单进程限流/缺少 WAF 与外部监控、单进程 worker 重启后 `interrupted`、复杂 DOCX/AI 内容审校深度仍需后续治理；不得把这些未完成项伪装成 P0 已完成。
+- 当前 P2：checkpoint/resume、分布式队列/多副本调度、对象存储、企业 SSO/SCIM、计费与更深的内容 Agent 仍不在本次 P0 发布范围。
+- 事实冲突处理：先核实 source code、Git、ECS/Compose、health/readiness 和浏览器行为，再更新仓库文档；聊天仅为临时上下文。
+
 项目名称：**PaperForge**
 
 正式定位：**Verified Academic Document Agent**

@@ -4,6 +4,19 @@
 
 当前 Agent 更接近“格式 Agent”：格式修复能力已经可用，内容级修改能力仍然偏弱。最近真实性审计显示，local 模式会真实修改 Word 格式、标题、行距、缩进、字体和部分标签；AI 模式目前主要做少量词语级替换，还不是深度论文润色。
 
+## 当前仓库驱动开发状态（2026-09-12）
+
+PaperForge 已正式采用 Repository-Driven Development。聊天记录只是临时上下文；长期状态、交接和生产事实必须以仓库文件和真实运行环境为准。完整规则见 [`AGENTS.md`](AGENTS.md) 与 [`docs/REPOSITORY_GOVERNANCE.md`](docs/REPOSITORY_GOVERNANCE.md)。
+
+- 当前阶段：P0 修复与生产发布闭环；当前工作树正在准备 `v3.7.3` release candidate。
+- Production 目标：前端 `https://aetherislab.xyz`，浏览器 API base `https://aetherislab.xyz/api`；真实 ECS 运行状态、镜像 digest 和最终发布 commit 以 `PROJECT_STATUS.md` 与 `docs/PRODUCTION_DEPLOYMENT.md` 的最新记录为准。
+- 当前 P0：修复 frontend production build args，Next.js 升级到 15.5.24，完成 ACR immutable image、ECS migration/deploy/readiness、公开浏览器 E2E 与 tenant isolation 验证，并完成 secret rotation。
+- 前端生产构建必须显式传入 `NEXT_PUBLIC_API_BASE_URL`、`NEXT_PUBLIC_PAPERFORGE_PREVIEW_AUTO_LOGIN=false`、`NEXT_PUBLIC_PAPERFORGE_APP_ENV=production`；Compose production 只消费预构建 image，不在运行时注入这些 Next public 变量。
+- 本机 Docker Desktop 只用于 local image build/validation；Aliyun ECS Docker/Compose 才是 production runtime。Docker Desktop 未运行不是 production 故障，不得因此修改 production Docker 配置。
+- 历史 `ops/acr-build-v3.6` / `acr-build-v3.6.yml` 已废弃；它指向旧 commit/IP 且缺少完整 frontend build args。当前只使用 `.github/workflows/acr-build-paperforge.yml` 或等价的 `scripts/build_and_push_acr.ps1`。
+
+Secret 只允许在仓库记录名称、用途和是否 required，绝不记录实际值、AccessKey、password、token、JWT secret 或私钥。
+
 # 当前功能
 
 已经实现：

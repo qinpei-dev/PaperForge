@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { apiUrl } from "../../lib/api-client";
 import { userFacingError } from "../../lib/error-messages";
 
 type TaskStats = { total: number; status_summary: Record<string, number> };
@@ -21,7 +22,6 @@ type AdminStats = {
   };
 };
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 const STATUS_LABEL: Record<string, string> = {
   pending: "等待处理",
   running: "处理中",
@@ -34,10 +34,6 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: "已取消",
   interrupted: "已中断",
 };
-
-function apiUrl(path: string) {
-  return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
-}
 
 function adminHeaders(): Record<string, string> {
   const token = typeof window === "undefined" ? "" : localStorage.getItem("paperforge_token") || "";

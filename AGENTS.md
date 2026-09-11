@@ -7,15 +7,35 @@
 
 ---
 
-## 启动流程
+## Repository-Driven Development
 
-每次开始新任务前，必须先阅读：
+PaperForge 从本轮开始采用 **Repository-Driven Development（仓库驱动开发）**。
+聊天记录只是临时工作上下文，不是项目长期状态的 Source of Truth。任何 Agent
+都必须以仓库事实为准，并在阶段性工作结束时回写仓库。
 
-* AI_CONTEXT.md
-* PROJECT_STATUS.md
-* TODO.md
+### Source of Truth
 
-阅读完成后，先总结：
+* Source code = 系统实现事实
+* `PROJECT_STATUS.md` = 当前项目状态事实
+* `TODO.md` = 下一步工作事实
+* `docs/PRODUCTION_DEPLOYMENT.md` = 生产部署事实
+* Git history = 项目历史事实
+* Chat conversation = 临时工作上下文，不是长期 Source of Truth
+
+聊天内容与仓库或运行环境冲突时，先核实真实代码、Git、部署和运行状态，再更新仓库文档。
+
+## Agent 开工规则
+
+任何 Agent 开始较大任务前，必须按以下顺序读取：
+
+1. `AI_CONTEXT.md`
+2. `PROJECT_STATUS.md`
+3. `TODO.md`
+4. 涉及部署/生产时读取 `docs/PRODUCTION_DEPLOYMENT.md`
+5. 读取最近 `git log` 和当前 `HEAD` / 工作树状态
+6. 读取与当前任务直接相关的设计、安全或 Release 文档
+
+读取完成后，先总结：
 
 1. 当前项目名称
 2. 当前项目阶段
@@ -24,6 +44,25 @@
 5. 当前开发规则
 
 不要直接修改代码。
+
+## Agent 收工规则
+
+阶段性任务完成后，在 commit / push 前必须同步：
+
+* 项目真实状态发生变化 → 更新 `PROJECT_STATUS.md`
+* 待办发生变化 → 更新 `TODO.md`
+* 部署/生产环境发生变化 → 更新 `docs/PRODUCTION_DEPLOYMENT.md`
+* 架构或长期开发规则发生变化 → 更新 `AI_CONTEXT.md` 及必要的治理文档
+
+禁止出现“代码或生产环境已经进入新阶段，但仓库状态文档仍停留在旧阶段”。
+
+仓库中的旧 `ops/acr-build-v3.6` / `acr-build-v3.6.yml` 只保留为历史记录，已废弃，
+不得用于当前或未来 PaperForge 生产发布；当前发布必须使用仓库标记的 canonical ACR pipeline。
+
+## Secret Rule
+
+仓库文档只能记录 Secret 名称、用途和是否 required。禁止写入 JWT secret 实际值、
+AccessKey、password、token、私钥或任何生产凭据。
 
 ---
 

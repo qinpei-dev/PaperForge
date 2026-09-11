@@ -1,6 +1,6 @@
 # PaperForge documentation
 
-PaperForge is currently a **V2 Release Freeze** project. The public product name is **PaperForge — Verified Academic Document Agent**. Older names and version numbers are retained only where they are necessary to preserve historical development records.
+PaperForge is currently in **P0 release remediation and production validation**. The public product name is **PaperForge — Verified Academic Document Agent**. Older names and version numbers are retained only where they are necessary to preserve historical development records; see `PROJECT_STATUS.md` and the production runbook for current facts.
 
 ## Start here
 
@@ -10,6 +10,7 @@ PaperForge is currently a **V2 Release Freeze** project. The public product name
 - [Limitations](LIMITATIONS.md) — supported boundaries, non-goals, and review expectations.
 - [GitHub presentation guide](GITHUB_PRESENTATION.md) — repository metadata, pinned-repository, and interview-entry recommendations.
 - [Release review checklist](RELEASE_REVIEW_CHECKLIST.md) — pre-release technical, documentation, demo, and interview checks.
+- [Repository governance](REPOSITORY_GOVERNANCE.md) — source-of-truth, agent handoff, secret, and release workflow rules.
 - [Risk level system](RISK_LEVEL_SYSTEM.md) — how low-risk, warning, and human-review work is handled.
 - [Agent Trace](AGENT_TRACE.md) — the explainability fields exposed by the runtime.
 - [Docker deployment](DOCKER_DEPLOYMENT.md) — local container startup and environment configuration.
