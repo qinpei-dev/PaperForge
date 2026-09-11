@@ -4,11 +4,14 @@
 
 This is the production source of truth for deployment facts. As of 2026-09-12,
 the target public frontend is `https://aetherislab.xyz` and the browser API base
-is `https://aetherislab.xyz/api`. The current P0 release candidate is `v3.7.3`;
-the release commit, image digests, ECS deployment time, migration result and
-readiness result must be written here after the release is actually performed.
-Until those fields are recorded from the target runtime, do not describe the
-candidate as deployed or production-ready.
+is `https://aetherislab.xyz/api`. The current P0 release candidate is `v3.7.3`,
+with release commit `729fe2f19864a7e80dc590084e0d0becdb04fe71`. The canonical ACR
+run reached the login step but was rejected by the current repository ACR secret;
+no application image was built or pushed and no ECS change was made. Image
+digests, ECS deployment time, migration result and readiness result must be
+written here only after the release is actually performed. Until those fields
+are recorded from the target runtime, do not describe the candidate as deployed
+or production-ready.
 
 The production runtime is Aliyun ECS Docker/Compose. Local Docker Desktop is
 only a developer image-build/validation environment. A stopped local Docker

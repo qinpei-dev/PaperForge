@@ -14,7 +14,7 @@
 发布门禁剩余项：
 
 1. 提交并推送同一 release commit；记录 commit SHA 与 Next 版本。
-2. 仅使用 `.github/workflows/acr-build-paperforge.yml` 或 `scripts/build_and_push_acr.ps1` 构建/推送 immutable backend/frontend images；记录 tag 与 digest，并再次确认 frontend image 包含三个生产 build args。
+2. 先通过安全 secret 管理修复/轮换 repository ACR credentials（只涉及 `ACR_USERNAME`、`ACR_PASSWORD` 名称，不写入值），再从 release commit `729fe2f19864a7e80dc590084e0d0becdb04fe71` 仅使用 `.github/workflows/acr-build-paperforge.yml` 或 `scripts/build_and_push_acr.ps1` 构建/推送 immutable backend/frontend images；记录 tag 与 digest，并再次确认 frontend image 包含三个生产 build args。当前 canonical run 已在 login 阶段失败，未产生 image。
 3. 在 Aliyun ECS 上执行备份检查、Alembic `upgrade head`、`docker compose pull/up -d` 和 `/api/health`、`/api/ready`；不清数据库、不删除 volume、不重建生产数据。
 4. 以脱敏样本执行公开浏览器 full E2E、console/network/SSE 检查和 A/B tenant isolation；确认 A 无法访问 B 的 task、artifact、private template 或 SSE。
 5. 稳定运行后按 secret 名称逐项完成 JWT 及其他可访问 secret 的轮换，绝不把值写入仓库或报告。
