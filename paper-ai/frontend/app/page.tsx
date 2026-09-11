@@ -722,48 +722,45 @@ export default function Home() {
                 </>}
               </nav>
               <p className="eyebrow">PaperForge</p>
-              <h1>Verified Academic Document Agent</h1>
-              <p className="hero-lead">面向 DOCX 学术文档的可信智能处理系统。通过规则检测、计划执行、局部修改、重读验证、风险控制和人工确认，建立可追踪的文档处理闭环。</p>
-              <div className="hero-badges" aria-label="当前能力">
-                <span>Verified Execution</span>
-                <span>Human-in-the-Loop</span>
-                <span>Provenance</span>
+              <h1>AI论文智能处理平台</h1>
+              <p className="hero-lead">上传论文与格式模板，自动完成分析、修改、验证和报告生成。</p>
+              <div className="hero-actions">
+                <a className="hero-cta" href="#start-processing">开始处理</a>
+                <Link className="hero-secondary-cta" href={authUser ? "/dashboard" : "/login"}>{authUser ? "进入工作台" : "登录"}</Link>
               </div>
-              <div className="capability-grid" aria-label="核心能力">
-                <div>
-                  <strong>可信执行</strong>
-                  <span>按 paragraph / section locator 执行局部修改，并重新读取输出 DOCX 验证实际结果。</span>
-                </div>
-                <div>
-                  <strong>风险感知内容审查</strong>
-                  <span>自动修正、安全建议和高风险人工确认采用不同执行策略。</span>
-                </div>
-                <div>
-                  <strong>证据与溯源</strong>
-                  <span>记录 before / expected / after、verification、provenance 与 pending actions。</span>
-                </div>
-              </div>
+              <p className="hero-meta">DOCX · Template Intelligence · Verified workflow</p>
             </div>
 
-            <div className="hero-visual" aria-label="演示仪表盘预览">
-              <div className="hero-visual-head">
-                <span>Live Dashboard</span>
-                <strong>{result ? `${result.before_score} -> ${result.after_score}` : "80 -> 86"}</strong>
+            <div className="hero-capabilities" aria-label="PaperForge V4 能力">
+              <div className="hero-capabilities-heading">
+                <span>V4 WORKSPACE</span>
+                <strong>从上传到验证</strong>
               </div>
-              <div className="hero-score-line">
-                <span>格式规则分</span>
-                <b>{result?.score_breakdown.format_score ?? result?.score_breakdown.local_score ?? 86}</b>
-              </div>
-              <div className="hero-metric-grid">
-                <span>报告</span>
-                <span>Trace</span>
-                <span>预览</span>
-              </div>
-              <ol>
-                <li>识别文档类型</li>
-                <li>模板规则匹配</li>
-                <li>生成修改报告</li>
-              </ol>
+              <article className="hero-capability-card">
+                <div className="hero-capability-index">01</div>
+                <div>
+                  <span className="hero-capability-label">Template Intelligence</span>
+                  <h2>让模板成为规则</h2>
+                  <p>解析模板并提取格式规则，为后续处理提供稳定约束。</p>
+                  <div className="hero-capability-tags"><span>模板解析</span><span>格式规则提取</span></div>
+                </div>
+              </article>
+              <article className="hero-capability-card">
+                <div className="hero-capability-index">02</div>
+                <div>
+                  <span className="hero-capability-label">Agent Workflow</span>
+                  <h2>每一步都可验证</h2>
+                  <div className="workflow-steps" aria-label="Agent Workflow"><span>Plan</span><i>→</i><span>Execute</span><i>→</i><span>Verify</span></div>
+                </div>
+              </article>
+              <article className="hero-capability-card">
+                <div className="hero-capability-index">03</div>
+                <div>
+                  <span className="hero-capability-label">Evidence-based Review</span>
+                  <h2>结果有据可查</h2>
+                  <div className="hero-capability-tags"><span>Trace</span><span>Report</span><span>Artifact</span></div>
+                </div>
+              </article>
             </div>
           </header>
 
@@ -781,7 +778,7 @@ export default function Home() {
           </section> : null}
           {authUser && (membership?.role === "owner" || membership?.role === "admin") ? <section className="governance-panel"><div className="section-title"><span>Audit Log</span><strong>{auditEvents.length} 条</strong></div><div className="invitation-list">{auditEvents.map((item) => <div className="member-row" key={item.id}><span>{item.event_type}</span><b>{new Date(item.created_at).toLocaleString()}</b></div>)}</div></section> : null}
 
-          <section className="setup-panel" aria-label="上传与运行">
+          <section className="setup-panel" id="start-processing" aria-label="上传与运行">
             <div className="section-title">
               <span>开始处理</span>
               <strong>{paperFilename ? "论文已选择" : "等待上传"}</strong>
@@ -825,7 +822,7 @@ export default function Home() {
 
             <div className="action-row">
               <button className="agent-button" disabled={buttonDisabled} onClick={runAgent}>
-                {running ? "正在处理并验证..." : result ? "重新运行 PaperForge" : "开始处理文档"}
+                {running ? "正在处理并验证..." : result ? "再次处理" : "开始处理"}
               </button>
               {result ? (
                 <button className="secondary-button" disabled={previewLoading} onClick={() => loadPreview(result.filename)}>
@@ -1109,7 +1106,7 @@ function TracePanel({ result }: { result: AgentResult }) {
             <span>agent_trace_detail</span>
             <strong>详细执行说明</strong>
           </div>
-          <p>以下为后端返回的旧解释型 trace 明细，仅用于排查和演示说明；字段缺失时以前面的步骤流为准。</p>
+          <p>以下为本次任务返回的补充执行证据；字段缺失时以前面的步骤流为准。</p>
           <pre className="trace-detail-json">{formatTraceDetail(traceDetail)}</pre>
         </div>
       ) : null}
