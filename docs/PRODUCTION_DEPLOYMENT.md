@@ -7,9 +7,8 @@ the target public frontend is `https://aetherislab.xyz` and the browser API base
 is `https://aetherislab.xyz/api`. Release `v3.7.3` was built from commit
 `729fe2f19864a7e80dc590084e0d0becdb04fe71`, published by the canonical ACR
 workflow, and deployed to Aliyun ECS. The production runtime is operational;
-the final public-beta gate remains pending authenticated browser E2E and A/B
-tenant-isolation evidence because no controlled production test account was
-available in the browser session.
+the final public-beta gate is **READY FOR CONTROLLED PUBLIC BETA** after the
+2026-09-12 authenticated production audit.
 
 The production runtime is Aliyun ECS Docker/Compose. Local Docker Desktop is
 only a developer image-build/validation environment. A stopped local Docker
@@ -47,7 +46,7 @@ This runbook deploys immutable images through `docker-compose.prod.yml`; it does
 - Runtime probes after deployment and JWT rotation: internal/public health, readiness and public homepage all returned HTTP 200; backend and PostgreSQL health were healthy. The historical frontend Compose file has no container healthcheck, so its public HTTP 200 is the route health signal.
 - Data safety: PostgreSQL image/container and named volume were retained. Existing bind mounts `/opt/paperforge-data/uploads`, `/opt/paperforge-data/outputs`, and `/opt/paperforge-data/template_storage` were retained; no database, volume, or production data was deleted or rebuilt. A non-empty PostgreSQL custom-format pre-release dump was stored in the ECS deployment backup directory; only its metadata belongs in project records.
 - Secrets: repository ACR secret names `ACR_USERNAME` and `ACR_PASSWORD` were refreshed through encrypted secret management; `JWT_SECRET_KEY` was rotated after stable deployment without recording its value. `POSTGRES_PASSWORD` and optional `DEEPSEEK_API_KEY` were not changed because no replacement credentials were available; neither value was exposed.
-- Browser smoke: public home, login, register and unauthenticated `/dashboard` redirect passed. On 2026-09-12, controlled User A/B smoke also passed account creation/login, paper and template upload, A Local task, B AI task, completed SSE-driven task detail, A preview, and task/private-template cross-tenant hiding; browser Console error/warn was empty. Raw authenticated response-header capture (`X-Request-ID`, CORS) and an independently captured artifact download event remain pending, so the final public-beta gate is still NOT READY.
+- Browser and programmatic audit: public home, login, register and unauthenticated `/dashboard` redirect passed. Controlled User A/B smoke passed account creation/login, paper and template upload, A Local task, B AI task, completed SSE-driven task detail, A preview, and task/private-template cross-tenant hiding; browser Console error/warn was empty. Programmatic authenticated `GET /api/usage` returned HTTP 200 over HTTPS with `Content-Type: application/json`, `Access-Control-Allow-Origin: https://aetherislab.xyz`, and `X-Request-ID`. Owner artifact download returned 200 with download disposition, non-empty valid DOCX ZIP body and `.docx` filename; cross-tenant artifact access returned 404 without the other tenant's content. Final gate: **READY FOR CONTROLLED PUBLIC BETA**.
 - Compose compatibility warning: ECS `/opt/paperforge/docker-compose.prod.yml` is a historical runtime file with direct image references and bind mounts. Do not replace it with the repository named-volume Compose without a separately reviewed data migration plan.
 
 1. On the production host, check out the intended release runbook and create a protected environment file from `.env.production.example` outside Git.

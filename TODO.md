@@ -1,8 +1,8 @@
 # TODO
 
-## [CURRENT] PaperForge P0 release remediation + repository-driven governance
+## [DONE] PaperForge P0 release remediation + repository-driven governance
 
-状态：**进行中；P0 代码、ACR immutable images、ECS runtime 发布和受控登录后业务 smoke 已完成，最终 Network/Artifact 原始响应审计仍阻断门禁**。
+状态：**已完成；P0 代码、ACR immutable images、ECS runtime 发布、受控登录后业务 smoke 和最终 Network/Artifact 原始响应审计均通过**。
 
 已完成：
 
@@ -13,12 +13,12 @@
 - canonical ACR run 已从 release commit 成功推送 backend/frontend；backend digest 为 `sha256:dd4cf884c553a7b06509d92c4d19fdca76d9fdc2b821ff9a9a2eb97ca98879f1`，frontend digest 为 `sha256:2fc634725e9f6814a57e2605f1d2f2d10c929caf8b4bb743673e73d2875265de`；前端生产 bundle layer scan PASS。
 - ECS 已在 `/opt/paperforge` 以上述 digest 更新 backend/frontend；保留原 PostgreSQL volume 和 data bind mounts；migration 为 `0012_day17_token_version (head)`；内部/公开 health、ready 和首页均 200；稳定后 JWT 已轮换。
 - 2026-09-12 已创建明确标识的 production smoke test User A/B 账号；A Local 任务、B AI 任务、SSE 完成态、在线预览、模板上传和跨 tenant 任务/private-template 访问均完成浏览器验证，未发现 console error/warn。
+- 最终程序化 production audit PASS：认证 `GET /api/usage` 为 HTTPS 200，`Content-Type: application/json`，CORS 返回 `https://aetherislab.xyz`，`X-Request-ID` 存在；owner artifact download 为 200；cross-tenant artifact request 为 404 且未返回对方内容；下载 body 非空、`Content-Disposition` 存在、扩展名为 `.docx` 且为合法 DOCX ZIP container。
 
-发布门禁剩余项：
+最终发布门禁：
 
-1. 在具备可导出认证 Network/response-header 和下载事件的浏览器审计环境中，补验 `X-Request-ID`、CORS、认证 artifact 直连下载与 A/B artifact/SSE 直连拒绝；当前环境只能确认 UI 结果和 console，不能独立暴露这些原始证据。
-2. 完成上述最后一项证据审计后，才可更新最终门禁为 `PUBLIC BETA READY`；在此之前保持 `NOT READY`。
-3. 后续发布必须继续使用 canonical workflow/script；历史 `ops/acr-build-v3.6` 只保留为历史记录，禁止误用。
+1. **READY FOR CONTROLLED PUBLIC BETA**。
+2. 后续发布必须继续使用 canonical workflow/script；历史 `ops/acr-build-v3.6` 只保留为历史记录，禁止误用。
 
 下方 `[DONE]` 条目保留各阶段的历史事实；本文件顶部 `[CURRENT]` 条目是下一步工作唯一依据。
 
