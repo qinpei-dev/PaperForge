@@ -8,15 +8,17 @@
 
 PaperForge 已正式采用 Repository-Driven Development。聊天记录只是临时上下文；长期状态、交接和生产事实必须以仓库文件和真实运行环境为准。完整规则见 [`AGENTS.md`](AGENTS.md) 与 [`docs/REPOSITORY_GOVERNANCE.md`](docs/REPOSITORY_GOVERNANCE.md)。
 
-- 当前阶段：P0 修复与生产发布闭环；release candidate `v3.7.3` 已提交为 `729fe2f19864a7e80dc590084e0d0becdb04fe71`。
-- Production 目标：前端 `https://aetherislab.xyz`，浏览器 API base `https://aetherislab.xyz/api`；真实 ECS 运行状态、镜像 digest 和最终发布 commit 以 `PROJECT_STATUS.md` 与 `docs/PRODUCTION_DEPLOYMENT.md` 的最新记录为准。
-- 当前 P0：修复 frontend production build args，Next.js 升级到 15.5.24，完成 ACR immutable image、ECS migration/deploy/readiness、公开浏览器 E2E 与 tenant isolation 验证，并完成 secret rotation。
+- 当前阶段：P0 源码、ACR 镜像和 ECS production runtime 已发布；公开 beta 最终验收仍等待受控的登录后浏览器 E2E 与 A/B tenant isolation。
+- Production：前端 `https://aetherislab.xyz`，浏览器 API base `https://aetherislab.xyz/api`；release candidate `v3.7.3` 从 commit `729fe2f19864a7e80dc590084e0d0becdb04fe71` 构建并已部署。真实 ECS 运行状态、镜像 digest 和最终发布事实以 `PROJECT_STATUS.md` 与 `docs/PRODUCTION_DEPLOYMENT.md` 的最新记录为准。
+- 当前 P0：源码、frontend production build args、Next.js 15.5.24、ACR immutable image、ECS migration/deploy/readiness 和 JWT rotation 已完成；受控登录后 upload/template/local/ai/preview/download/SSE 与 A/B tenant isolation 尚待有授权测试账号的浏览器验收。
 - 前端生产构建必须显式传入 `NEXT_PUBLIC_API_BASE_URL`、`NEXT_PUBLIC_PAPERFORGE_PREVIEW_AUTO_LOGIN=false`、`NEXT_PUBLIC_PAPERFORGE_APP_ENV=production`；Compose production 只消费预构建 image，不在运行时注入这些 Next public 变量。
 - 本机 Docker Desktop 只用于 local image build/validation；Aliyun ECS Docker/Compose 才是 production runtime。Docker Desktop 未运行不是 production 故障，不得因此修改 production Docker 配置。
 - 历史 `ops/acr-build-v3.6` / `acr-build-v3.6.yml` 已废弃；它指向旧 commit/IP 且缺少完整 frontend build args。当前只使用 `.github/workflows/acr-build-paperforge.yml` 或等价的 `scripts/build_and_push_acr.ps1`。
-- canonical ACR run 已绑定上述 commit，但在 ACR login 阶段因现有 repository secret 被 registry 拒绝而停止；没有 image build/push，也没有 ECS 变更。修复 ACR secret 后必须从该精确 commit 重新运行并记录 digest。
+- canonical ACR run 已从上述 commit 成功构建并推送 backend/frontend；release digest、ECS deployment、migration、health/readiness、JWT rotation 和浏览器公开 smoke 结果已写入 `PROJECT_STATUS.md` 与 `docs/PRODUCTION_DEPLOYMENT.md`。首次 login 失败的历史 run 不代表当前发布状态；后续发布仍必须从精确 release commit 运行 canonical pipeline。
 
 Secret 只允许在仓库记录名称、用途和是否 required，绝不记录实际值、AccessKey、password、token、JWT secret 或私钥。
+
+下方 Day/版本段落是历史里程碑记录；如与上方当前状态或真实 ECS 检查冲突，以上方当前状态和生产 runbook 为准。
 
 # 当前功能
 
@@ -329,7 +331,7 @@ paper-ai/
 # Day16-P0 Production Release Closure
 
 - 当前 `main` 与 `origin/main` 的 HEAD 均为 `3bce4e0`；Day13-Day15 变更仍在未提交工作树，release 前必须统一审阅并 commit。
-- 生产 Compose release version 通过 `PAPERFORGE_RELEASE_VERSION` 标记 backend/frontend/postgres；Alembic production head 为 `0011_day13_usage_quota`。
+- 在该历史里程碑时，生产 Compose release version 通过 `PAPERFORGE_RELEASE_VERSION` 标记 backend/frontend/postgres；当时 Alembic production head 为 `0011_day13_usage_quota`。当前生产 head 已为 `0012_day17_token_version`，详见上方当前状态。
 - Task Detail 支持 verification summary、认证 artifact download、DOCX preview、failed/interrupted 说明和 retry；旧任务缺少新 result metadata 时安全降级。
 - 分类上传临时文件会在请求结束删除；`scripts/cleanup_orphan_files.py` 默认 dry-run，`--apply` 才执行删除，且保护 Task/Artifact 引用文件。保留期由 `PAPERFORGE_RETENTION_DAYS` 配置。
-- `deploy/nginx/paperforge.conf` 仅提供可复现 public-edge 配置，不代表已经部署；真实 TLS、registry、备份恢复、WAF 和生产 smoke 仍待目标环境验收。
+- `deploy/nginx/paperforge.conf` 仍是可复现 public-edge 配置示例；本轮真实 ECS TLS/registry pull/备份/migration/health-readiness 已验收，WAF 外部能力与登录后业务/tenant browser E2E 仍需单独验证。

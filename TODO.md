@@ -2,7 +2,7 @@
 
 ## [CURRENT] PaperForge P0 release remediation + repository-driven governance
 
-状态：**进行中；P0 代码和本地可执行验证已完成，生产发布门禁尚未闭环**。
+状态：**进行中；P0 代码、ACR immutable images、ECS runtime 发布和公开 smoke 已完成，最终登录后 E2E / tenant isolation 门禁待受控账号**。
 
 已完成：
 
@@ -10,15 +10,17 @@
 - Next.js 从 `15.1.4` 升级到 `15.5.24`；兼容的 `postcss` / `nanoid` 传递依赖覆盖已通过官方 npm audit。
 - `AGENTS.md`、`AI_CONTEXT.md`、`PROJECT_STATUS.md`、本文件和 `docs/REPOSITORY_GOVERNANCE.md` 已建立仓库驱动开发规则；旧 `ops/acr-build-v3.6` workflow 已明确废弃。
 - frontend production build、backend pytest、产物 API URL/loopback 静态扫描已完成；Docker Desktop 未运行不作为 production blocker。
+- canonical ACR run 已从 release commit 成功推送 backend/frontend；backend digest 为 `sha256:dd4cf884c553a7b06509d92c4d19fdca76d9fdc2b821ff9a9a2eb97ca98879f1`，frontend digest 为 `sha256:2fc634725e9f6814a57e2605f1d2f2d10c929caf8b4bb743673e73d2875265de`；前端生产 bundle layer scan PASS。
+- ECS 已在 `/opt/paperforge` 以上述 digest 更新 backend/frontend；保留原 PostgreSQL volume 和 data bind mounts；migration 为 `0012_day17_token_version (head)`；内部/公开 health、ready 和首页均 200；稳定后 JWT 已轮换。
+- 部署后浏览器公开 smoke PASS：首页、登录、注册、未登录 `/dashboard` 路由守卫；当前没有受控生产账号，未自动创建账号。
 
 发布门禁剩余项：
 
-1. 提交并推送同一 release commit；记录 commit SHA 与 Next 版本。
-2. 先通过安全 secret 管理修复/轮换 repository ACR credentials（只涉及 `ACR_USERNAME`、`ACR_PASSWORD` 名称，不写入值），再从 release commit `729fe2f19864a7e80dc590084e0d0becdb04fe71` 仅使用 `.github/workflows/acr-build-paperforge.yml` 或 `scripts/build_and_push_acr.ps1` 构建/推送 immutable backend/frontend images；记录 tag 与 digest，并再次确认 frontend image 包含三个生产 build args。当前 canonical run 已在 login 阶段失败，未产生 image。
-3. 在 Aliyun ECS 上执行备份检查、Alembic `upgrade head`、`docker compose pull/up -d` 和 `/api/health`、`/api/ready`；不清数据库、不删除 volume、不重建生产数据。
-4. 以脱敏样本执行公开浏览器 full E2E、console/network/SSE 检查和 A/B tenant isolation；确认 A 无法访问 B 的 task、artifact、private template 或 SSE。
-5. 稳定运行后按 secret 名称逐项完成 JWT 及其他可访问 secret 的轮换，绝不把值写入仓库或报告。
-6. 将真实 release/deploy/readiness/image facts 回写 `PROJECT_STATUS.md`、`TODO.md`、`AI_CONTEXT.md`（如长期规则变化）和 `docs/PRODUCTION_DEPLOYMENT.md`，再提交/推送状态同步。
+1. 提供/批准两个受控的生产 beta 测试账号或等价的已认证浏览器会话，执行登录后 upload paper、upload template、local/ai、Agent、preview、download、SSE 及 A/B tenant isolation；确认 A 无法读取 B 的 task、artifact、private template 或 SSE。不得自动创建账号。
+2. 完成上述受控验收后，更新最终门禁为 `PUBLIC BETA READY`；在此之前保持 `NOT READY`，不要把公开页面 smoke 当成完整业务验收。
+3. 后续发布必须继续使用 canonical workflow/script；历史 `ops/acr-build-v3.6` 只保留为历史记录，禁止误用。
+
+下方 `[DONE]` 条目保留各阶段的历史事实；本文件顶部 `[CURRENT]` 条目是下一步工作唯一依据。
 
 P1/P2 继续项：localStorage bearer token、WAF/分布式限流/外部监控、worker restart recovery、复杂 DOCX 和 AI 内容审校深度属于 P1；checkpoint/resume、分布式队列、对象存储、企业 IAM、计费和更深内容 Agent 属于 P2，均不得抢占当前 P0 发布顺序。
 

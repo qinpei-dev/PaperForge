@@ -3,14 +3,17 @@
 ## 当前权威状态（2026-09-12）
 
 - 项目：**PaperForge — Verified Academic Document Agent**；当前阶段：**P0 修复与生产发布闭环**。
-- Production 目标：前端 `https://aetherislab.xyz`；浏览器 API：`https://aetherislab.xyz/api`。真实 ECS runtime 版本、运行镜像 digest、migration/readiness 和最终部署时间必须在发布完成后回写本文件与 `docs/PRODUCTION_DEPLOYMENT.md`。
-- Release candidate：`v3.7.3`；release commit：`729fe2f19864a7e80dc590084e0d0becdb04fe71`。frontend/backend 仍必须从该同一 commit 构建。
+- Production：前端 `https://aetherislab.xyz`；浏览器 API：`https://aetherislab.xyz/api`。ECS 已运行本轮 `v3.7.3`，runtime digest、migration/readiness 和部署时间已在本文件与 `docs/PRODUCTION_DEPLOYMENT.md` 记录。
+- Release candidate：`v3.7.3`；release commit：`729fe2f19864a7e80dc590084e0d0becdb04fe71`；frontend/backend 均从该同一 commit 构建。
 - P0 源码状态：frontend Docker build 已保留 local loopback fallback，并要求生产 CI 显式传递三个 `NEXT_PUBLIC_*` build args；Next.js 已升级到 `15.5.24`，兼容传递依赖审计为 0 vulnerabilities。
 - 本地验证：frontend production `npm run build` **PASS**；backend 从 `paper-ai/backend` 执行 `pytest -q` 为 **107 passed**；`.next/server` 与 `.next/static` 未发现 `http://localhost:8000` 或 `http://127.0.0.1:8000`，并发现生产 API URL。Docker image build 尚未在本机执行；这只代表 local build 环境状态，不代表 production Docker 故障。
-- 发布状态：新的 canonical ACR pipeline 已加入；其 run 已绑定 release commit，但在 ACR login 阶段被现有 repository ACR secret 拒绝，未产生或推送任何镜像。旧 `ops/acr-build-v3.6` workflow 已标记废弃，不得使用。ACR image tag/digest、ECS migration/deploy、`/api/health`、`/api/ready`、公开浏览器 E2E、A/B tenant isolation 和 secret rotation 尚待本轮发布闭环完成；ECS、数据库和 volumes 本轮尚未修改。
+- 发布状态：canonical ACR run 已从 release commit 成功构建并推送 immutable backend/frontend images；ECS 已按 digest 部署，Alembic 已验证为 `0012_day17_token_version (head)`，公开 `/api/health`、`/api/ready` 和首页均为 200，JWT 已在稳定后轮换。旧 `ops/acr-build-v3.6` workflow 已标记废弃，不得使用。公开首页、登录、注册和未登录 dashboard 路由 smoke 已通过；因当前没有受控生产测试账号，登录后 full E2E 与 A/B tenant isolation 尚未执行，因此最终 `PUBLIC BETA READY` 门禁仍为 **NOT READY**。ECS 数据库、PostgreSQL volume 和现有数据 bind mounts 未被删除或替换。
+- 运行时事实：ECS `/opt/paperforge` 沿用历史 Compose 数据挂载结构，仅替换 backend/frontend image；不得未经数据迁移审查直接切换到仓库新版 named-volume Compose。
 - 当前 P1：localStorage bearer token 的 XSS 暴露面、单进程限流/缺少 WAF 与外部监控、单进程 worker 重启后 `interrupted`、复杂 DOCX/AI 内容审校深度仍需后续治理；不得把这些未完成项伪装成 P0 已完成。
 - 当前 P2：checkpoint/resume、分布式队列/多副本调度、对象存储、企业 SSO/SCIM、计费与更深的内容 Agent 仍不在本次 P0 发布范围。
 - 事实冲突处理：先核实 source code、Git、ECS/Compose、health/readiness 和浏览器行为，再更新仓库文档；聊天仅为临时上下文。
+
+下方 Day/版本段落是历史里程碑记录；如与上方当前状态或真实 ECS 检查冲突，以上方当前状态和生产 runbook 为准。
 
 项目名称：**PaperForge**
 
@@ -18,13 +21,13 @@
 
 中文定位：**学术文档可信智能处理 Agent**
 
-当前阶段：**Day17-P0 Security Hardening 已完成；Controlled Beta 代码发布门禁通过，等待目标环境验收**
+当前阶段：**P0 修复、immutable 镜像和 ECS production 发布已完成；Controlled Beta 最终登录后 E2E / tenant isolation 验收待受控账号**
 
 品牌视觉增量：**PaperForge Brand Visual System 已完成**。已生成并导入 Canva 可编辑品牌板，包含字标优先 Logo / PF 图形方向、字体与色彩系统、Landing Page Hero 软件窗口概念及品牌定位边界；不修改 Agent 主链路。
 
 Landing Page 增量：**真实用户首页已完成**。首页现以产品窗口为主视觉，包含 Hero、PaperForge App Preview、Workflow、Verification Result 与 CTA；移除品牌规范展示和虚假评分，统一使用 `Template parsed`、`Changes verified`、`Report generated`、`Preview available` 等真实状态文案。未修改后端 API 或 Agent 主链路。
 
-Day17-P0 最新增量：**Security Hardening 已完成**。JWT 现携带并校验用户持久化 `token_version`；`POST /auth/revoke-sessions` 原子递增该版本，使当前用户的所有旧 bearer token 立即失效，后续登录签发新版本 token。公开 Nginx 示例补充严格 CSP、每 IP `60r/m` 边缘限流（burst 20、429）及 SSE 兼容代理设置。`docker-compose.yml` 现明确是 development-only stack（`paperforge-dev`）；生产仍只能使用 `docker-compose.prod.yml` 与受审查的 public edge。新增 Day17 专项测试；未修改 TaskWorker 或 Agent 业务逻辑。真实域名/TLS、image digest、数据库备份恢复和目标环境 smoke 仍是部署门禁。
+Day17-P0 最新增量：**Security Hardening 已完成**。JWT 现携带并校验用户持久化 `token_version`；`POST /auth/revoke-sessions` 原子递增该版本，使当前用户的所有旧 bearer token 立即失效，后续登录签发新版本 token。公开 Nginx 示例补充严格 CSP、每 IP `60r/m` 边缘限流（burst 20、429）及 SSE 兼容代理设置。`docker-compose.yml` 现明确是 development-only stack（`paperforge-dev`）；生产仍只能使用 `docker-compose.prod.yml` 与受审查的 public edge。新增 Day17 专项测试；未修改 TaskWorker 或 Agent 业务逻辑。真实域名/TLS、immutable image、备份、migration、health/readiness 已在本轮目标环境完成；登录后业务链路和 tenant isolation 仍待受控账号验收。
 
 Day12-P1 最新增量：**Observability Foundation 已完成**。每个 HTTP 请求现在生成 UUID request ID，并通过 `X-Request-ID` 返回；请求完成/失败日志采用 JSON 结构，含 timestamp、level、request_id、tenant/user/task（可用时）、event 与 duration，敏感字段（JWT、password、API key、论文/文件正文）会被排除或脱敏。既有 durable `task_events` 继续作为 task execution history authority，同时新增 task created/claimed/started/stage changed/completed/failed 的关联结构化诊断日志，可按 task_id 查询一次执行过程。`/health` 仅表示进程存活；新增 `/ready` 以轻量 `SELECT 1` 验证数据库可达。HTTP 错误现返回 `error.code`、`error.message`、`request_id`，分类为 AUTH_ERROR、VALIDATION_ERROR、TASK_ERROR、STORAGE_ERROR 或 INTERNAL_ERROR。未引入 Prometheus/Grafana/ELK/OpenTelemetry 或改变业务 Agent 行为。
 
@@ -32,7 +35,7 @@ Day12-P0 最新增量：**Security Hardening 已完成**。已审计认证、ten
 
 Day11 最新增量：**Durable Task Runtime 已完成**。现有 `tasks` 表已增量扩展为 PostgreSQL authoritative task lifecycle，保存 progress/stage、运行与完成时间、worker run identity、attempt/recovery/error/result/input metadata 与 state version；新增 tenant-scoped append-only `task_events`，SSE 通过 event sequence 与 `Last-Event-ID` 可重放数据库事件。`PENDING -> RUNNING` 使用数据库 conditional update claim，terminal task 不会被旧 worker 回写为 RUNNING。backend startup 会将遗留 RUNNING 任务明确标记为 `interrupted`，记录前 worker identity 和检测时间，不伪造 checkpoint resume。旧 JSON task-state 保留为 pipeline compatibility artifact，不再作为 SaaS task lifecycle authority。未引入外部队列或多节点调度；真实 checkpoint/resume、retry API、对象存储、生产监控和真实 production deployment 仍未实现。
 
-Production Infrastructure P0 最新增量：新增 immutable-image `docker-compose.prod.yml`，包含 PostgreSQL、backend、frontend、健康检查、内部网络，以及 PostgreSQL / uploads / outputs / managed templates / task states / bundled templates 的 named volumes。新增生产环境占位模板、PostgreSQL backup/restore PowerShell 脚本及 migration、rollback、公开边缘和文件备份 runbook。Docker Desktop 使用非敏感 rehearsal env 与本地 release-gate images 验证 config、Alembic `0009_day10_ownership_audit_settings`、backend `/health`、frontend HTTP 200，并在 `docker compose down`（不带 `-v`）与容器重建后确认 DB revision 和五类文件卷标记仍在。未修改 SaaS 业务代码、未移动 `v3.7.1-multi-tenant-saas`，也未执行真实 production deploy；真实公网域名/TLS/reverse proxy、registry pull 和用户端完整 upload/task workflow 尚待真实环境验证。
+Production Infrastructure P0 最新增量：新增 immutable-image `docker-compose.prod.yml`，包含 PostgreSQL、backend、frontend、健康检查、内部网络，以及 PostgreSQL / uploads / outputs / managed templates / task states / bundled templates 的 named volumes；该仓库 Compose 是后续标准。真实 ECS 本轮保守沿用历史 Compose 的 PostgreSQL named volume 与 `/opt/paperforge-data/{uploads,outputs,template_storage}` bind mounts，完成 immutable image pull、Alembic、runtime update 和公开 health/readiness；不得在没有数据迁移方案时直接替换挂载结构。Docker Desktop 仅完成 local config/build validation，不是 production runtime。
 
 Day10-P2 最新增量：**Ownership Lifecycle + Tenant Audit Log + Tenant Settings 已完成**。Owner 通过 24 小时、hash-only、显式接受的 transfer lifecycle 转让 ownership；接受时在事务/行锁内将旧 Owner 降为 Admin、新成员提升为 Owner。数据库对 active owner 与 pending transfer 均使用 tenant-scoped partial unique index；服务层进一步验证参与者 active 状态与唯一 Owner。新增 append-only tenant audit events，覆盖成员、邀请、ownership transfer 与设置变更，metadata 自动排除 token/hash/secret；Owner/Admin 可读，Member 不可读。新增 Owner-only Workspace display name 更新，首页治理区支持 settings、transfer、audit，另有明确确认的 `/ownership-transfer?token=...` 接受页。Alembic `0009_day10_ownership_audit_settings` 从 `0008` 升级。未扩展 SSO/SAML、SCIM、custom roles、企业目录、邮件或计费。
 
@@ -578,7 +581,7 @@ Current Bottleneck：
 
 验收：Day16 专项 4 passed；后端全量 pytest 102 passed；frontend `npm run build` PASS；Python compile PASS；Compose config PASS；`git diff --check` PASS；smoke/cleanup 脚本 `--help` PASS。真实公网 TLS、registry image pull、真实 PostgreSQL restore 和 WAF 仍未在目标环境执行。
 
-当前状态：**Controlled Beta Ready（受控测试就绪，待 commit/release tag 与目标环境 smoke）**。
+当时状态：**Controlled Beta Ready（受控测试就绪，待 commit/release tag 与目标环境 smoke）**；该里程碑已被上方当前 P0 production 发布状态 supersede。
 
 ## PaperForge Auth Experience Release Candidate
 
