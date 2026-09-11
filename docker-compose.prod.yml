@@ -28,6 +28,7 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in the production environment}
       APP_ENV: production
       AUTH_REQUIRED: "true"
+      PAPERFORGE_PREVIEW_AUTO_LOGIN: "false"
       AUTO_CREATE_DB: "false"
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       CORS_ORIGINS: ${CORS_ORIGINS:?Set the public HTTPS origin}

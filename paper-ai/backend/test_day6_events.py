@@ -140,8 +140,9 @@ def test_terminal_event_history_is_cleaned_after_ttl_and_bounded() -> None:
 
 
 def test_frontend_uses_polling_only_as_sse_fallback() -> None:
-    source = (Path(__file__).resolve().parents[1] / "frontend" / "app" / "tasks" / "[taskId]" / "page.tsx").read_text(encoding="utf-8")
-    assert "await loadTask(false); if (!stopped && !terminalReceived) void connectStream();" in source
+    source = (Path(__file__).resolve().parents[1] / "frontend" / "app" / "(workspace)" / "tasks" / "[taskId]" / "page.tsx").read_text(encoding="utf-8")
+    assert "await loadTask(false);" in source
+    assert "if (!stopped && !terminalReceived) void connectStream();" in source
     assert "if (scheduleNext && pollingActive)" in source
     assert "if (!terminalReceived) startPolling();" in source
     assert "void loadTask(); void connectStream();" not in source

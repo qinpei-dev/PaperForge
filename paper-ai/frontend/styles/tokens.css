@@ -1,0 +1,16 @@
+:root {
+  --pf-color-primary: #1f4b99;
+  --pf-color-primary-hover: #173b7a;
+  --pf-color-text: #162033;
+  --pf-color-muted: #56657a;
+  --pf-color-surface: #ffffff;
+  --pf-color-surface-subtle: #f8fafc;
+  --pf-color-border: #d6dee9;
+  --pf-color-danger: #b42318;
+  --pf-radius-sm: 8px;
+  --pf-radius-md: 12px;
+  --pf-space-2: 8px;
+  --pf-space-3: 12px;
+  --pf-space-4: 16px;
+  --pf-shadow-card: 0 8px 24px rgba(15, 23, 42, 0.06);
+}

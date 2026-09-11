@@ -19,6 +19,7 @@ from db.session import get_db
 JWT_ALGORITHM = "HS256"
 MIN_PRODUCTION_JWT_SECRET_LENGTH = 32
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+PREVIEW_USER_DEFAULT_EMAIL = "preview@paperforge.local"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
@@ -96,6 +97,24 @@ def get_optional_current_user(token: str | None = Depends(oauth2_scheme), db: Se
 
 def auth_is_required() -> bool:
     return os.getenv("AUTH_REQUIRED", "false").strip().lower() == "true"
+
+
+def is_non_production_environment() -> bool:
+    environment = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "local")).strip().lower()
+    return environment in {"local", "development", "dev", "preview"}
+
+
+def preview_auto_login_enabled() -> bool:
+    """Enable the development-only preview session bootstrap."""
+    return is_non_production_environment() and os.getenv("PAPERFORGE_PREVIEW_AUTO_LOGIN", "false").strip().lower() == "true"
+
+
+def preview_user_email() -> str:
+    """Return a reserved local-only identity; no real account email is accepted by default."""
+    email = os.getenv("PAPERFORGE_PREVIEW_USER_EMAIL", PREVIEW_USER_DEFAULT_EMAIL).strip().lower()
+    if not EMAIL_PATTERN.fullmatch(email) or not email.endswith(".local"):
+        raise RuntimeError("PAPERFORGE_PREVIEW_USER_EMAIL must be a valid .local development email.")
+    return email
 
 
 def configured_admin_emails() -> frozenset[str]:

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { apiUrl } from "../lib/api-client";
+import { authorizationHeaders, getStoredAuthUser, suppressPreviewAutoLogin } from "../lib/auth";
 
 type AgentStep = { name: string; status: "running" | "done" | "error"; message: string };
 type AgentTraceItem = {
@@ -179,30 +181,7 @@ type UsageSummary = {
   remaining: number;
 };
 
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
-const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, "");
 const defaultSteps = ["识别文档类型", "读取论文", "分析本地格式", "识别模板格式", "修复标题样式", "AI增强审校", "重复风险预检", "最终复查", "生成最终报告"];
-
-function apiUrl(path: string) {
-  return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
-function authorizationHeaders(): Record<string, string> {
-  const token = localStorage.getItem("paperforge_token");
-  const tenantId = localStorage.getItem("paperforge_active_tenant");
-  return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(tenantId ? { "X-Tenant-ID": tenantId } : {}) };
-}
-
-function storedAuthUser(): AuthUser | null {
-  try {
-    const rawUser = localStorage.getItem("paperforge_user");
-    if (!rawUser) return null;
-    const user = JSON.parse(rawUser) as unknown;
-    return isRecord(user) && typeof user.email === "string" && user.email.trim() ? { email: user.email, is_admin: user.is_admin === true } : null;
-  } catch {
-    return null;
-  }
-}
 
 function isAuthenticationFailure(response: Response) {
   return response.status === 401 || response.status === 403;
@@ -325,7 +304,7 @@ export default function Home() {
   const buttonDisabled = running || !canRun;
 
   useEffect(() => {
-    setAuthUser(storedAuthUser());
+    setAuthUser(getStoredAuthUser());
   }, []);
 
   useEffect(() => {
@@ -462,6 +441,7 @@ export default function Home() {
   }
 
   function logout() {
+    suppressPreviewAutoLogin();
     localStorage.removeItem("paperforge_token");
     localStorage.removeItem("paperforge_user");
     localStorage.removeItem("paperforge_workspace");

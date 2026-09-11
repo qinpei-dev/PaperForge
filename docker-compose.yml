@@ -33,6 +33,7 @@ services:
       APP_ENV: development
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
       AUTH_REQUIRED: ${AUTH_REQUIRED:-true}
+      PAPERFORGE_PREVIEW_AUTO_LOGIN: ${PAPERFORGE_PREVIEW_AUTO_LOGIN:-false}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       AUTO_CREATE_DB: "false"
     ports:
@@ -59,6 +60,8 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+        NEXT_PUBLIC_PAPERFORGE_PREVIEW_AUTO_LOGIN: ${NEXT_PUBLIC_PAPERFORGE_PREVIEW_AUTO_LOGIN:-false}
+        NEXT_PUBLIC_PAPERFORGE_APP_ENV: ${NEXT_PUBLIC_PAPERFORGE_APP_ENV:-development}
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
     ports:

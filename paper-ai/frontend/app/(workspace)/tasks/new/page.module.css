@@ -1,0 +1,94 @@
+.page { display: grid; gap: 24px; max-width: 980px; margin: 0 auto; }
+.pageHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.eyebrow, .cardEyebrow { margin: 0; color: #2563eb; font-size: 11px; font-weight: 800; letter-spacing: .1em; }
+.pageHeader h1 { margin: 6px 0 8px; color: #162033; font-size: clamp(28px, 4vw, 40px); letter-spacing: -.03em; }
+.lead, .stepHeader p:not(.cardEyebrow) { margin: 0; color: #64748b; line-height: 1.65; }
+.cancelLink, .backLink { color: #2563eb; font-size: 14px; font-weight: 800; text-decoration: none; white-space: nowrap; }
+.cancelLink { padding-top: 8px; }
+.cancelLink:hover, .backLink:hover { text-decoration: underline; }
+.stepRail { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 4px 0; }
+.stepRailItem { display: flex; align-items: center; gap: 9px; color: #64748b; font-size: 12px; font-weight: 700; }
+.stepRailItem span { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 50%; background: #e7effc; color: #1d4ed8; font-size: 12px; }
+.stepRailItem:not(:last-child)::after { content: ""; height: 1px; flex: 1; background: #dbe3ee; }
+.errorBanner, .noticeBanner { padding: 12px 14px; border-radius: 10px; font-size: 13px; line-height: 1.5; }
+.errorBanner { border: 1px solid #fecaca; background: #fff7f7; color: #b42318; }
+.noticeBanner { border: 1px solid #bfdbfe; background: #eff6ff; color: #1e40af; }
+.flow { display: grid; gap: 18px; }
+.stepCard { display: grid; gap: 20px; padding: clamp(18px, 3vw, 26px); }
+.stepHeader { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: start; gap: 14px; }
+.stepHeader h2 { margin: 4px 0 6px; color: #162033; font-size: 21px; }
+.stepNumber { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 12px; background: #eaf2ff; color: #1d4ed8; font-size: 13px; font-weight: 900; }
+.dropzone { position: relative; display: grid; min-height: 170px; place-items: center; align-content: center; gap: 7px; overflow: hidden; border: 1.5px dashed #9db6d9; border-radius: 13px; background: #f8fbff; color: #64748b; text-align: center; cursor: pointer; transition: border-color .15s ease, background .15s ease, transform .15s ease; }
+.dropzone:hover, .dropzoneActive { border-color: #2563eb; background: #eff6ff; }
+.dropzoneActive { transform: translateY(-1px); }
+.dropzoneFilled { border-style: solid; border-color: #93c5fd; background: #f0f7ff; }
+.dropzone strong { color: #1e3a5f; font-size: 15px; }
+.dropzone span:not(.uploadIcon) { font-size: 12px; }
+.uploadIcon { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 50%; background: #dbeafe; color: #1d4ed8; font-size: 22px; font-weight: 700; }
+.fileInput { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; padding: 0; opacity: 0; cursor: pointer; }
+.fileSummary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid #dbe3ee; border-radius: 10px; background: #fbfdff; }
+.fileSummary > div { display: grid; min-width: 0; gap: 4px; }
+.fileSummary strong { overflow: hidden; color: #1e3a5f; text-overflow: ellipsis; white-space: nowrap; }
+.fileSummary span, .helperText { color: #64748b; font-size: 12px; }
+.helperText { margin: 0; line-height: 1.5; }
+.classificationBox, .warningBox, .fallbackNote { display: grid; gap: 7px; padding: 13px 14px; border-radius: 10px; font-size: 13px; }
+.classificationBox { border: 1px solid #bbf7d0; background: #f0fdf4; color: #166534; }
+.warningBox { border: 1px solid #fed7aa; background: #fff7ed; color: #9a3412; }
+.classificationBox > div, .warningBox > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.classificationBox span, .warningBox span { font-size: 12px; }
+.classificationBox p, .warningBox p { margin: 0; line-height: 1.5; }
+.confirmLabel { display: flex; align-items: center; gap: 8px; padding-top: 3px; font-weight: 800; }
+.checkboxInput, .radioInput { width: 16px !important; height: 16px; padding: 0 !important; }
+.templateList { display: grid; gap: 9px; }
+.templateOption { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 13px; border: 1px solid #dbe3ee; border-radius: 10px; cursor: pointer; }
+.templateOption:hover, .templateOptionSelected { border-color: #93c5fd; background: #f8fbff; }
+.templateOption > span { display: grid; min-width: 0; gap: 4px; }
+.templateOption strong { overflow: hidden; color: #1e3a5f; text-overflow: ellipsis; white-space: nowrap; }
+.templateOption small { overflow: hidden; color: #64748b; text-overflow: ellipsis; white-space: nowrap; }
+.tempTemplate { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px; border: 1px dashed #cbd5e1; border-radius: 10px; background: #f8fafc; }
+.tempTemplate > div { display: grid; gap: 4px; }
+.tempTemplate strong { color: #1e3a5f; font-size: 14px; }
+.tempTemplate span { color: #64748b; font-size: 12px; }
+.tempUpload { position: relative; display: inline-flex; min-height: 36px; align-items: center; justify-content: center; padding: 0 12px; border: 1px solid #d6dee9; border-radius: 8px; background: #fff; color: #1d4ed8; font-size: 13px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.tempUpload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.modeGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.modeOption { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: start; gap: 11px; min-height: 120px; padding: 16px; border: 1px solid #dbe3ee; border-radius: 12px; background: #fff; color: #162033; font: inherit; text-align: left; cursor: pointer; }
+.modeOption:hover, .modeOptionSelected { border-color: #2563eb; background: #f8fbff; box-shadow: 0 0 0 2px rgba(37, 99, 235, .08); }
+.modeOption > span:nth-child(2) { display: grid; gap: 6px; }
+.modeOption strong { font-size: 14px; }
+.modeOption small { color: #64748b; font-size: 12px; line-height: 1.55; }
+.modeIcon { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 9px; background: #eaf2ff; color: #1d4ed8; font-size: 12px; font-weight: 900; }
+.fallbackNote { grid-template-columns: auto 1fr; align-items: baseline; border: 1px solid #bfdbfe; background: #eff6ff; color: #1e40af; }
+.fallbackNote span { color: #334155; line-height: 1.5; }
+.advanced { border-top: 1px solid #eef2f7; padding-top: 14px; color: #64748b; font-size: 12px; }
+.advanced summary { color: #475569; font-weight: 800; cursor: pointer; }
+.advanced p { margin: 10px 0 0; line-height: 1.6; }
+.confirmCard { border-color: #b8cceb; }
+.confirmGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.confirmGrid > div { display: grid; gap: 7px; min-width: 0; padding: 13px; border-radius: 10px; background: #f8fafc; }
+.confirmGrid span { color: #64748b; font-size: 12px; }
+.confirmGrid strong { overflow: hidden; color: #1e3a5f; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.quotaSummary { display: grid; gap: 8px; }
+.quotaSummary > div:first-child { display: flex; justify-content: space-between; gap: 12px; color: #64748b; font-size: 12px; }
+.quotaSummary strong { color: #1e3a5f; }
+.quotaSummary small { color: #64748b; font-size: 11px; }
+.progressTrack { height: 7px; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
+.progressTrack span { display: block; height: 100%; border-radius: inherit; background: #2563eb; }
+.confirmActions { display: flex; align-items: center; gap: 18px; }
+.actionHint { margin: 0; color: #b42318; font-size: 12px; }
+.successBadge { background: #ecfdf3; color: #027a48; }
+.warningBadge { background: #fff7ed; color: #c2410c; }
+
+@media (max-width: 760px) {
+  .pageHeader { display: grid; }
+  .cancelLink { padding-top: 0; }
+  .stepRail { gap: 5px; }
+  .stepRailItem { gap: 5px; font-size: 10px; }
+  .stepRailItem:not(:last-child)::after { display: none; }
+  .stepHeader { grid-template-columns: 36px minmax(0, 1fr); }
+  .stepHeader > .pf-badge { grid-column: 2; justify-self: start; }
+  .stepNumber { width: 34px; height: 34px; border-radius: 10px; }
+  .modeGrid, .confirmGrid { grid-template-columns: 1fr; }
+  .tempTemplate, .confirmActions { align-items: stretch; flex-direction: column; }
+  .tempUpload { width: 100%; }
+}

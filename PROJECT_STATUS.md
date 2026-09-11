@@ -563,3 +563,40 @@ Current Bottleneck：
 验收：Day16 专项 4 passed；后端全量 pytest 102 passed；frontend `npm run build` PASS；Python compile PASS；Compose config PASS；`git diff --check` PASS；smoke/cleanup 脚本 `--help` PASS。真实公网 TLS、registry image pull、真实 PostgreSQL restore 和 WAF 仍未在目标环境执行。
 
 当前状态：**Controlled Beta Ready（受控测试就绪，待 commit/release tag 与目标环境 smoke）**。
+# PaperForge V4 前端产品化第一阶段
+
+状态：已完成。新增 SaaS 前端基础目录 `components/`、`lib/`、`types/` 和 `styles/tokens.css`；提供 Button、Card、Badge、Input、EmptyState、Loading 基础组件，并抽离公共 API URL、认证请求头/会话读写和任务状态标签。既有页面、后端 API 与上传、模板、local/ai、Agent、预览、下载业务流均保持兼容。前端 `npm run build` 已通过。
+
+## PaperForge V4-P1.2 — SaaS App Shell
+
+状态：已完成。新增 `(workspace)` 路由组与统一 AppShell，提供 Sidebar、Topbar、真实 Workspace Switcher 和 User Menu；`/dashboard` 与 `/tasks/[taskId]` 保持原 URL 且接入壳层，新增 `/tasks`、`/templates`、`/settings` 工作区入口。根论文处理工作台、认证/Admin 页面及后端 API 均未改动；模板和设置入口继续复用工作台中的既有业务界面。前端 `npm run build` PASS。
+
+## PaperForge V4-P1.3 — Dashboard 产品化
+
+状态：已完成。Dashboard 保留既有 `GET /tasks` 任务获取逻辑，并复用现有 `GET /usage` 展示当前 Workspace 的月度额度；新增产品欢迎区、Workspace 信息、Quick Start、Recent Tasks、状态 Badge、Metrics 和无任务引导。页面使用 V4 `Card/Badge/Button/EmptyState/Loading` 组件，Dashboard 专用布局样式放入 CSS Module，未继续扩展 `globals.css`；未修改后端、API contract 或论文处理业务流。Workspace 切换时同步本地 Workspace 名称，避免 Dashboard 显示旧名称。前端 `npm run build` PASS，`git diff --check` PASS。
+
+## PaperForge V4-P1.4 — Task Detail 产品化
+
+状态：已完成。任务详情页已升级为 SaaS 核心工作流页面，按“任务头部 → 结果概览 → Workflow Timeline → Agent Execution → Artifacts”展示；使用 V4 `Card/Badge/Button/Loading`，开发级 Trace 默认折叠。保留 SSE、`Last-Event-ID` 重连、轮询 fallback、Artifact 下载、DOCX 预览、失败重试和现有 Trace 数据；修改数量通过既有报告 Artifact 下载接口读取并在失败时降级显示。仅新增任务详情 CSS Module，未改后端、API contract 或 `globals.css`。
+
+验收：frontend `npm run build` PASS；`git diff --check` PASS。
+
+## PaperForge V4-P1.5 — New Task 页面产品化
+
+目标：在不修改后端 API、不删除旧入口的前提下，将论文任务创建流程升级为正式 SaaS 四步工作流。
+
+完成：新增 `/tasks/new` 新建任务页，保留 DOCX 论文上传、文档分类确认、已有模板选择、临时模板上传、Local/AI 模式、额度提示、`POST /tasks` 创建和 `/tasks/[taskId]` 跳转。页面使用 V4 Card/Button/Input/Badge 与 CSS Module；AI fallback 和 Local 模式边界说明收敛到用户流程与高级信息区域。Dashboard、任务中心和 AppShell 的正式新建入口已切换到 `/tasks/new`，根路径旧工作台仍保留。
+
+验收：frontend `npm run build` PASS；`git diff --check` PASS；后端目录无本轮变更，API contract 未修改，`globals.css` 未新增内容。
+
+## PaperForge V4-P1.6 — Local Preview 自动登录
+
+已完成：增加 `PAPERFORGE_PREVIEW_AUTO_LOGIN` 与 `NEXT_PUBLIC_PAPERFORGE_PREVIEW_AUTO_LOGIN` 双开关，并要求非生产 `APP_ENV`；后端 Preview 路由只创建/加载保留的 `.local` 用户，密码为服务端随机值且不返回，JWT 仍使用现有正式 token/version 校验。前端 Preview 成功后自动保存标准 session，并从根路径/登录页进入 `/dashboard`。生产环境始终拒绝 Preview 路由，不改变正式认证和 RBAC。
+
+验收：Preview 专项 2 passed；backend compile、frontend `npm run build`、Compose config、`git diff --check` PASS。
+
+## PaperForge V4-P1.7 — Preview Experience Polish
+
+已完成：Dashboard 空状态补充产品价值说明、三步示例流程和创建第一个任务按钮；AppShell 仅在 development/local/preview 环境显示 `Preview Environment`。登录跳转、未登录保护、refresh 后 session 保留和 logout 行为保持可用，并避免 Preview logout 后立即自动重新登录。未修改生产认证、数据模型或 Agent 核心流程。
+
+验收：frontend `npm run build`、backend pytest、`git diff --check` PASS；旧 V4 路由路径断言的陈旧测试保持单独记录。

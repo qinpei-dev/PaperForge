@@ -1,0 +1,210 @@
+.dashboard {
+  display: grid;
+  gap: 24px;
+  width: min(1120px, 100%);
+  margin: 0 auto;
+}
+
+.welcomeCard,
+.quickStartCard,
+.quotaCard,
+.metricCard,
+.recentCard {
+  padding: 24px;
+}
+
+.welcomeCard {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 32px;
+  border-color: #cbdcf2;
+  background: linear-gradient(135deg, #f8fbff 0%, #ffffff 58%, #f0fdfa 100%);
+}
+
+.eyebrow,
+.cardEyebrow {
+  margin: 0;
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .1em;
+}
+
+.welcomeCard h1 {
+  margin: 8px 0 10px;
+  color: #162033;
+  font-size: clamp(30px, 4vw, 44px);
+  line-height: 1.1;
+}
+
+.welcomeText,
+.quickStartCard p,
+.period,
+.inlineMessage {
+  color: #56657a;
+  line-height: 1.6;
+}
+
+.welcomeText {
+  max-width: 620px;
+  margin: 0;
+  font-size: 15px;
+}
+
+.workspaceInfo {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  min-width: 230px;
+  padding: 16px 18px;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .84);
+}
+
+.workspaceInfo span,
+.workspaceInfo small,
+.metricCard span,
+.metricCard small,
+.quotaNumbers span,
+.quotaNumbers small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.workspaceInfo span,
+.metricCard span,
+.quotaNumbers span {
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.workspaceInfo strong {
+  overflow: hidden;
+  color: #1e3a5f;
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actionRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 16px;
+}
+
+.quickStartCard,
+.quotaCard {
+  display: grid;
+  align-content: space-between;
+  gap: 20px;
+  min-width: 0;
+}
+
+.quickStartCard {
+  background: #10233f;
+  color: #fff;
+}
+
+.quickStartCard .cardEyebrow { color: #7dd3fc; }
+.quickStartCard h2 { margin: 7px 0 8px; font-size: 22px; }
+.quickStartCard p { margin: 0; color: #c6d5e9; }
+
+.sectionHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sectionHeading h2 {
+  margin: 5px 0 0;
+  color: #162033;
+  font-size: 20px;
+}
+
+.quotaCard { background: linear-gradient(135deg, #ffffff, #f8fbff); }
+.quotaNumbers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.quotaNumbers > div { display: grid; gap: 4px; padding: 13px; border: 1px solid #dbeafe; border-radius: 10px; background: #fff; }
+.quotaNumbers strong { color: #1e3a5f; font-size: 30px; line-height: 1; }
+.progressTrack { height: 8px; overflow: hidden; border-radius: 999px; background: #dbeafe; }
+.progressTrack span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #1d4ed8, #0f766e); transition: width .25s ease; }
+.period { margin: 0; font-size: 12px; }
+.inlineMessage { margin: 0; }
+
+.badgeSuccess,
+.badgeWarning,
+.statusSuccess,
+.statusProgress,
+.statusDanger,
+.statusNeutral {
+  border: 1px solid transparent;
+}
+
+.badgeSuccess { border-color: #99f6e4; background: #ecfdf5; color: #0f766e; }
+.badgeWarning { border-color: #fed7aa; background: #fff7ed; color: #b45309; }
+.statusSuccess { border-color: #bbf7d0; background: #f0fdf4; color: #15803d; }
+.statusProgress { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
+.statusDanger { border-color: #fecaca; background: #fef2f2; color: #b42318; }
+.statusNeutral { border-color: #dbe3ee; background: #f8fafc; color: #64748b; }
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.metricCard { display: grid; gap: 8px; }
+.metricCard strong { color: #1e3a5f; font-size: 34px; line-height: 1; }
+.metricCard small { line-height: 1.4; }
+
+.recentCard { display: grid; gap: 18px; }
+.sectionLink { color: #1d4ed8; font-size: 13px; font-weight: 800; text-decoration: none; }
+.sectionLink:hover { text-decoration: underline; }
+.taskList { display: grid; gap: 8px; }
+.taskRow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 18px; padding: 14px; border: 1px solid #e2e8f0; border-radius: 10px; }
+.taskRow:hover { border-color: #93c5fd; background: #f8fbff; }
+.taskMain { display: grid; gap: 5px; min-width: 0; }
+.taskMain strong { overflow: hidden; color: #1e3a5f; text-overflow: ellipsis; white-space: nowrap; }
+.taskMain span,
+.taskMeta small { color: #64748b; font-size: 12px; }
+.taskMeta { display: grid; justify-items: end; gap: 5px; min-width: 110px; }
+.detailButton { white-space: nowrap; }
+.emptyWrap { display: grid; justify-items: start; gap: 14px; padding: 8px 0; }
+.emptyState { display: grid; gap: 20px; padding: 24px; border: 1px dashed #b8cbe2; border-radius: 14px; background: linear-gradient(135deg, #f8fbff, #f0fdfa); }
+.emptyStateCopy { display: grid; gap: 12px; }
+.emptyValue { margin: 0; color: #334155; font-size: 14px; font-weight: 700; line-height: 1.6; }
+.emptyFlow { display: grid; gap: 10px; }
+.emptyFlowTitle { margin: 0; color: #64748b; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.emptyFlow ol { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 0; margin: 0; list-style: none; }
+.emptyFlow li { display: grid; gap: 4px; padding: 13px; border: 1px solid #dbe3ee; border-radius: 10px; background: rgba(255, 255, 255, .82); }
+.emptyFlow b { color: #1d4ed8; font-size: 12px; }
+.emptyFlow span { color: #1e3a5f; font-size: 14px; font-weight: 800; }
+.emptyFlow small { color: #64748b; font-size: 12px; line-height: 1.4; }
+.errorMessage { margin: 0; color: #b42318; font-weight: 700; }
+.footerActions { display: flex; justify-content: flex-end; }
+
+@media (max-width: 820px) {
+  .welcomeCard { display: grid; }
+  .workspaceInfo { min-width: 0; }
+  .actionRow { grid-template-columns: 1fr; }
+  .metricsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .welcomeCard,
+  .quickStartCard,
+  .quotaCard,
+  .metricCard,
+  .recentCard { padding: 18px; }
+  .metricsGrid { grid-template-columns: 1fr; }
+  .emptyFlow ol { grid-template-columns: 1fr; }
+  .taskRow { grid-template-columns: 1fr; align-items: start; gap: 10px; }
+  .taskMeta { justify-items: start; }
+  .detailButton { width: 100%; }
+  .sectionHeading { align-items: flex-start; }
+}

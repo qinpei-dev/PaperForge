@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { PreviewAutoLogin } from "../components/PreviewAutoLogin";
 
 export const metadata: Metadata = {
   title: "PaperForge | Verified Academic Document Agent",
@@ -13,7 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body><PreviewAutoLogin />{children}</body>
     </html>
   );
 }

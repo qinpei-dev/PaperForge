@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiUrl } from "../../lib/api-client";
+import { isPreviewAutoLoginEnabled, storeAuthSession, tryPreviewAutoLogin } from "../../lib/auth";
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,17 +14,27 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (!isPreviewAutoLoginEnabled()) return;
+    let cancelled = false;
+    setLoading(true);
+    void tryPreviewAutoLogin().then((ready) => {
+      if (ready && !cancelled) router.replace("/dashboard");
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [router]);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${API_BASE}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
+      const response = await fetch(apiUrl("/auth/login"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "登录失败");
-      localStorage.setItem("paperforge_token", data.access_token);
-      localStorage.setItem("paperforge_user", JSON.stringify(data.user));
-      localStorage.setItem("paperforge_workspace", JSON.stringify({ id: data.workspace_id, name: data.workspace_name }));
+      storeAuthSession(data.access_token, data.user, { id: data.workspace_id, name: data.workspace_name });
       router.push("/dashboard");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "登录失败");

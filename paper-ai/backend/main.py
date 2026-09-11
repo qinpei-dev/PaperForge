@@ -5,6 +5,7 @@ import json
 import logging
 import hashlib
 import re
+import secrets
 import zipfile
 from datetime import datetime, timezone
 from time import sleep
@@ -24,7 +25,7 @@ from services.preview_service import build_docx_preview
 from services.storage import LocalStorage
 from services.content_review import apply_content_suggestion
 from services.review_evidence import aggregate_review_evidence, content_score_summary
-from auth import auth_is_required, create_access_token, get_current_user, get_optional_current_user, hash_password, is_platform_admin, require_platform_admin, validate_email, verify_password
+from auth import auth_is_required, create_access_token, get_current_user, get_optional_current_user, hash_password, is_platform_admin, preview_auto_login_enabled, preview_user_email, require_platform_admin, validate_email, verify_password
 from db.models import Artifact, Project, Quota, Task, TaskEvent, Template, Tenant, TenantAuditEvent, TenantInvitation, TenantMembership, TenantOwnershipTransfer, Usage, User, Workspace
 from db.session import SessionLocal, get_db, init_db
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
@@ -427,6 +428,32 @@ def login_user(payload: LoginRequest, request: Request, db: Session = Depends(ge
         db.add(workspace)
         db.flush()
     db.commit()
+    db.refresh(workspace)
+    return AuthResponse(access_token=create_access_token(user.id, user.token_version), user=UserResponse(id=user.id, email=user.email, is_admin=is_platform_admin(user)), workspace_id=workspace.id, workspace_name=workspace.name)
+
+
+@app.post("/auth/preview-login", response_model=AuthResponse)
+def preview_login(request: Request, db: Session = Depends(get_db)) -> AuthResponse:
+    """Create/load the reserved local Preview user without exposing a password."""
+    if not preview_auto_login_enabled():
+        raise HTTPException(status_code=404, detail="Preview 自动登录未启用。")
+    enforce_rate_limit(request, bucket="auth-preview-login", limit=60)
+    email = preview_user_email()
+    user = db.scalar(select(User).where(User.email == email))
+    if user is None:
+        user = User(email=email, password_hash=hash_password(secrets.token_urlsafe(32)))
+        user.workspaces.append(Workspace(name="PaperForge Preview Space"))
+        db.add(user)
+        db.flush()
+    membership = ensure_personal_tenant(db, user)
+    get_or_create_quota(db, membership.tenant_id)
+    workspace = db.scalar(select(Workspace).where(Workspace.owner_id == user.id).order_by(Workspace.created_at).limit(1))
+    if workspace is None:
+        workspace = Workspace(owner_id=user.id, name="PaperForge Preview Space")
+        db.add(workspace)
+        db.flush()
+    db.commit()
+    db.refresh(user)
     db.refresh(workspace)
     return AuthResponse(access_token=create_access_token(user.id, user.token_version), user=UserResponse(id=user.id, email=user.email, is_admin=is_platform_admin(user)), workspace_id=workspace.id, workspace_name=workspace.name)
 
