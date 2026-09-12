@@ -8,6 +8,8 @@
 
 已完成：受控运维窗口备份生产 `.env`，配置 `ADMIN_EMAILS`，更新 ECS historical Compose backend environment 并重建 backend；管理员登录、`/admin/stats`、`/admin/feedback`、`/admin` 与 `/admin/feedback` 页面验收 PASS，未认证请求 401，临时普通测试账号请求 403。管理员账号、密码和生产凭据未写入仓库。
 
+已完成：`DEEPSEEK_API_KEY` 安全输入链路先以隔离假值连续两次自测 HTTP 200，再一次性接收正式值；已修复 Windows 文本管道附加 CR 的问题并确认 production `.env` 与 Compose 注入精确一致。backend recreate、内部/公开 health/ready、生产容器内完整 AI Agent smoke 均 PASS，结果为 `language_mode_ai=true`、`ai_used=true`、AI score 存在；日志与 Secret 泄漏检查 PASS，临时状态已清理。仓库仅记录配置状态，不记录 Secret 值。
+
 ## [DONE] PaperForge P0 release remediation + repository-driven governance
 
 状态：**已完成；P0 代码、ACR immutable images、ECS runtime 发布、受控登录后业务 smoke 和最终 Network/Artifact 原始响应审计均通过**。
