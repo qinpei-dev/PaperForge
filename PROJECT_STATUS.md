@@ -634,3 +634,9 @@ Current Bottleneck：
 已完成：Dashboard 空状态补充产品价值说明、三步示例流程和创建第一个任务按钮；AppShell 仅在 development/local/preview 环境显示 `Preview Environment`。登录跳转、未登录保护、refresh 后 session 保留和 logout 行为保持可用，并避免 Preview logout 后立即自动重新登录。未修改生产认证、数据模型或 Agent 核心流程。
 
 验收：frontend `npm run build`、backend pytest、`git diff --check` PASS；旧 V4 路由路径断言的陈旧测试保持单独记录。
+
+## PaperForge Single-Admin Beta Feedback Console
+
+已完成：复用既有 `ADMIN_EMAILS` 平台管理员 allowlist、JWT 认证和 `require_platform_admin`，新增只读跨 tenant `GET /admin/feedback`，支持分页、分类、用户/email、task id 和版本筛选；仅返回反馈字段及白名单速度 metadata，不返回 token、密码、论文正文或上传文件。新增 `/admin/feedback` 页面，支持列表、详情、筛选、分页、空态、错误态和非管理员拒绝态；现有 `/admin` 统计 Dashboard 保持不变并增加入口。
+
+未新增用户权限字段或数据库 migration；唯一管理员原则仍由部署环境 `ADMIN_EMAILS` 显式指定，管理员继续使用正常登录流程。验收：专项后端 7 passed；后端全量 112 passed；frontend production build PASS；`git diff --check` PASS。

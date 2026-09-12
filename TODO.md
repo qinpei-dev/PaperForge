@@ -1220,3 +1220,9 @@ P1/P2 继续项：localStorage bearer token、WAF/分布式限流/外部监控�
 完成：新增 `/tasks/new` 四步流程：上传论文、选择已有或临时模板、选择 Local/AI 处理模式、确认文件/模板/模式/额度后创建 Task。保留文档分类确认、额度提示、AI fallback 说明和创建后跳转 `/tasks/[taskId]`；Dashboard、任务中心与 AppShell 入口已指向新页面，旧根路径工作台仍可访问。页面使用 V4 Card/Button/Input/Badge 和 CSS Module，未扩展 `globals.css`。
 
 验收：frontend `npm run build` PASS；`git diff --check` PASS；后端目录无本轮变更，API contract 未修改。
+
+## [DONE] PaperForge Single-Admin Beta Feedback Console
+
+完成：复用现有 `ADMIN_EMAILS` 平台管理员 allowlist，不新增 role/is_admin 字段、不新增 migration、不创建独立认证系统。新增 admin-only、跨 tenant、只读 `GET /admin/feedback`，支持 page/page_size、category、user/email、task_id、version 筛选和 created_at 倒序；返回反馈身份、tenant、描述、route、task/request、版本、时间及白名单 speed metadata，禁止泄漏凭据、密码或论文内容。新增 `/admin/feedback` 前端列表、详情、筛选、分页、空态、错误态和拒绝态，并从现有 `/admin` 页面提供入口。
+
+验收：专项后端 7 passed；后端全量 112 passed；frontend production build PASS；`git diff --check` PASS。当前仍为单管理员、只读运营后台，不包含用户/反馈修改、删除、下载论文或任务操作。

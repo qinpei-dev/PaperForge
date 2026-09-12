@@ -185,6 +185,10 @@ paper-ai/
 
 平台管理员专用的聚合运营统计接口。除 JWT 认证外，用户邮箱必须命中部署环境的 `ADMIN_EMAILS` allowlist；返回 tenant/user/task 总数、task status summary，以及当前周期/历史 `agent_run` usage 和额度汇总，不返回租户、用户或任务明细。tenant 内的 `admin` 角色不会自动获得该平台权限。
 
+## GET `/admin/feedback`
+
+平台管理员专用的只读跨 tenant 反馈接口。复用 `ADMIN_EMAILS` allowlist 和正常 JWT；支持 `page`、`page_size`、`category`、`user`（用户 ID/email）、`task_id`、`version` 筛选，默认按 `created_at` 倒序。返回反馈明细、用户 email、tenant、task/request、版本、时间及白名单 speed metadata；不返回 JWT、密码、论文正文或上传文件。前端入口为 `/admin/feedback`。
+
 ## GET `/preview/{filename}`
 
 读取 `backend/outputs/{filename}` 并返回 HTML 预览。

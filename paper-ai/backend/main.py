@@ -1025,6 +1025,74 @@ def admin_stats(_admin: User = Depends(require_platform_admin), db: Session = De
     }
 
 
+@app.get("/admin/feedback")
+def admin_feedback(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    category: str | None = Query(None),
+    user: str | None = Query(None, alias="user"),
+    task_id: str | None = Query(None),
+    version: str | None = Query(None),
+    _admin: User = Depends(require_platform_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Return a read-only, cross-tenant feedback view for platform admins."""
+    allowed_categories = {"bug", "slow", "format", "ai", "suggestion", "other"}
+    if category is not None and category not in allowed_categories:
+        raise HTTPException(status_code=422, detail="category 无效。")
+    query = select(Feedback, User.email).join(User, User.id == Feedback.user_id)
+    count_query = select(func.count()).select_from(Feedback).join(User, User.id == Feedback.user_id)
+    filters = []
+    if category:
+        filters.append(Feedback.category == category)
+    if user:
+        search = f"%{user.strip()}%"
+        filters.append((Feedback.user_id.ilike(search)) | (User.email.ilike(search)))
+    if task_id:
+        filters.append(Feedback.task_id == task_id.strip())
+    if version:
+        filters.append(Feedback.app_version == version.strip())
+    if filters:
+        query = query.where(*filters)
+        count_query = count_query.where(*filters)
+    total = int(db.scalar(count_query) or 0)
+    rows = db.execute(
+        query.order_by(Feedback.created_at.desc(), Feedback.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+
+    def public_item(item: Feedback, email: str) -> dict[str, object]:
+        metadata = item.metadata_json or {}
+        speed_metadata = {
+            key: metadata[key]
+            for key in ("task_status", "elapsed_seconds", "timing_source")
+            if key in metadata
+        }
+        return {
+            "id": item.id,
+            "user_id": item.user_id,
+            "user_email": email,
+            "tenant_id": item.tenant_id,
+            "category": item.category,
+            "description": item.description,
+            "contact": item.contact,
+            "route": item.route,
+            "task_id": item.task_id,
+            "request_id": item.request_id,
+            "app_version": item.app_version,
+            "created_at": item.created_at,
+            "speed_metadata": speed_metadata,
+        }
+
+    return {
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "items": [public_item(item, email) for item, email in rows],
+    }
+
+
 @app.post("/agent/run")
 async def run_agent(
     request: Request,

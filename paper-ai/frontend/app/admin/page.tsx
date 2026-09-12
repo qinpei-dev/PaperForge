@@ -118,7 +118,7 @@ export default function AdminPage() {
     <main className="admin-page">
       <header className="admin-header">
         <div><p className="eyebrow">PAPERFORGE OPERATIONS</p><h1>Admin Dashboard</h1><p className="admin-muted">最小运营视图 · 仅展示聚合统计，不包含租户或用户明细</p></div>
-        <div className="admin-actions"><Link className="home-auth-link" href="/">返回工作台</Link><button className="home-auth-link logout-button" type="button" onClick={() => { localStorage.removeItem("paperforge_token"); localStorage.removeItem("paperforge_user"); window.location.href = "/login"; }}>退出登录</button></div>
+        <div className="admin-actions"><Link className="home-auth-link" href="/admin/feedback">Feedback</Link><Link className="home-auth-link" href="/">返回工作台</Link><button className="home-auth-link logout-button" type="button" onClick={() => { localStorage.removeItem("paperforge_token"); localStorage.removeItem("paperforge_user"); window.location.href = "/login"; }}>退出登录</button></div>
       </header>
 
       <section className="admin-stat-grid" aria-label="系统核心统计">
