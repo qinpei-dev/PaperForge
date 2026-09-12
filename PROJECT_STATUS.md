@@ -12,6 +12,8 @@
 - 运行时事实：ECS `/opt/paperforge` 沿用历史 Compose 数据挂载结构，仅替换 backend/frontend image；不得未经数据迁移审查直接切换到仓库新版 named-volume Compose。
 - 当前 P1：localStorage bearer token 的 XSS 暴露面、单进程限流/缺少 WAF 与外部监控、单进程 worker 重启后 `interrupted`、复杂 DOCX/AI 内容审校深度仍需后续治理；不得把这些未完成项伪装成 P0 已完成。
 - 当前 P2：checkpoint/resume、分布式队列/多副本调度、对象存储、企业 SSO/SCIM、计费与更深的内容 Agent 仍不在本次 P0 发布范围。
+- Beta Feedback Entry：已在源码实现最小受控 Beta 反馈闭环，支持 Bug/功能异常、速度慢、格式修改问题、AI 修改问题、使用建议、其他六类；反馈写入 tenant-scoped `feedback` 表，当前无独立管理后台，需通过数据库查询。Alembic `0013_beta_feedback` 已通过临时 SQLite fresh upgrade；尚未部署到 production，因此 production 当前仍以 `0012_day17_token_version` 为 migration head。
+- Beta Feedback 安全边界：API 必须 JWT 认证，user/tenant 由服务端 membership context 绑定；task_id 仅接受当前 tenant 任务；不保存 JWT、Authorization、cookie、上传文件或论文正文。速度反馈复用现有 task status/started_at/finished_at，后续 observability enhancement 留在 TODO。
 - 事实冲突处理：先核实 source code、Git、ECS/Compose、health/readiness 和浏览器行为，再更新仓库文档；聊天仅为临时上下文。
 
 下方 Day/版本段落是历史里程碑记录；如与上方当前状态或真实 ECS 检查冲突，以上方当前状态和生产 runbook 为准。

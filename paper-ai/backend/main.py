@@ -26,9 +26,10 @@ from services.storage import LocalStorage
 from services.content_review import apply_content_suggestion
 from services.review_evidence import aggregate_review_evidence, content_score_summary
 from auth import auth_is_required, create_access_token, get_current_user, get_optional_current_user, hash_password, is_platform_admin, preview_auto_login_enabled, preview_user_email, require_platform_admin, validate_email, verify_password
-from db.models import Artifact, Project, Quota, Task, TaskEvent, Template, Tenant, TenantAuditEvent, TenantInvitation, TenantMembership, TenantOwnershipTransfer, Usage, User, Workspace
+from db.models import Artifact, Feedback, Project, Quota, Task, TaskEvent, Template, Tenant, TenantAuditEvent, TenantInvitation, TenantMembership, TenantOwnershipTransfer, Usage, User, Workspace
 from db.session import SessionLocal, get_db, init_db
 from schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserResponse
+from schemas.feedback import FeedbackRequest
 from services.task_worker import task_worker
 from services.durable_tasks import advance_running_task, claim_pending_task, finish_running_task, record_task_event, reconcile_orphaned_tasks
 from services.observability import bind_context, clear_context, configure_structured_logging, log_event
@@ -70,6 +71,7 @@ MAX_DOCX_ARCHIVE_ENTRIES = int(os.getenv("MAX_DOCX_ARCHIVE_ENTRIES", "5000"))
 MAX_DOCX_COMPRESSION_RATIO = float(os.getenv("MAX_DOCX_COMPRESSION_RATIO", "200"))
 MAX_UPLOAD_FILENAME_LENGTH = int(os.getenv("MAX_UPLOAD_FILENAME_LENGTH", "320"))
 MAX_REQUEST_BODY_BYTES = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(240 * 1024 * 1024)))
+APP_VERSION = os.getenv("APP_VERSION", "v3.7.3")
 LOGGER = logging.getLogger(__name__)
 configure_structured_logging()
 
@@ -928,6 +930,49 @@ def get_usage(context: TenantContext = Depends(get_current_tenant), db: Session 
     snapshot = get_usage_snapshot(db, context.tenant_id)
     db.commit()
     return usage_response(snapshot)
+
+
+@app.post("/feedback", status_code=201)
+def create_feedback(payload: FeedbackRequest, request: Request, context: TenantContext = Depends(get_current_tenant), db: Session = Depends(get_db)) -> dict[str, object]:
+    """Store tenant-scoped user feedback without accepting forged identity fields."""
+    description = payload.description.strip()
+    if not description:
+        raise HTTPException(status_code=422, detail="问题描述不能为空。")
+    task = None
+    if payload.task_id:
+        task = db.scalar(select(Task).where(Task.id == payload.task_id, Task.tenant_id == context.tenant_id))
+        if task is None:
+            raise HTTPException(status_code=404, detail="没有找到当前工作区中的任务。")
+    metadata: dict[str, object] = {}
+    if payload.category == "slow" and task is not None:
+        now = datetime.now(timezone.utc)
+        started = task.started_at
+        finished = task.finished_at
+        end = finished or now
+        if started is not None:
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            if end.tzinfo is None:
+                end = end.replace(tzinfo=timezone.utc)
+            metadata["task_status"] = task.status
+            metadata["elapsed_seconds"] = max(0, round((end - started).total_seconds(), 3))
+            metadata["timing_source"] = "task.started_at/finished_at"
+    item = Feedback(
+        user_id=context.current_user.id,
+        tenant_id=context.tenant_id,
+        category=payload.category,
+        description=description,
+        contact=payload.contact.strip() if payload.contact and payload.contact.strip() else None,
+        route=payload.route.strip() if payload.route and payload.route.strip() else None,
+        task_id=task.id if task else None,
+        request_id=getattr(request.state, "request_id", None),
+        app_version=APP_VERSION,
+        metadata_json=metadata or None,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return {"id": item.id, "status": "submitted", "message": "反馈已提交，感谢你的帮助。"}
 
 
 @app.get("/admin/stats")

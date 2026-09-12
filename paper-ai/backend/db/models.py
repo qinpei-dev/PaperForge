@@ -27,6 +27,7 @@ class User(Base):
     tenant_memberships: Mapped[list[TenantMembership]] = relationship(back_populates="user", cascade="all, delete-orphan")
     tasks: Mapped[list[Task]] = relationship(back_populates="user")
     usage_records: Mapped[list[Usage]] = relationship(back_populates="user")
+    feedback_items: Mapped[list[Feedback]] = relationship(back_populates="user")
 
 
 class Tenant(Base):
@@ -49,6 +50,7 @@ class Tenant(Base):
     templates: Mapped[list[Template]] = relationship(back_populates="tenant")
     tasks: Mapped[list[Task]] = relationship(back_populates="tenant")
     task_events: Mapped[list[TaskEvent]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
+    feedback_items: Mapped[list[Feedback]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
 
 
 class TenantMembership(Base):
@@ -193,6 +195,7 @@ class Task(Base):
     artifacts: Mapped[list[Artifact]] = relationship(back_populates="task", cascade="all, delete-orphan")
     events: Mapped[list[TaskEvent]] = relationship(back_populates="task", cascade="all, delete-orphan")
     usage_records: Mapped[list[Usage]] = relationship(back_populates="task")
+    feedback_items: Mapped[list[Feedback]] = relationship(back_populates="task")
 
 
 class TaskEvent(Base):
@@ -294,6 +297,33 @@ class Usage(Base):
 # Keep the longer domain name available to callers without introducing a
 # second table or a second usage vocabulary in the P0 API.
 UsageRecord = Usage
+
+
+class Feedback(Base):
+    """Minimal authenticated feedback intake for the controlled beta."""
+
+    __tablename__ = "feedback"
+    __table_args__ = (
+        CheckConstraint("category IN ('bug', 'slow', 'format', 'ai', 'suggestion', 'other')", name="ck_feedback_category"),
+        Index("ix_feedback_tenant_created", "tenant_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), index=True, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True, nullable=False)
+    category: Mapped[str] = mapped_column(String(30), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    contact: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    route: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"), index=True, nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    app_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    user: Mapped[User] = relationship(back_populates="feedback_items")
+    tenant: Mapped[Tenant] = relationship(back_populates="feedback_items")
+    task: Mapped[Task | None] = relationship(back_populates="feedback_items")
 
 
 class Template(Base):

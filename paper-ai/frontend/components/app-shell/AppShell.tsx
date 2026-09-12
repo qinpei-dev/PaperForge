@@ -29,6 +29,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [workspaceLoadState, setWorkspaceLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [activeTenantId, setActiveTenantId] = useState("");
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackCategory, setFeedbackCategory] = useState("bug");
+  const [feedbackDescription, setFeedbackDescription] = useState("");
+  const [feedbackContact, setFeedbackContact] = useState("");
+  const [feedbackState, setFeedbackState] = useState<"idle" | "submitting" | "success" | "error">("idle");
 
   useEffect(() => {
     let cancelled = false;
@@ -105,6 +110,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     router.push("/login");
   }
 
+  async function submitFeedback(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!feedbackDescription.trim() || feedbackState === "submitting") return;
+    setFeedbackState("submitting");
+    const taskMatch = pathname.match(/^\/tasks\/([^/]+)/);
+    try {
+      const response = await fetch(apiUrl("/feedback"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authorizationHeaders() },
+        body: JSON.stringify({ category: feedbackCategory, description: feedbackDescription.trim(), contact: feedbackContact.trim() || null, route: pathname, task_id: taskMatch?.[1] || null }),
+      });
+      if (!response.ok) throw new Error("feedback request failed");
+      setFeedbackState("success");
+      setFeedbackDescription("");
+      setFeedbackContact("");
+    } catch {
+      setFeedbackState("error");
+    }
+  }
+
   const activeWorkspace = workspaces.find((workspace) => workspace.tenant_id === activeTenantId);
   return (
     <div className="app-shell">
@@ -127,6 +152,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         <main className="app-main">{children}</main>
       </div>
+      <button className="feedback-fab" type="button" onClick={() => { setFeedbackOpen(true); setFeedbackState("idle"); }} aria-label="提交反馈">遇到问题？反馈</button>
+      {feedbackOpen ? <div className="feedback-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFeedbackOpen(false); }}><section className="feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title"><div className="feedback-modal-heading"><div><p className="eyebrow">CONTROLLED BETA</p><h2 id="feedback-title">告诉我们哪里可以更好</h2></div><button className="feedback-close" type="button" onClick={() => setFeedbackOpen(false)} aria-label="关闭反馈">×</button></div>{feedbackState === "success" ? <div className="feedback-success"><strong>反馈已提交，感谢你的帮助。</strong><button className="app-primary-link" type="button" onClick={() => setFeedbackOpen(false)}>完成</button></div> : <form className="feedback-form" onSubmit={submitFeedback}><label>问题类型<select value={feedbackCategory} onChange={(event) => setFeedbackCategory(event.target.value)}><option value="bug">Bug / 功能异常</option><option value="slow">速度慢</option><option value="format">格式修改问题</option><option value="ai">AI 修改问题</option><option value="suggestion">使用建议</option><option value="other">其他</option></select></label><label>问题描述 <span>必填</span><textarea required minLength={1} maxLength={5000} rows={5} value={feedbackDescription} onChange={(event) => setFeedbackDescription(event.target.value)} placeholder="请描述你遇到的情况，越具体越有帮助。" /></label><label>联系方式 <span>选填</span><input maxLength={320} value={feedbackContact} onChange={(event) => setFeedbackContact(event.target.value)} placeholder="微信、邮箱或其他联系方式" /></label>{feedbackState === "error" ? <p className="feedback-error">提交失败，请稍后重试。</p> : null}<button className="app-primary-link feedback-submit" type="submit" disabled={feedbackState === "submitting"}>{feedbackState === "submitting" ? "提交中…" : "提交反馈"}</button></form>}</section></div> : null}
     </div>
   );
 }

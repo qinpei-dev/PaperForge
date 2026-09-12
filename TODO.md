@@ -24,6 +24,14 @@
 
 P1/P2 继续项：localStorage bearer token、WAF/分布式限流/外部监控、worker restart recovery、复杂 DOCX 和 AI 内容审校深度属于 P1；checkpoint/resume、分布式队列、对象存储、企业 IAM、计费和更深内容 Agent 属于 P2，均不得抢占当前 P0 发布顺序。
 
+## [DONE] Controlled Beta Feedback Entry
+
+完成：登录后 AppShell 提供低干扰“遇到问题？反馈”浮动入口与移动端可退化 Modal；表单支持 Bug/功能异常、速度慢、格式修改问题、AI 修改问题、使用建议、其他六类，描述必填（后端/前端 5000 字限制），联系方式选填，并防止提交中重复点击。
+
+后端新增认证 `POST /feedback` 与 Alembic `0013_beta_feedback`。反馈自动保存 user、tenant、category、description、contact、route、task_id、request_id、app_version 和创建时间；task_id 由服务端校验当前 tenant，速度类别在可用时记录 task status 与 started_at/finished_at elapsed。没有新增管理后台，反馈可直接从数据库查询。
+
+验收：反馈专项 + SaaS + Day17 安全回归 `12 passed`；frontend production build PASS；fresh Alembic upgrade 至 `0013_beta_feedback` PASS；`git diff --check` PASS。后续 observability enhancement（更细 stage/trace timing）保留，不在本轮重做任务执行系统。尚未执行 production migration/deploy。
+
 ## [DONE] PaperForge Landing Page — Product Homepage
 
 完成：基于 PaperForge Brand Visual System 实现真实用户首页，包含 Hero、PaperForge App Preview、Workflow、Verification Result 和 CTA。采用暖白背景、黑色文字、品牌蓝强调与产品窗口优先布局；不展示 Brand Guideline、Logo 介绍、字体说明或品牌理念。
