@@ -2,11 +2,11 @@
 
 ## [CURRENT] PaperForge v3.7.5 Production Release
 
-状态：**CONTROLLED PUBLIC BETA LIVE；管理员验收待配置 `ADMIN_EMAILS`**。
+状态：**CONTROLLED PUBLIC BETA LIVE；管理员验收 PASS**。
 
 已完成：canonical ACR run `34678107681`、ECS immutable backend/frontend 部署、非空 PostgreSQL 备份、migration `0013_beta_feedback`、health/readiness、authenticated feedback submit、ordinary-user admin 403、Local task/SSE/preview/DOCX download smoke。修复并发布 feedback ORM 到 `metadata` 列的最小映射 bug。
 
-待办：在受控运维窗口配置真实 `ADMIN_EMAILS` 后，使用现有管理员账号验收 `/admin` 与 `/admin/feedback` 列表/详情及跨 tenant 读取；不把管理员账号或凭据写入仓库。
+已完成：受控运维窗口备份生产 `.env`，配置 `ADMIN_EMAILS`，更新 ECS historical Compose backend environment 并重建 backend；管理员登录、`/admin/stats`、`/admin/feedback`、`/admin` 与 `/admin/feedback` 页面验收 PASS，未认证请求 401，临时普通测试账号请求 403。管理员账号、密码和生产凭据未写入仓库。
 
 ## [DONE] PaperForge P0 release remediation + repository-driven governance
 
