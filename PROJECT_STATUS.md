@@ -3,16 +3,16 @@
 ## 当前权威状态（2026-09-12）
 
 - 项目：**PaperForge — Verified Academic Document Agent**；当前阶段：**READY FOR CONTROLLED PUBLIC BETA**。
-- Production：前端 `https://aetherislab.xyz`；浏览器 API：`https://aetherislab.xyz/api`。ECS 已运行本轮 `v3.7.3`，runtime digest、migration/readiness 和部署时间已在本文件与 `docs/PRODUCTION_DEPLOYMENT.md` 记录。
-- Release candidate：`v3.7.3`；release commit：`729fe2f19864a7e80dc590084e0d0becdb04fe71`；frontend/backend 均从该同一 commit 构建。
+- Production：前端 `https://aetherislab.xyz`；浏览器 API：`https://aetherislab.xyz/api`。ECS 已运行本轮 `v3.7.5`，runtime digest、migration/readiness 和部署事实已同步记录。
+- Release candidate：`v3.7.5`；release commit：`4ca4bf29a1eee67f05bcdd6c7b5dfd8a0841a018`；frontend/backend 均从该同一 commit 构建。
 - P0 源码状态：frontend Docker build 已保留 local loopback fallback，并要求生产 CI 显式传递三个 `NEXT_PUBLIC_*` build args；Next.js 已升级到 `15.5.24`，兼容传递依赖审计为 0 vulnerabilities。
 - 本地验证：frontend production `npm run build` **PASS**；backend 从 `paper-ai/backend` 执行 `pytest -q` 为 **107 passed**；`.next/server` 与 `.next/static` 未发现 `http://localhost:8000` 或 `http://127.0.0.1:8000`，并发现生产 API URL。Docker image build 尚未在本机执行；这只代表 local build 环境状态，不代表 production Docker 故障。
-- 发布状态：canonical ACR run 已从 release commit 成功构建并推送 immutable backend/frontend images；ECS 已按 digest 部署，Alembic 已验证为 `0012_day17_token_version (head)`，公开 `/api/health`、`/api/ready` 和首页均为 200，JWT 已在稳定后轮换。旧 `ops/acr-build-v3.6` workflow 已标记废弃，不得使用。2026-09-12 受控生产浏览器 smoke 与最终程序化审计均通过：A Local 任务、B AI 任务、SSE 完成态、预览、A/B 任务与 private template 隔离均通过；认证 `GET /api/usage` 返回 200、HTTPS、production CORS `https://aetherislab.xyz` 和 `X-Request-ID`；A owner artifact download 返回 200，B 请求 A artifact 返回 404；DOCX 下载 body 为非空合法 ZIP 容器且文件名扩展名为 `.docx`。最终门禁为 **READY FOR CONTROLLED PUBLIC BETA**。ECS 数据库、PostgreSQL volume 和现有数据 bind mounts 未被删除或替换。
+- 发布状态：canonical ACR run `34678107681` 已从 release commit 成功构建并推送 immutable backend/frontend images；ECS 已按 digest 部署，Alembic 已验证为 `0013_beta_feedback (head)`，公开 `/api/health`、`/api/ready` 和首页均为 200。Feedback authenticated submit、unauthenticated 401、数据库写入、普通用户 admin 403、Local task、SSE、preview、合法 DOCX download 均 PASS。`ADMIN_EMAILS` 未配置，因此平台管理员页面与跨 tenant admin 读取未执行，不伪造 PASS。旧 `ops/acr-build-v3.6` workflow 已废弃。ECS 数据库、PostgreSQL volume 和现有数据 bind mounts 未被删除或替换。
 - 受控 smoke 资源：A task `2c3eee5f-597f-4ebe-a6b9-23411b257424`；B task `e8831a6f-fd94-4a69-9f43-36676721cda3`。仅记录非敏感资源标识；账号密码、JWT、数据库和 provider 凭据未写入仓库。
 - 运行时事实：ECS `/opt/paperforge` 沿用历史 Compose 数据挂载结构，仅替换 backend/frontend image；不得未经数据迁移审查直接切换到仓库新版 named-volume Compose。
 - 当前 P1：localStorage bearer token 的 XSS 暴露面、单进程限流/缺少 WAF 与外部监控、单进程 worker 重启后 `interrupted`、复杂 DOCX/AI 内容审校深度仍需后续治理；不得把这些未完成项伪装成 P0 已完成。
 - 当前 P2：checkpoint/resume、分布式队列/多副本调度、对象存储、企业 SSO/SCIM、计费与更深的内容 Agent 仍不在本次 P0 发布范围。
-- Beta Feedback Entry：已在源码实现最小受控 Beta 反馈闭环，支持 Bug/功能异常、速度慢、格式修改问题、AI 修改问题、使用建议、其他六类；反馈写入 tenant-scoped `feedback` 表，当前无独立管理后台，需通过数据库查询。Alembic `0013_beta_feedback` 已通过临时 SQLite fresh upgrade；尚未部署到 production，因此 production 当前仍以 `0012_day17_token_version` 为 migration head。
+- Beta Feedback Entry：已部署 v3.7.5；`feedback` 表、认证提交和只读 admin console API/UI 已上线。生产 smoke 发现并修复 ORM `metadata_json` 未显式映射 migration `metadata` 列的问题；修复已通过专项回归并随 v3.7.5 发布。
 - Beta Feedback 安全边界：API 必须 JWT 认证，user/tenant 由服务端 membership context 绑定；task_id 仅接受当前 tenant 任务；不保存 JWT、Authorization、cookie、上传文件或论文正文。速度反馈复用现有 task status/started_at/finished_at，后续 observability enhancement 留在 TODO。
 - 事实冲突处理：先核实 source code、Git、ECS/Compose、health/readiness 和浏览器行为，再更新仓库文档；聊天仅为临时上下文。
 

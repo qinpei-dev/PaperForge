@@ -4,9 +4,9 @@
 
 This is the production source of truth for deployment facts. As of 2026-09-12,
 the target public frontend is `https://aetherislab.xyz` and the browser API base
-is `https://aetherislab.xyz/api`. Release `v3.7.3` was built from commit
-`729fe2f19864a7e80dc590084e0d0becdb04fe71`, published by the canonical ACR
-workflow, and deployed to Aliyun ECS. The production runtime is operational;
+is `https://aetherislab.xyz/api`. Release `v3.7.5` was built from commit
+`4ca4bf29a1eee67f05bcdd6c7b5dfd8a0841a018`, published by canonical ACR run
+`34678107681`, and deployed to Aliyun ECS. The production runtime is operational;
 the final public-beta gate is **READY FOR CONTROLLED PUBLIC BETA** after the
 2026-09-12 authenticated production audit.
 
@@ -37,16 +37,16 @@ This runbook deploys immutable images through `docker-compose.prod.yml`; it does
 
 ## Current ECS runtime snapshot
 
-- ACR workflow run: `34640050446` (success); the first login failure is historical and must not be treated as the current release state.
-- Backend image: `crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/paperforge-backend:v3.7.3@sha256:dd4cf884c553a7b06509d92c4d19fdca76d9fdc2b821ff9a9a2eb97ca98879f1`.
-- Frontend image: `crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/paperforge-frontend:v3.7.3@sha256:2fc634725e9f6814a57e2605f1d2f2d10c929caf8b4bb743673e73d2875265de`.
+- ACR workflow run: `34678107681` (success); the prior runs are historical.
+- Backend image: `crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/paperforge-backend:v3.7.5@sha256:27522b2f2c04010c657d03d30e3e741abd17843700df04241ed6853f3c1167c8`.
+- Frontend image: `crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/paperforge-frontend:v3.7.5@sha256:40f26beb77117a434f002e498c20abdd69ef24b3e4ed7bd224b67378617acb09`.
 - ACR frontend layer scan: production API URL present; localhost and loopback API URLs absent; all three production build args were present in the workflow logs.
 - ECS host: `47.109.185.251`, deployment directory `/opt/paperforge`; backend container created `2026-09-11T20:08:31Z`, frontend container created `2026-09-11T20:07:23Z`.
-- Migration: `0012_day17_token_version (head)`; explicit `upgrade head` completed before the runtime update.
+- Migration: `0013_beta_feedback (head)`; explicit `upgrade head` completed before the runtime update.
 - Runtime probes after deployment and JWT rotation: internal/public health, readiness and public homepage all returned HTTP 200; backend and PostgreSQL health were healthy. The historical frontend Compose file has no container healthcheck, so its public HTTP 200 is the route health signal.
 - Data safety: PostgreSQL image/container and named volume were retained. Existing bind mounts `/opt/paperforge-data/uploads`, `/opt/paperforge-data/outputs`, and `/opt/paperforge-data/template_storage` were retained; no database, volume, or production data was deleted or rebuilt. A non-empty PostgreSQL custom-format pre-release dump was stored in the ECS deployment backup directory; only its metadata belongs in project records.
 - Secrets: repository ACR secret names `ACR_USERNAME` and `ACR_PASSWORD` were refreshed through encrypted secret management; `JWT_SECRET_KEY` was rotated after stable deployment without recording its value. `POSTGRES_PASSWORD` and optional `DEEPSEEK_API_KEY` were not changed because no replacement credentials were available; neither value was exposed.
-- Browser and programmatic audit: public home, login, register and unauthenticated `/dashboard` redirect passed. Controlled User A/B smoke passed account creation/login, paper and template upload, A Local task, B AI task, completed SSE-driven task detail, A preview, and task/private-template cross-tenant hiding; browser Console error/warn was empty. Programmatic authenticated `GET /api/usage` returned HTTP 200 over HTTPS with `Content-Type: application/json`, `Access-Control-Allow-Origin: https://aetherislab.xyz`, and `X-Request-ID`. Owner artifact download returned 200 with download disposition, non-empty valid DOCX ZIP body and `.docx` filename; cross-tenant artifact access returned 404 without the other tenant's content. Final gate: **READY FOR CONTROLLED PUBLIC BETA**.
+- Programmatic audit: authenticated feedback submit returned 201 and was found in PostgreSQL; unauthenticated feedback returned 401; ordinary user `/admin/feedback` returned 403; Local task, SSE, preview, usage and non-empty valid DOCX download all passed. `ADMIN_EMAILS` is not configured, so platform-admin page/list/detail and cross-tenant admin reads remain unverified.
 - Compose compatibility warning: ECS `/opt/paperforge/docker-compose.prod.yml` is a historical runtime file with direct image references and bind mounts. Do not replace it with the repository named-volume Compose without a separately reviewed data migration plan.
 
 1. On the production host, check out the intended release runbook and create a protected environment file from `.env.production.example` outside Git.

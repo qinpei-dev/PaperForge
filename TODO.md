@@ -1,5 +1,13 @@
 # TODO
 
+## [CURRENT] PaperForge v3.7.5 Production Release
+
+状态：**CONTROLLED PUBLIC BETA LIVE；管理员验收待配置 `ADMIN_EMAILS`**。
+
+已完成：canonical ACR run `34678107681`、ECS immutable backend/frontend 部署、非空 PostgreSQL 备份、migration `0013_beta_feedback`、health/readiness、authenticated feedback submit、ordinary-user admin 403、Local task/SSE/preview/DOCX download smoke。修复并发布 feedback ORM 到 `metadata` 列的最小映射 bug。
+
+待办：在受控运维窗口配置真实 `ADMIN_EMAILS` 后，使用现有管理员账号验收 `/admin` 与 `/admin/feedback` 列表/详情及跨 tenant 读取；不把管理员账号或凭据写入仓库。
+
 ## [DONE] PaperForge P0 release remediation + repository-driven governance
 
 状态：**已完成；P0 代码、ACR immutable images、ECS runtime 发布、受控登录后业务 smoke 和最终 Network/Artifact 原始响应审计均通过**。
@@ -30,7 +38,7 @@ P1/P2 继续项：localStorage bearer token、WAF/分布式限流/外部监控�
 
 后端新增认证 `POST /feedback` 与 Alembic `0013_beta_feedback`。反馈自动保存 user、tenant、category、description、contact、route、task_id、request_id、app_version 和创建时间；task_id 由服务端校验当前 tenant，速度类别在可用时记录 task status 与 started_at/finished_at elapsed。没有新增管理后台，反馈可直接从数据库查询。
 
-验收：反馈专项 + SaaS + Day17 安全回归 `12 passed`；frontend production build PASS；fresh Alembic upgrade 至 `0013_beta_feedback` PASS；`git diff --check` PASS。后续 observability enhancement（更细 stage/trace timing）保留，不在本轮重做任务执行系统。尚未执行 production migration/deploy。
+验收：反馈专项 + SaaS + Day17 安全回归 `12 passed`；frontend production build PASS；fresh Alembic upgrade 至 `0013_beta_feedback` PASS；生产 authenticated submit、数据库写入和 ordinary-user 403 已通过。后续 observability enhancement（更细 stage/trace timing）保留，不在本轮重做任务执行系统。
 
 ## [DONE] PaperForge Landing Page — Product Homepage
 
