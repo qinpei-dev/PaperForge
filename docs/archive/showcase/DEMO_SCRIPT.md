@@ -112,7 +112,7 @@
 
 详细素材清单见 `docs/DEMO_SCREENSHOT_GUIDE.md`。建议录屏控制在 60-90 秒，按下面顺序推进：
 
-真实网页截图已归档到 `docs/assets/screenshots/real-web-2026-06-27/`。如果不现场录屏，也可以直接按以下顺序展示静态截图：
+真实网页截图已归档到 `docs/archive/screenshots/`。如果不现场录屏，也可以直接按以下顺序展示静态截图：
 
 1. `01_home_overview_real.png`
 2. `03_upload_waiting_real.png`

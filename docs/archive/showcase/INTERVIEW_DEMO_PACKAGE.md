@@ -124,7 +124,7 @@
 
 详细清单见 `docs/DEMO_SCREENSHOT_GUIDE.md`。
 
-真实网页截图已归档到 `docs/assets/screenshots/real-web-2026-06-27/`，共 10 张，覆盖首页、上传、运行中、结果 dashboard、检查模块、TracePanel、在线预览和下载入口。建议作品集主图使用 `01_home_overview_real.png`，面试流程展示按 `03_upload_waiting_real.png`、`04_running_agent_real.png`、`06_result_dashboard_real.png`、`08_trace_expanded_real.png`、`10_preview_download_real.png` 顺序展开。
+真实网页截图已归档到 `docs/archive/screenshots/`，共 10 张，覆盖首页、上传、运行中、结果 dashboard、检查模块、TracePanel、在线预览和下载入口。建议作品集主图使用 `01_home_overview_real.png`，面试流程展示按 `03_upload_waiting_real.png`、`04_running_agent_real.png`、`06_result_dashboard_real.png`、`08_trace_expanded_real.png`、`10_preview_download_real.png` 顺序展开。
 
 建议至少准备 13 张截图：首页 Hero、上传工作台、文件已选择、运行中状态、结果 dashboard、评分 `80 -> 86`、修改报告、参考文献/图表检查、TracePanel 默认折叠、TracePanel 展开 9 步、在线预览、下载入口和 390px 窄屏适配。
 

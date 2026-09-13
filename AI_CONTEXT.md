@@ -9,7 +9,7 @@
 PaperForge 已正式采用 Repository-Driven Development。聊天记录只是临时上下文；长期状态、交接和生产事实必须以仓库文件和真实运行环境为准。完整规则见 [`AGENTS.md`](AGENTS.md) 与 [`docs/REPOSITORY_GOVERNANCE.md`](docs/REPOSITORY_GOVERNANCE.md)。
 
 - 当前阶段：P0 源码、ACR 镜像和 ECS production runtime 已发布；公开 beta 最终验收仍等待受控的登录后浏览器 E2E 与 A/B tenant isolation。
-- Production：前端 `https://aetherislab.xyz`，浏览器 API base `https://aetherislab.xyz/api`；release candidate `v3.7.3` 从 commit `729fe2f19864a7e80dc590084e0d0becdb04fe71` 构建并已部署。真实 ECS 运行状态、镜像 digest 和最终发布事实以 `PROJECT_STATUS.md` 与 `docs/PRODUCTION_DEPLOYMENT.md` 的最新记录为准。
+- Production：前端 `https://aetherislab.xyz`，浏览器 API base `https://aetherislab.xyz/api`；release candidate `v3.7.5` 从 commit `4ca4bf29a1eee67f05bcdd6c7b5dfd8a0841a018` 构建并已部署。真实 ECS 运行状态、镜像 digest 和最终发布事实以 `PROJECT_STATUS.md` 与 `docs/PRODUCTION_DEPLOYMENT.md` 的最新记录为准。
 - 当前 P0：源码、frontend production build args、Next.js 15.5.24、ACR immutable image、ECS migration/deploy/readiness 和 JWT rotation 已完成；受控登录后 upload/template/local/ai/preview/download/SSE 与 A/B tenant isolation 尚待有授权测试账号的浏览器验收。
 - 前端生产构建必须显式传入 `NEXT_PUBLIC_API_BASE_URL`、`NEXT_PUBLIC_PAPERFORGE_PREVIEW_AUTO_LOGIN=false`、`NEXT_PUBLIC_PAPERFORGE_APP_ENV=production`；Compose production 只消费预构建 image，不在运行时注入这些 Next public 变量。
 - 本机 Docker Desktop 只用于 local image build/validation；Aliyun ECS Docker/Compose 才是 production runtime。Docker Desktop 未运行不是 production 故障，不得因此修改 production Docker 配置。

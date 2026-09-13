@@ -71,7 +71,7 @@ MAX_DOCX_ARCHIVE_ENTRIES = int(os.getenv("MAX_DOCX_ARCHIVE_ENTRIES", "5000"))
 MAX_DOCX_COMPRESSION_RATIO = float(os.getenv("MAX_DOCX_COMPRESSION_RATIO", "200"))
 MAX_UPLOAD_FILENAME_LENGTH = int(os.getenv("MAX_UPLOAD_FILENAME_LENGTH", "320"))
 MAX_REQUEST_BODY_BYTES = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(240 * 1024 * 1024)))
-APP_VERSION = os.getenv("APP_VERSION", "v3.7.3")
+APP_VERSION = os.getenv("APP_VERSION", "v3.7.5")
 LOGGER = logging.getLogger(__name__)
 configure_structured_logging()
 

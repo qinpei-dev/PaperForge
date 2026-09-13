@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
   [ValidatePattern('^v\d+\.\d+\.\d+$')]
-  [string]$ReleaseVersion = 'v3.7.3',
+  [string]$ReleaseVersion = 'v3.7.5',
   [string]$Registry = 'crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge',
   [string]$ApiBaseUrl = 'https://aetherislab.xyz/api',
   [ValidateSet('false', 'true')]

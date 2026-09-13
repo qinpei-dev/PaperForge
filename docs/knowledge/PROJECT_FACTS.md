@@ -101,7 +101,7 @@
 
 - 测试库：`test_documents/` 10 个脱敏 DOCX；来源仅限公开/已授权，不含登录/付费/验证码受限全文（CNKI 边界见 docs）
 - demo 输入输出：人工构造脱敏样本（demo_inputs/ demo_outputs/），不来自真实用户论文
-- 真实网页截图：`docs/assets/screenshots/real-web-2026-06-27/` 共 10 张（早期界面，评分 81→87 等为当时数据）
+- 真实网页截图：`docs/archive/screenshots/` 共 10 张（早期界面，评分 81→87 等为当时数据；不作为当前产品展示素材）
 - 营销项目素材：无当前版本产品截图；Sidebar 工作区需登录无公开截图
 
 ## 11. 事实维护规则

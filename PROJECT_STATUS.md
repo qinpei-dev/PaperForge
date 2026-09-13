@@ -3,13 +3,14 @@
 ## 当前权威状态（2026-09-12）
 
 - 项目：**PaperForge — Verified Academic Document Agent**；当前阶段：**READY FOR CONTROLLED PUBLIC BETA**。
+- 公开仓库清理（第一阶段）：当前入口已统一为 v3.7.5，个人/运维标识已脱敏，早期 demo、旧 UI 截图和历史审计已迁至 `docs/archive/`；Git 历史与本地运行数据均未处理。
 - Production：前端 `https://aetherislab.xyz`；浏览器 API：`https://aetherislab.xyz/api`。ECS 已运行本轮 `v3.7.5`，runtime digest、migration/readiness 和部署事实已同步记录。
 - Release candidate：`v3.7.5`；release commit：`4ca4bf29a1eee67f05bcdd6c7b5dfd8a0841a018`；frontend/backend 均从该同一 commit 构建。
 - P0 源码状态：frontend Docker build 已保留 local loopback fallback，并要求生产 CI 显式传递三个 `NEXT_PUBLIC_*` build args；Next.js 已升级到 `15.5.24`，兼容传递依赖审计为 0 vulnerabilities。
 - 本地验证：frontend production `npm run build` **PASS**；backend 从 `paper-ai/backend` 执行 `pytest -q` 为 **107 passed**；`.next/server` 与 `.next/static` 未发现 `http://localhost:8000` 或 `http://127.0.0.1:8000`，并发现生产 API URL。Docker image build 尚未在本机执行；这只代表 local build 环境状态，不代表 production Docker 故障。
 - 发布状态：canonical ACR run `34678107681` 已从 release commit 成功构建并推送 immutable backend/frontend images；ECS 已按 digest 部署，Alembic 已验证为 `0013_beta_feedback (head)`，公开 `/api/health`、`/api/ready` 和首页均为 200。Feedback authenticated submit、unauthenticated 401、数据库写入、普通用户 admin 403、Local task、SSE、preview、合法 DOCX download 均 PASS。2026-09-12 已备份生产 `.env`，配置 `ADMIN_EMAILS` 并将其注入 ECS historical Compose backend；管理员登录、`/admin/stats`、`/admin/feedback`、`/admin`、`/admin/feedback` 页面均 PASS，未认证请求为 401，临时普通测试账号请求为 403。旧 `ops/acr-build-v3.6` workflow 已废弃。ECS 数据库、PostgreSQL volume 和现有数据 bind mounts 未被删除或替换。
 - Production AI：2026-09-12 已通过本机仅监听 loopback 的安全输入链路配置 `DEEPSEEK_API_KEY`；正式输入前以隔离假值连续两次验证 POST、trim、content-type/body parsing 和 HTTP 200，假值未写入 production。ECS `.env` 与 backend 容器注入已做长度一致和精确匹配检查，backend recreate 后内部/公开 health、ready 均为 200；生产容器内完整 `mode=ai` Agent smoke 返回 `language_mode_ai=true`、`ai_used=true` 且 AI score 存在。近 15 分钟 backend 日志无 traceback/HTTP 500，未发现 Secret 值或变量赋值泄漏；一次性 smoke 与安全输入临时状态已清理。仓库未记录任何 Secret 值。
-- 受控 smoke 资源：A task `2c3eee5f-597f-4ebe-a6b9-23411b257424`；B task `e8831a6f-fd94-4a69-9f43-36676721cda3`。仅记录非敏感资源标识；账号密码、JWT、数据库和 provider 凭据未写入仓库。
+- 受控 smoke 资源：`task_<redacted>` 与 `task_<redacted>`。账号密码、JWT、数据库、provider 凭据和完整任务标识均不写入公开仓库。
 - 运行时事实：ECS `/opt/paperforge` 沿用历史 Compose 数据挂载结构，仅替换 backend/frontend image；不得未经数据迁移审查直接切换到仓库新版 named-volume Compose。
 - 当前 P1：localStorage bearer token 的 XSS 暴露面、单进程限流/缺少 WAF 与外部监控、单进程 worker 重启后 `interrupted`、复杂 DOCX/AI 内容审校深度仍需后续治理；不得把这些未完成项伪装成 P0 已完成。
 - 当前 P2：checkpoint/resume、分布式队列/多副本调度、对象存储、企业 SSO/SCIM、计费与更深的内容 Agent 仍不在本次 P0 发布范围。
@@ -76,7 +77,7 @@ Day 3 已在不改变 Planner / Executor / Verifier 核心逻辑的前提下完�
 
 正式结论：**READY**
 
-PaperForge V2 核心开发已经完成；Day 1 SaaS 基础升级已在保持 Agent Pipeline 兼容的前提下完成。当前已具备 PostgreSQL/SQLAlchemy/Alembic 元数据层、JWT 认证、Workspace/Task 基础隔离和最小 SaaS 前端入口。
+**Historical / Archived（V2 验收）**：PaperForge V2 核心开发已完成；Day 1 SaaS 基础升级在保持 Agent Pipeline 兼容的前提下完成。当时已具备 PostgreSQL/SQLAlchemy/Alembic 元数据层、JWT 认证、Workspace/Task 基础隔离和最小 SaaS 前端入口；当前生产能力以上方 v3.7.5 权威状态为准。
 
 Day 1 SaaS 验收结果：后端 pytest 9 passed，前端 build PASS，SaaS 专项测试 4 passed，docker compose config PASS。Docker 镜像实际构建待 Docker Desktop daemon 启动后复验。
 
@@ -118,11 +119,11 @@ P1.1 Target-level Formatting Verification：已为 Word 标题样式和可解析
 
 P1.2 Body Paragraph Target-level Verification：正文低风险格式修改现在将每个 paragraph index 记录为 `body_paragraph` target，并保留 before、expected、after 与 locator。Verifier 会重新读取输出 DOCX 并对字体、字号、对齐、行距、首行/左右缩进、段前段后逐 target 比较 actual；无法定位的正文 PlanStep 会写入 unsupported provenance 和原因，不再以 rule-level 分数伪装段落验证。
 
-当前公开发布基线：tag `v2.0-paperforge`，指向当前 HEAD `966dc02`
+Historical / Archived 公开发布基线：tag `v2.0-paperforge`，当时指向 `966dc02`。
 
 版本口径：
 
-- `v2.0-paperforge` 是当前公开发布与 Release Freeze 基线。
+- `v2.0-paperforge` 是 Historical / Archived 的 Release Freeze 基线，不是当前公开发布版本。
 
 - `v0.9.4-demo-screenshot-package` 是上一阶段截图包 tag。
 - `v1.0-showcase` 是稳定展示版本，指向 `10904db`。
@@ -150,7 +151,7 @@ P1.2 Body Paragraph Target-level Verification：正文低风险格式修改现�
 - Beta 文档：v0.4.0-beta-docs 已整理 README 和 docs 文档，补充架构、Agent Trace、Risk Level、真实回归结果和部署规划说明。
 - local模式：只执行本地格式修复和基础预检，返回 `ai_score=null`、`ai_used=false`。
 - ai模式：在 local 格式修复基础上执行 AI/语言审校，返回 AI 语言参考评分和建议；主展示评分仍以格式规则分为准。
-- Demo 文件：v0.6.3 已新增人工构造的脱敏模拟论文样本、模板样本和一次 local 模式输出样例，路径见 `docs/DEMO_RESULT.md`。
+- Demo 文件：v0.6.3 已新增人工构造的脱敏模拟论文样本、模板样本和一次 local 模式输出样例，历史路径见 `docs/archive/showcase/DEMO_RESULT.md`。
 - Task State：v0.7.0 已新增最小任务状态落盘记录，默认写入 `paper-ai/backend/task_states/{task_id}.json`，用于记录每次 Agent 运行的生命周期状态。
 - Task State 文档同步：v0.7.1 已同步 README、架构说明、面试问答、演示脚本和 demo 结果说明，明确 task state 与 agent_trace 的边界。
 - Task State Demo 样例：v0.7.2 已新增 `demo_outputs/task_state_sample.json`，用于固定展示 task state 字段结构和 demo 生命周期状态。
@@ -163,9 +164,9 @@ P1.2 Body Paragraph Target-level Verification：正文低风险格式修改现�
 - 前端产品化视觉升级：v0.9.0 已将首页升级为 AI SaaS 产品页 + 工具工作台 + 结果仪表盘风格，增强第一屏吸引力和演示效果；未改变后端核心逻辑、`/agent/run`、上传/预览/下载主流程或依赖文件。
 - 前端运行链路修复：v0.9.1 已修复页面点击运行 Agent 时错误提示过于笼统、分类失败后继续运行未透传确认状态的问题；浏览器页面上传 demo 文件、点击运行、生成报告、TracePanel、预览和下载链路已验收通过。
 - 前端 fetch 兼容修复：v0.9.2 已统一前端后端请求 base URL，支持 `NEXT_PUBLIC_API_BASE_URL` 覆盖，默认 `http://127.0.0.1:8000`；网络错误会显示实际请求地址，便于定位本地浏览器到 FastAPI 的连接问题。
-- 面试演示包：v0.9.3 已新增 `docs/INTERVIEW_DEMO_PACKAGE.md`，并同步 README、DEMO_SCRIPT、INTERVIEW_QA、DEMO_RESULT 和 DEMO_CASE，用于说明 v0.9.2 稳定演示基线、演示流程、架构讲法、项目亮点、边界和面试追问。
-- 截图/录屏素材指南：v0.9.4 已新增 `docs/DEMO_SCREENSHOT_GUIDE.md`，整理首页、上传、结果 dashboard、TracePanel、预览、下载和 390px 窄屏等素材清单，用于面试、简历、作品集和演示准备。
-- 真实网页截图归档：已将 2026-06-27 的 10 张真实运行截图整理到 `docs/assets/screenshots/real-web-2026-06-27/`，覆盖首页、上传、运行中、结果 dashboard、检查模块、TracePanel、在线预览和下载入口。
+- 面试演示包：v0.9.3 已新增 `docs/archive/showcase/INTERVIEW_DEMO_PACKAGE.md`，并同步历史 README、DEMO_SCRIPT、INTERVIEW_QA、DEMO_RESULT 和 DEMO_CASE，用于说明 v0.9.2 稳定演示基线、演示流程、架构讲法、项目亮点、边界和面试追问。
+- 截图/录屏素材指南：v0.9.4 已新增 `docs/archive/showcase/DEMO_SCREENSHOT_GUIDE.md`，整理首页、上传、结果 dashboard、TracePanel、预览、下载和 390px 窄屏等素材清单，用于面试、简历、作品集和演示准备。
+- 真实网页截图归档：已将 2026-06-27 的 10 张真实运行截图迁至 `docs/archive/screenshots/`；这是早期界面历史记录，不作为当前产品展示素材。
 - v1.0-showcase 稳定展示版：tag `v1.0-showcase` 已创建并指向 `10904db`；`main` 分支仅在其后继续补充公开前文档和面试材料。
 
 # 最近回归测试结果
@@ -234,7 +235,7 @@ FAIL：
 
 Current Bottleneck：
 
-- 当前功能层面没有阻断级 FAIL，适合进入 v1.0-showcase 封版整理。
+- 当时功能层面没有阻断级 FAIL，适合进入 v1.0-showcase 封版整理。
 - 主要瓶颈已从功能修复转为版本口径、演示材料和回归记录统一。
 - `v1.0-showcase` tag 是推荐稳定展示基线；`main` 分支保留 tag 之后的公开前文档补充；`v0.9.4-demo-screenshot-package` 保留为上一阶段截图包 tag。
 - 本阶段不做核心格式化算法重构，不改上传、预览、下载主流程，不破坏 local/ai 模式兼容。
@@ -301,7 +302,7 @@ Current Bottleneck：
 ## v1.0-showcase 稳定展示版
 
 - 统一 README、PROJECT_STATUS、TODO 和 docs 演示材料中的版本口径。
-- 明确当前推荐稳定展示基线为 `v1.0-showcase` tag，而不是旧的 `v0.9.2` 或 `v0.9.4`。
+- 明确当时推荐稳定展示基线为 `v1.0-showcase` tag，而不是旧的 `v0.9.2` 或 `v0.9.4`。
 - 明确 `v0.9.4-demo-screenshot-package` 是上一阶段截图包 tag。
 - 明确 `v1.0-showcase` tag 指向 `10904db`，`main` 分支包含该 tag 之后的公开前文档和面试材料补充。
 - 冻结当前可展示能力、边界说明、demo 输入输出、截图资产和回归检查清单。
@@ -361,7 +362,7 @@ Current Bottleneck：
 - 新增 `paper-ai/backend/services/agent_pipeline.py` 作为统一调度层，`/agent/run` 已切换到该层调用。
 - 新 `agent_trace` 为逐步列表，每项包含 `step`、`status`、`duration_ms`、`fallback_used`、`message`。
 - 旧解释型 trace 保留为 `agent_trace_detail`，旧字段 `modification_report`、`reference_check`、`figure_table_check` 保持兼容。
-- 新增/更新 `docs/ARCHITECTURE.md` 和 `docs/DEVELOPMENT_LOG.md`，用于说明架构、处理流程和 fallback 策略。
+- 新增/更新 `docs/ARCHITECTURE.md` 和 `docs/archive/releases/DEVELOPMENT_LOG.md`，用于说明架构、处理流程和 fallback 策略。
 - 本轮回归：`py_compile` PASS；现有后端测试 PASS；`npm run build` PASS。
 
 ## v0.6.1 Demo Polish
@@ -369,15 +370,15 @@ Current Bottleneck：
 - 本轮只做展示文档增强，不修改核心业务逻辑、`agent_pipeline` 执行逻辑、`/agent/run` 接口行为、前端交互、测试断言或依赖文件。
 - README 已补充项目定位、技术栈、核心功能、处理流程、启动方式、测试命令、当前版本和展示亮点。
 - `docs/ARCHITECTURE.md` 已补充架构图、`agent_pipeline`、`agent_trace`、local/ai fallback 和旧字段兼容说明。
-- 新增 `docs/DEMO_SCRIPT.md` 和 `docs/archive/INTERVIEW_QA.md`，用于暑期实习面试演示历史记录。
+- 新增 `docs/archive/showcase/DEMO_SCRIPT.md` 和 `docs/archive/INTERVIEW_QA.md`，用于暑期实习面试演示历史记录。
 - 当前仍定位为格式 Agent；不宣传为论文代写、正式查重或深度内容改写系统。
 ## v0.6.2 Demo Samples
 
 - 本轮只新增/更新演示样本目录说明和固定演示案例文档，不修改核心业务逻辑。
 - 新增 `demo_inputs/README.md`，说明推荐输入样本路径：`messy_paper_sample.docx` 和 `template_sample.docx`。
 - 新增 `demo_outputs/README.md`，说明推荐输出样例路径：`formatted_result_sample.docx`、`report_sample.json`、`agent_trace_sample.json`。
-- 新增 `docs/DEMO_CASE.md`，说明固定面试演示案例、推荐样本特征、处理流程、重点观察字段和 1 分钟讲解话术。
-- 更新 README 和 `docs/DEMO_SCRIPT.md`，把固定演示样本目录纳入展示流程。
+- 新增 `docs/archive/showcase/DEMO_CASE.md`，说明固定面试演示案例、推荐样本特征、处理流程、重点观察字段和 1 分钟讲解话术。
+- 更新 README 和 `docs/archive/showcase/DEMO_SCRIPT.md`，把固定演示样本目录纳入展示流程。
 - 当前仍未新增真实脱敏 DOCX 样本，也未新增真实运行输出；后续需要补充脱敏真实论文、模板和一次真实输出样例。
 
 ## v0.6.3 Real Demo Files
@@ -390,7 +391,7 @@ Current Bottleneck：
   - `demo_outputs/report_sample.json`
   - `demo_outputs/agent_trace_sample.json`
 - 本次运行结果：`status=ok`，`mode=local`，`classification.document_type=academic_paper`，`confidence=0.95`，`before_score=80`，`after_score=86`，local 模式保持 `ai_score=null`、`ai_used=false`。
-- 新增 `docs/DEMO_RESULT.md`，记录输入/输出路径、运行方式、重点字段、限制和验收情况。
+- 新增 `docs/archive/showcase/DEMO_RESULT.md`，记录输入/输出路径、运行方式、重点字段、限制和验收情况。
 - 本轮未修改核心业务逻辑、前端交互、测试断言或依赖文件；DOCX 渲染视觉 QA 因当前环境缺少 LibreOffice/`soffice` 跳过。
 
 ## v0.7.0 Task State Minimal
@@ -407,16 +408,16 @@ Current Bottleneck：
 - README 已补充 task state 能力、字段、写入路径和边界。
 - `docs/ARCHITECTURE.md` 已补充 `task_state.py` 在架构中的位置，以及 `paper-ai/backend/task_states/{task_id}.json` 写入说明。
 - `docs/archive/INTERVIEW_QA.md` 已补充 task state 与 agent_trace 的区别、为什么不直接做异步队列、当前解决的问题和限制。
-- `docs/DEMO_SCRIPT.md` 已补充 task state 演示步骤。
-- `docs/DEMO_RESULT.md` 在 v0.7.1 时记录了缺少固定 `demo_outputs/task_state_sample.json` 的缺口；该缺口已在 v0.7.2 补齐。
+- `docs/archive/showcase/DEMO_SCRIPT.md` 已补充 task state 演示步骤。
+- `docs/archive/showcase/DEMO_RESULT.md` 在 v0.7.1 时记录了缺少固定 `demo_outputs/task_state_sample.json` 的缺口；该缺口已在 v0.7.2 补齐。
 - 当前仍不是完整断点续跑或异步队列，也没有前端 task state 可视化界面。
 
 ## v0.7.2 Task State Sample
 
 - 本轮只新增固定 demo JSON 样例和同步文档，不修改核心业务逻辑、前端交互或测试断言。
 - 新增 `demo_outputs/task_state_sample.json`，字段与当前 `report_sample.json` 和 `agent_trace_sample.json` 保持一致。
-- `docs/DEMO_CASE.md` 已补充样本来源边界：人工构造、脱敏模拟、不来自真实用户论文、不来自 CAJ 原文、不用于论文代写。
-- `docs/DEMO_RESULT.md` 和 `docs/DEMO_SCRIPT.md` 已补充 task state 样例展示说明。
+- `docs/archive/showcase/DEMO_CASE.md` 已补充样本来源边界：人工构造、脱敏模拟、不来自真实用户论文、不来自 CAJ 原文、不用于论文代写。
+- `docs/archive/showcase/DEMO_RESULT.md` 和 `docs/archive/showcase/DEMO_SCRIPT.md` 已补充 task state 样例展示说明。
 - 当前仍不是完整断点续跑或异步队列，也没有前端 task state 可视化界面。
 
 ## v0.7.3 Task State Cleanup
@@ -425,7 +426,7 @@ Current Bottleneck：
 - `.gitignore` 已新增 `paper-ai/backend/task_states/`，运行生成的 task state JSON 不应进入 Git。
 - `demo_outputs/task_state_sample.json` 仍是固定 demo 样例，应继续保留在 Git 中。
 - README 已补充当前不是完整工业级 Agent。
-- `docs/DEMO_SCRIPT.md` 和 `docs/DEMO_RESULT.md` 已补充 demo 样本不来自 CAJ 原文。
+- `docs/archive/showcase/DEMO_SCRIPT.md` 和 `docs/archive/showcase/DEMO_RESULT.md` 已补充 demo 样本不来自 CAJ 原文。
 - 本轮未修改 `task_state.py`，后续如需自动清理可单独做轻量清理函数或维护命令。
 
 ## v0.8.1 Trace UI Minimal
@@ -496,19 +497,19 @@ Current Bottleneck：
 
 ## v0.9.3 Interview Demo Package
 
-- 当时 v0.9.2 是面试/演示稳定代码基线，已通过 final demo check；当前稳定展示基线已切换为 `v1.0-showcase` tag。
-- 本轮主要整理展示材料，新增 `docs/INTERVIEW_DEMO_PACKAGE.md`。
+- 当时 v0.9.2 是面试/演示稳定代码基线，已通过 final demo check；随后稳定展示基线切换为 `v1.0-showcase` tag（Historical / Archived）。
+- 本轮主要整理展示材料，新增 `docs/archive/showcase/INTERVIEW_DEMO_PACKAGE.md`。
 - README、DEMO_SCRIPT、INTERVIEW_QA、DEMO_RESULT、DEMO_CASE 和 DEVELOPMENT_LOG 已同步 v0.9.3 演示口径。
 - 本轮未修改后端核心逻辑、前端 UI、接口语义、依赖文件或 demo 输入输出文件。
 - 当前仍不是论文代写、正式查重、异步队列、完整断点续跑或完整工业级 Agent。
 
 ## v0.9.4 Demo Screenshot Package
 
-- 本轮主要整理截图/录屏素材指南，新增 `docs/DEMO_SCREENSHOT_GUIDE.md`。
+- 本轮主要整理截图/录屏素材指南，新增 `docs/archive/showcase/DEMO_SCREENSHOT_GUIDE.md`。
 - 截图清单覆盖首页 Hero、上传工作台、文件已选择、运行中状态、结果 dashboard、评分 `80 -> 86`、修改报告、参考文献/图表检查、TracePanel 折叠/展开、在线预览、下载入口和 390px 窄屏。
-- 已补充真实网页截图素材目录 `docs/assets/screenshots/real-web-2026-06-27/`，本次真实截图评分为 `81 -> 87`，可作为 README、作品集和面试静态展示素材。
-- `docs/DEMO_SCRIPT.md` 已补充 60-90 秒录屏顺序和重点停顿画面。
-- `docs/INTERVIEW_DEMO_PACKAGE.md` 已增加截图/录屏素材建议，并指向 `docs/DEMO_SCREENSHOT_GUIDE.md`。
+- 已补充真实网页截图素材目录 `docs/archive/screenshots/`；其 `81 -> 87` 评分为早期界面历史数据，不作为 README、作品集或当前产品展示素材。
+- `docs/archive/showcase/DEMO_SCRIPT.md` 已补充 60-90 秒录屏顺序和重点停顿画面。
+- `docs/archive/showcase/INTERVIEW_DEMO_PACKAGE.md` 已增加截图/录屏素材建议，并指向 `docs/archive/showcase/DEMO_SCREENSHOT_GUIDE.md`。
 - 本轮未修改后端核心逻辑、前端 UI、接口语义、依赖文件或 demo 输入输出文件。
 - 当前仍不是论文代写、正式查重、异步队列、完整断点续跑或完整工业级 Agent。
 

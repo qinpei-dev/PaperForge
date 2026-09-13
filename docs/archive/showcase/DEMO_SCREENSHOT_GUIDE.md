@@ -9,7 +9,7 @@
 2026-06-27 已补充一组真实网页运行截图，目录为：
 
 ```text
-docs/assets/screenshots/real-web-2026-06-27/
+docs/archive/screenshots/
 ```
 
 这组截图来自浏览器真实页面，不是设计稿或占位图。当前共 10 张，覆盖首页、上传工作台、运行中状态、结果 dashboard、检查模块、TracePanel、在线预览和下载入口。

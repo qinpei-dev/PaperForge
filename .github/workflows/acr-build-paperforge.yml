@@ -8,9 +8,9 @@ on:
         required: true
         type: string
       release_version:
-        description: Immutable PaperForge image tag, for example v3.7.3
+        description: Immutable PaperForge image tag, for example v3.7.5
         required: true
-        default: v3.7.3
+        default: v3.7.5
         type: string
   push:
     tags:

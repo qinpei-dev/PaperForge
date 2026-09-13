@@ -40,11 +40,11 @@ The repository includes real local application screenshots from 2026-06-27. They
 
 | Stage | Screenshot |
 | --- | --- |
-| Upload ready | [03_upload_waiting_real.png](assets/screenshots/real-web-2026-06-27/03_upload_waiting_real.png) |
-| Agent running | [04_running_agent_real.png](assets/screenshots/real-web-2026-06-27/04_running_agent_real.png) |
-| Result dashboard | [06_result_dashboard_real.png](assets/screenshots/real-web-2026-06-27/06_result_dashboard_real.png) |
-| Trace and task state | [08_trace_expanded_real.png](assets/screenshots/real-web-2026-06-27/08_trace_expanded_real.png) |
-| Preview and download | [10_preview_download_real.png](assets/screenshots/real-web-2026-06-27/10_preview_download_real.png) |
+| Upload ready | [03_upload_waiting_real.png](../screenshots/03_upload_waiting_real.png) |
+| Agent running | [04_running_agent_real.png](../screenshots/04_running_agent_real.png) |
+| Result dashboard | [06_result_dashboard_real.png](../screenshots/06_result_dashboard_real.png) |
+| Trace and task state | [08_trace_expanded_real.png](../screenshots/08_trace_expanded_real.png) |
+| Preview and download | [10_preview_download_real.png](../screenshots/10_preview_download_real.png) |
 
 The screenshots display a score change of `81 → 87` for that particular sample run. Do not present it as a universal quality metric or as evidence of formal plagiarism checking.
 

@@ -37,6 +37,6 @@ Use this checklist before creating a release, publishing a showcase update, or c
 - [ ] A 30-second demo path and a longer implementation discussion path are available.
 - [ ] Limitations can be explained clearly without overclaiming.
 
-## Current V2 evidence
+## Current release evidence
 
-The documented V2 acceptance baseline reports 26 core capability checks passed, end-to-end scenarios A–F passed, real DOCX regression 10/10 PASS with 0 warnings and 0 blocking failures, and a passing frontend production build. Confirm the evidence remains applicable before reusing it for a new release or public claim.
+For PaperForge v3.7.5, confirm that the release commit, immutable image references, Alembic head, backend test result, frontend production build, and controlled production smoke remain applicable before reusing them in a public claim. Historical V1/V2 acceptance records are retained under `docs/archive/`; they are not the current release baseline.

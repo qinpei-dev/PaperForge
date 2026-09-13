@@ -138,7 +138,7 @@
 - 远端同步前检查：PASS，`git status --short` 为空，当前分支为 `main`，HEAD 包含 `v0.9.4-demo-screenshot-package`，`origin` 指向 `https://github.com/AKl2781/ai-paper-format-agent.git`。
 - 远端同步结果：PASS，`git push origin main` 和 `git push origin v0.9.4-demo-screenshot-package` 均成功。
 - demo 截图素材目录已准备：`docs/assets/screenshots/`。
-- 2026-06-27 已补充真实网页运行截图：`docs/assets/screenshots/real-web-2026-06-27/`，共 10 张，覆盖首页、上传、运行中、结果 dashboard、检查模块、TracePanel、在线预览和下载入口。
+- 2026-06-27 已补充真实网页运行截图：`docs/archive/screenshots/`，共 10 张，覆盖首页、上传、运行中、结果 dashboard、检查模块、TracePanel、在线预览和下载入口。
 - 本次真实截图评分为 `81 -> 87`；历史固定 demo 输出样例仍为 `80 -> 86`，文档中已提醒展示时区分来源。
 
 ## 2026-06-27 v0.9.3-interview-demo-package

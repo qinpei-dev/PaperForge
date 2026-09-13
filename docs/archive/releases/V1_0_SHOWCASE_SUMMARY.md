@@ -36,7 +36,7 @@
 - `agent_trace_detail` 旧解释型 trace 兼容保留。
 - `task_id` / `task_state_path` / `running` / `succeeded` / `failed` 最小任务状态。
 - `demo_inputs` 与 `demo_outputs` 示例材料。
-- `docs/assets/screenshots/real-web-2026-06-27/` 真实网页截图资产。
+- `docs/archive/screenshots/` 真实网页截图资产。
 - smoke / manifest / generated_manifest / heavy_manifest 等回归测试体系。
 
 ## 演示流程

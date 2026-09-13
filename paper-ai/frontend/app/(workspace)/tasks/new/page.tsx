@@ -441,7 +441,7 @@ export default function NewTaskPage() {
               <label className={styles.uploadField}><span>模板名称</span><Input value={managedTemplateName} onChange={(event) => setManagedTemplateName(event.target.value)} placeholder="例如：本科毕业论文模板" /></label>
               <label className={styles.uploadField}><span>Template ID</span><Input value={managedTemplateId} onChange={(event) => setManagedTemplateId(event.target.value)} placeholder="例如：university-thesis" /></label>
               <label className={styles.uploadField}><span>版本</span><Input value={managedTemplateVersion} onChange={(event) => setManagedTemplateVersion(event.target.value)} placeholder="例如：1.0" /></label>
-              <label className={styles.uploadField}><span>学校 / 组织</span><Input value={managedTemplateSchool} onChange={(event) => setManagedTemplateSchool(event.target.value)} placeholder="例如：成都大学" /></label>
+              <label className={styles.uploadField}><span>学校 / 组织</span><Input value={managedTemplateSchool} onChange={(event) => setManagedTemplateSchool(event.target.value)} placeholder="例如：某高校本科毕业论文模板" /></label>
             </div>
             {templateUploadError ? <p className={styles.uploadError} role="alert">{templateUploadError}</p> : null}
             <div className={styles.uploadActions}><Button type="submit" disabled={uploadingTemplate || !managedTemplateFile}>{uploadingTemplate ? "上传中…" : "上传并选择模板"}</Button><Button variant="secondary" type="button" onClick={() => setShowManagedUpload(false)} disabled={uploadingTemplate}>取消</Button></div>

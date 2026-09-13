@@ -1,5 +1,9 @@
 # TODO
 
+## [DONE] Public repository cleanup — phase 1
+
+当前公开入口已统一为 PaperForge v3.7.5 / Controlled Public Beta；个人与运维标识已脱敏，早期 demo、旧 UI 截图和历史工程审计已迁至 `docs/archive/`。Git 历史、tracked regression artifacts、模板跟踪策略、当前 SaaS 截图和本地运行数据保留至后续阶段处理。
+
 ## [CURRENT] PaperForge v3.7.5 Production Release
 
 状态：**CONTROLLED PUBLIC BETA LIVE；管理员验收 PASS**。
@@ -422,7 +426,7 @@ P1/P2 继续项：localStorage bearer token、WAF/分布式限流/外部监控�
 - 已放入人工构造的脱敏模拟论文样本和模板样本。
 - 已使用固定命名：`demo_inputs/messy_paper_sample.docx`、`demo_inputs/template_sample.docx`。
 - 已通过现有 `run_agent_pipeline(...)` local 模式运行一次主流程，并保留 `demo_outputs/formatted_result_sample.docx`、`demo_outputs/report_sample.json`、`demo_outputs/agent_trace_sample.json`。
-- 已在 `docs/DEMO_RESULT.md` 记录样本来源、故意设置的格式问题、运行方式、重点字段、限制和验收情况。
+- 已在 `docs/archive/showcase/DEMO_RESULT.md` 记录样本来源、故意设置的格式问题、运行方式、重点字段、限制和验收情况。
 
 状态：已完成。样本不是真实用户论文，输出来自一次真实 local 模式处理流程。
 
@@ -451,8 +455,8 @@ P1/P2 继续项：localStorage bearer token、WAF/分布式限流/外部监控�
 - README 已补充 task state 能力说明。
 - `docs/ARCHITECTURE.md` 已补充 `task_state.py` 和 `task_states/{task_id}.json`。
 - `docs/archive/INTERVIEW_QA.md` 已补充 task state 相关问答。
-- `docs/DEMO_SCRIPT.md` 已补充 task state 演示步骤。
-- `docs/DEMO_RESULT.md` 已在 v0.7.1 记录当时缺少固定 `task_state_sample.json` 的缺口；该缺口已在 v0.7.2 补齐。
+- `docs/archive/showcase/DEMO_SCRIPT.md` 已补充 task state 演示步骤。
+- `docs/archive/showcase/DEMO_RESULT.md` 已在 v0.7.1 记录当时缺少固定 `task_state_sample.json` 的缺口；该缺口已在 v0.7.2 补齐。
 
 状态：已完成。仅同步文档，未修改核心业务逻辑。
 
@@ -465,8 +469,8 @@ P1/P2 继续项：localStorage bearer token、WAF/分布式限流/外部监控�
 已完成：
 - 已保存固定样例 `demo_outputs/task_state_sample.json`。
 - 样例字段与当前 `report_sample.json`、`agent_trace_sample.json` 的关键字段保持一致。
-- 已更新 `docs/DEMO_CASE.md`，明确 demo 样本是人工构造 / 脱敏模拟，不来自真实用户论文，不来自 CAJ 原文，不用于论文代写。
-- 已更新 `docs/DEMO_RESULT.md`、`docs/DEMO_SCRIPT.md`、README、PROJECT_STATUS 和开发记录。
+- 已更新 `docs/archive/showcase/DEMO_CASE.md`，明确 demo 样本是人工构造 / 脱敏模拟，不来自真实用户论文，不来自 CAJ 原文，不用于论文代写。
+- 已更新 `docs/archive/showcase/DEMO_RESULT.md`、`docs/archive/showcase/DEMO_SCRIPT.md`、README、PROJECT_STATUS 和开发记录。
 - 没有把前端描述为已有 task state 可视化，也没有把系统描述为异步队列或完整断点续跑。
 
 状态：已完成。
@@ -657,10 +661,10 @@ P1/P2 继续项：localStorage bearer token、WAF/分布式限流/外部监控�
 目标：整理面试/演示材料，让项目从“能跑”升级为“能讲、能展示、能回答追问”。
 
 已完成：
-- 新增 `docs/INTERVIEW_DEMO_PACKAGE.md`。
+- 新增 `docs/archive/showcase/INTERVIEW_DEMO_PACKAGE.md`。
 - 已整理项目一句话介绍、30 秒介绍、2 分钟演示流程、技术架构讲法、项目亮点、当前边界和面试追问。
 - 已同步 README、DEMO_SCRIPT、INTERVIEW_QA、DEMO_RESULT、DEMO_CASE 和 DEVELOPMENT_LOG。
-- 当时推荐演示代码基线为 `v0.9.2-ui-fetch-compat-fix`；当前推荐稳定展示基线已切换为 tag `v1.0-showcase`。
+- 当时推荐演示代码基线为 `v0.9.2-ui-fetch-compat-fix`；随后推荐稳定展示基线切换为 tag `v1.0-showcase`（Historical / Archived）。
 - 本轮未修改后端核心逻辑、前端 UI、接口语义、依赖文件或 demo 输入输出文件。
 
 状态：已完成。当前仍不是论文代写、正式查重、异步队列、完整断点续跑或完整工业级 Agent。
@@ -672,9 +676,9 @@ P1/P2 继续项：localStorage bearer token、WAF/分布式限流/外部监控�
 目标：整理截图/录屏清单，为面试现场准备可视化展示材料。
 
 已完成：
-- 新增 `docs/DEMO_SCREENSHOT_GUIDE.md`。
+- 新增 `docs/archive/showcase/DEMO_SCREENSHOT_GUIDE.md`。
 - 已整理 13 张推荐截图：Hero、上传工作台、文件已选择、运行中、结果 dashboard、评分 `80 -> 86`、修改报告、参考文献/图表检查、TracePanel 折叠/展开、在线预览、下载入口和 390px 窄屏。
-- 已归档 2026-06-27 真实网页运行截图：`docs/assets/screenshots/real-web-2026-06-27/`，共 10 张，覆盖首页、上传、运行中、结果 dashboard、检查模块、TracePanel、在线预览和下载入口。
+- 已归档 2026-06-27 真实网页运行截图：`docs/archive/screenshots/`，共 10 张，覆盖首页、上传、运行中、结果 dashboard、检查模块、TracePanel、在线预览和下载入口。
 - 已整理 60-90 秒录屏脚本。
 - 已补充 ASCII 临时路径、API base URL、demo 后 Git 干净和临时服务停止等自动化演示注意事项。
 - 已同步 README、PROJECT_STATUS、DEMO_SCRIPT、INTERVIEW_DEMO_PACKAGE 和 DEVELOPMENT_LOG。
@@ -721,13 +725,13 @@ P1/P2 继续项：localStorage bearer token、WAF/分布式限流/外部监控�
 
 任务：
 - 统一 README、PROJECT_STATUS、TODO、DEMO_SCRIPT、INTERVIEW_DEMO_PACKAGE、DEMO_SCREENSHOT_GUIDE 和 DEVELOPMENT_LOG 的版本口径。
-- 明确当前推荐稳定展示基线为 tag `v1.0-showcase`，而不是旧的 `v0.9.2` 或 `v0.9.4`。
+- 明确当时推荐稳定展示基线为 tag `v1.0-showcase`，而不是旧的 `v0.9.2` 或 `v0.9.4`。
 - 明确 `v0.9.4-demo-screenshot-package` 是上一阶段截图包 tag。
 - 明确 `v1.0-showcase` 指向 `10904db`，`main` 分支包含 tag 之后的公开前文档和面试材料补充。
-- 补充封版摘要文档 `docs/V1_0_SHOWCASE_SUMMARY.md`。
+- 补充封版摘要文档 `docs/archive/releases/V1_0_SHOWCASE_SUMMARY.md`。
 - 不移动、删除或重建 `v1.0-showcase` tag。
 
-状态：已完成封版整理。`v1.0-showcase` tag 已创建并指向 `10904db`；当前公开前清理只做文档、轻量配置和展示文案整理，未新增核心功能，未重构核心代码，未改变 API 字段结构。
+状态：已完成封版整理。`v1.0-showcase` tag 已创建并指向 `10904db`；这是 Historical / Archived 展示版记录。当前公开入口与版本口径以本文顶部 v3.7.5 条目和根 README 为准。
 
 ---
 
@@ -961,7 +965,7 @@ P1/P2 继续项：localStorage bearer token、WAF/分布式限流/外部监控�
 
 目标：为 controlled beta 试用用户准备简单说明文档和反馈表，明确测试版边界、上传建议、支持能力、非承诺事项和问题反馈字段。
 
-状态：已完成。受控试用用户说明和反馈表已归档到 `docs/archive/BETA_TRIAL_USER_GUIDE.md`、`docs/archive/BETA_TRIAL_FEEDBACK_FORM.md`；归档资料仅作为历史记录，当前展示入口以 README 和 v1.0-showcase 文档为准。
+状态：已完成。受控试用用户说明和反馈表已归档到 `docs/archive/BETA_TRIAL_USER_GUIDE.md`、`docs/archive/BETA_TRIAL_FEEDBACK_FORM.md`；归档资料仅作为历史记录，当前展示入口以根 README 和 `docs/README.md` 为准。
 ---
 
 ### [DONE] 暑期实习展示版整理
