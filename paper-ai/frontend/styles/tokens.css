@@ -1,16 +1,38 @@
 :root {
-  --pf-color-primary: #1f4b99;
-  --pf-color-primary-hover: #173b7a;
-  --pf-color-text: #162033;
-  --pf-color-muted: #56657a;
+  /* Colors */
+  --pf-color-primary: #2563eb;
+  --pf-color-primary-hover: #1d4ed8;
+  --pf-color-primary-light: #eff6ff;
+  --pf-color-text: #0f172a;
+  --pf-color-muted: #64748b;
   --pf-color-surface: #ffffff;
   --pf-color-surface-subtle: #f8fafc;
-  --pf-color-border: #d6dee9;
-  --pf-color-danger: #b42318;
-  --pf-radius-sm: 8px;
-  --pf-radius-md: 12px;
+  --pf-color-border: #e2e8f0;
+  
+  --pf-color-success: #16a34a;
+  --pf-color-success-light: #f0fdf4;
+  --pf-color-warning: #d97706;
+  --pf-color-warning-light: #fffbeb;
+  --pf-color-danger: #dc2626;
+  --pf-color-danger-light: #fef2f2;
+
+  /* Border Radius */
+  --pf-radius-sm: 6px;
+  --pf-radius-md: 10px;
+  --pf-radius-lg: 16px;
+  --pf-radius-full: 9999px;
+
+  /* Spacing */
+  --pf-space-1: 4px;
   --pf-space-2: 8px;
   --pf-space-3: 12px;
   --pf-space-4: 16px;
-  --pf-shadow-card: 0 8px 24px rgba(15, 23, 42, 0.06);
+  --pf-space-6: 24px;
+  --pf-space-8: 32px;
+
+  /* Shadows */
+  --pf-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --pf-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --pf-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --pf-shadow-card: 0 12px 32px -4px rgba(15, 23, 42, 0.04), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
 }
