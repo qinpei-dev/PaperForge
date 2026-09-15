@@ -6,187 +6,179 @@
 
 > **Verified Academic Document Agent / 可验证的学术文档 Agent**
 
-**当前版本 / Current release:** PaperForge **v3.7.5** · **READY FOR CONTROLLED PUBLIC BETA**. Production access is available at [aetherislab.xyz](https://aetherislab.xyz); authenticated end-to-end and tenant-isolation validation remains intentionally controlled.
+PaperForge 将学术 DOCX 的格式处理变成一条可检查的工作流：**理解文档、解析模板、制定计划、执行低风险修改、重新读取验证，并交付证据与产物**。AI 可以辅助语言审校和建议，但模型输出本身不会被当作修改成功的证明。
 
-PaperForge 是一个可验证的 AI 学术文档 Agent，通过**规划、执行、验证和证据报告**处理学术 DOCX 文档。AI 可以辅助分析和提出建议，但不会被视为文档已正确修改的证明：确定性规则负责执行支持的低风险修改，系统会重新读取结果，并为每次处理保留可供人工复查的追踪信息。
+PaperForge turns academic DOCX processing into an inspectable workflow: **understand the document, resolve template rules, plan changes, execute supported low-risk actions, re-read the output, and deliver evidence with the artifact**. AI may assist with language review and suggestions, but model output alone is never treated as proof of a successful edit.
 
-PaperForge is a verified AI agent that transforms academic DOCX documents through **planning, execution, verification, and evidence reporting**. AI can assist with analysis and suggestions, but it is not treated as proof that a document was changed correctly: deterministic rules execute supported low-risk changes, the result is re-read, and every outcome remains traceable for human review.
+**Live product / 在线产品:** [aetherislab.xyz](https://aetherislab.xyz)<br>
+**Release / 当前版本:** `v3.7.5`<br>
+**Stage / 当前阶段:** Controlled Public Beta Live<br>
+**Docs / 文档:** [Documentation index](docs/README.md) · [Architecture](docs/ARCHITECTURE_OVERVIEW.md) · [Limitations](docs/LIMITATIONS.md) · [Repository governance](docs/REPOSITORY_GOVERNANCE.md)
 
-**快速了解 / Explore:** [产品与文档导航 / Product documentation](docs/README.md) · [架构 / Architecture](docs/ARCHITECTURE_OVERVIEW.md) · [限制 / Limitations](docs/LIMITATIONS.md) · [仓库治理 / Repository governance](docs/REPOSITORY_GOVERNANCE.md)
+## Highlights / 项目亮点
 
-**工程重点 / Engineering focus:** 可验证 Agent 闭环 / Verified Agent Loop · 确定性执行 / Deterministic Execution · LLM 可选 / LLM Optional · 人在回路 / Human-in-the-loop · 证据与追踪 / Evidence & Trace
+- **Verified Agent Loop / 可验证 Agent 闭环** — Document Model → Rules → Planner → Executor → Verifier → Governance；输出 DOCX 会被重新读取，而不是只相信执行过程。
+- **Deterministic execution / 确定性执行** — 支持的低风险格式修改由目标感知规则执行；冲突、不支持或高风险操作进入复查边界。
+- **LLM-optional workflow / LLM 可选** — local 模式不调用 LLM；ai 模式支持 DeepSeek 或 OpenAI 兼容接口，并在调用失败时回退，不中断主流程。
+- **Evidence-first results / 证据优先结果** — 结果可包含 Agent Trace、计划步骤、前后值、验证摘要、修改报告和人工复查项。
+- **Multi-tenant SaaS boundary / 多租户 SaaS 边界** — JWT、Workspace membership、固定 RBAC、tenant-scoped task/template/artifact 查询和额度控制由后端统一执行。
+- **Durable task history / 持久化任务历史** — PostgreSQL 保存任务生命周期和可重放事件；前端通过 SSE 展示进度。当前执行 worker 仍是单进程实现，并非分布式队列。
+- **DOCX delivery loop / DOCX 交付闭环** — 支持论文与可选模板上传、在线预览、修改报告以及处理后 DOCX 下载。
 
-## Live Product
+## What users can do / 用户实际能做什么
 
-PaperForge is deployed and running in production at [aetherislab.xyz](https://aetherislab.xyz). The production site is the authoritative live-product entry point; no production usage, customer, score, or volume claims are implied here.
+1. **Create a task / 创建任务** — 登录 Workspace，上传 `.docx` 论文，并选择已有模板或临时上传模板。
+2. **Choose processing mode / 选择处理模式** — 使用确定性的 local 模式，或启用带可靠回退的 ai 模式。
+3. **Review document understanding / 检查文档理解** — 查看文档分类、模板身份、检测问题和计划处理范围；非标准论文需要明确确认后继续。
+4. **Follow execution / 跟踪执行** — 在任务详情中查看 analyzing → planning → executing → verifying 的状态与 Agent Trace。
+5. **Inspect evidence / 核对证据** — 查看实际修改、验证结果、未支持项、冲突和需要人工判断的内容。
+6. **Preview and export / 预览与导出** — 在线预览处理结果，下载修改后的 DOCX 和分析报告。
 
-The image below is a sanitized screenshot captured from the real production site. It is deployment evidence only and makes no performance or usage claim.
+local 模式保证 `ai_score = null`、`ai_used = false`。ai 模式中的 LLM 失败会触发本地回退；不会因为 AI 不可用而中断格式处理，也不会让 AI 参考评分拉低最终格式评分。
+
+Local mode guarantees `ai_score = null` and `ai_used = false`. In AI mode, an LLM failure activates the local fallback: formatting continues, and the optional AI reference score does not reduce the final formatting score.
+
+## Product tour / 产品展示
+
+下面是经过脱敏审查的真实生产 Landing 页面。它只证明产品已部署，不代表使用量、性能、准确率或成功率。
+
+The following sanitized image is from the live production landing page. It is deployment evidence only—not a usage, performance, accuracy, or success-rate claim.
 
 <p align="center">
   <img src="docs/assets/screenshots/production/production_01_landing.jpeg" alt="PaperForge production landing page" width="100%">
 </p>
 
-## Product Workflow / 当前产品工作流
+以下工作流截图来自当前 `main` 的本地运行版本，使用合成 Workspace 与测试 DOCX，用于展示 New Task 和可追踪的 Task Detail，不作为生产指标。
 
-真实生产站的 New Task 截图已归档，但因登录态脱敏遮盖影响版面，目前不作为 README 主图。以下补充截图来自当前 `main` 的本地运行版本，使用合成 preview workspace 与测试 DOCX；它们只用于安全展示产品工作流，不代表生产站状态、性能、准确率或成功率承诺。
-
-The production New Task capture is retained in the repository for review but is not used as a primary README image because the login-state redaction affects layout. The supplemental screenshots below come from the current `main` local runtime with a synthetic preview workspace and test DOCX. They show workflow only; they are not production-site evidence or performance, accuracy, or success-rate claims.
+The workflow images below come from the current `main` local runtime with a synthetic Workspace and test DOCX. They demonstrate New Task and traceable Task Detail behavior, not production metrics.
 
 <p align="center">
-  <img src="docs/assets/screenshots/current/04_new_task_selected.png" alt="PaperForge supplemental local new task workflow with synthetic DOCX files" width="100%">
+  <img src="docs/assets/screenshots/current/04_new_task_selected.png" alt="PaperForge local New Task workflow using synthetic DOCX files" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/screenshots/current/06_trace.png" alt="PaperForge current task detail and Agent Trace" width="100%">
+  <img src="docs/assets/screenshots/current/06_trace.png" alt="PaperForge local Task Detail and Agent Trace" width="100%">
 </p>
 
-更多当前素材（包括统一 Auth Layout 与 Task Detail）见 [`docs/assets/screenshots/current/`](docs/assets/screenshots/current/)。历史 UI 素材仍只保留在 [`docs/archive/`](docs/archive/)，不作为当前产品证据。
-
-Additional current assets, including the unified Auth Layout and Task Detail view, are available in [`docs/assets/screenshots/current/`](docs/assets/screenshots/current/). Historical UI material remains under [`docs/archive/`](docs/archive/) and is not current product evidence.
-
-## 要解决的问题 / The problem
-
-学术文档排版通常重复、容易出错，也很难审计。黑盒式的文本回复无法证明 Word 文档是否被安全修改、结构是否保持完整，或者某个不支持的修改是否被静默执行。
-
-Academic document formatting is often repetitive, error-prone, and difficult to audit. A black-box text response cannot establish that a Word document was safely changed, that its structure survived, or that an unsupported change was not silently applied.
-
-PaperForge 将这一过程变成可检查的文档处理工作流。它支持常见格式修复和受约束的内容审校，同时为复杂或高风险修改保留清晰边界。
-
-PaperForge turns this into an inspectable document-processing workflow. It supports common formatting and constrained content-review actions while preserving clear boundaries for complex or high-risk changes.
-
-## 可验证的方法 / The verified approach
+## How verification works / 验证如何工作
 
 ```mermaid
 flowchart LR
     A[DOCX input] --> B[Document Model]
-    B --> C[Rule Engine]
+    B --> C[Template and Rules]
     C --> D[Planner]
     D --> E[Executor]
-    E --> F[Verification]
-    F --> G[Evidence Report]
-    F --> H{Decision}
-    H -->|Verified| I[Preview and download]
-    H -->|Needs review| J[Human-in-the-loop]
+    E --> F[Re-read output]
+    F --> G[Verifier]
+    G --> H{Governance decision}
+    H -->|Verified| I[Preview and artifacts]
+    H -->|Ambiguous or risky| J[Human review]
+    H -->|Fixable failure| D
 ```
 
-PaperForge 对职责进行了明确拆分：
+- **Understand / 理解：** 分类 DOCX，建立标准化文档模型，并识别标题、正文、摘要、关键词、参考文献、表格和图片等结构。
+- **Plan / 规划：** 将模板规则、检测问题、风险和可靠定位信息转为显式执行步骤。
+- **Execute / 执行：** 只应用当前支持的低风险操作，并记录目标、字段、预期值与修改前后信息。
+- **Verify / 验证：** 重新读取输出 DOCX，将实际结果与计划目标比较，同时检查结构完整性。
+- **Govern / 治理：** 验证失败可触发有限重规划；冲突、高风险内容和不支持项进入人工复查，不伪装为成功。
 
-- **AI 负责分析和提出建议。** AI 可以辅助语言审校，但不会获得不受限制的文档重写权限。
-- **规则负责规划和执行。** 确定性、面向目标的规则负责应用支持的低风险修改。
-- **验证负责检查输出。** 系统会重新读取生成的 DOCX，并在存在可靠定位信息时与预期结果进行比较。
-- **证据负责解释结果。** 来源记录会关联规则、计划步骤、修改前后值、执行过程和验证结果。
+## Result package / 结果交付
 
-PaperForge is therefore more than a formatter or an API wrapper: a suggestion is not reported as successful merely because a model produced it.
+仓库目前没有一个适合公开宣传、同时具备稳定输入、脱敏产物和可复现基线的单一“示例分数”。因此 README 不展示虚构或脱离上下文的分数提升，而展示真实结果契约。
 
-## 核心能力 / Core capabilities
+The repository does not currently contain one public, sanitized, reproducible benchmark artifact suitable for a headline “example score.” This README therefore shows the real result contract instead of inventing or decontextualizing a score improvement.
 
-| 能力 / Capability | 说明 / What it provides |
+| Output / 输出 | What it means / 含义 |
 | --- | --- |
-| 文档理解 / Document understanding | DOCX 分类、标准化文档模型、模板提取和文档分析 / DOCX classification, normalized document model, template extraction, and document analysis. |
-| 安全执行 / Safe execution | 对标题、正文、字体、行距、缩进、页边距和部分题注执行低风险格式修复 / Low-risk formatting for titles, body text, fonts, spacing, indentation, margins, and selected captions. |
-| 可验证 Agent 闭环 / Verified Agent Loop | 规则驱动规划、冲突检查、目标感知执行、输出重读和验证 / Rule-driven planning, conflict checks, target-aware execution, output re-read, and verification. |
-| 人在回路 / Human-in-the-loop | 安全操作可自动处理；建议、高风险或有歧义的操作保留人工复查 / Automatic handling for safe actions; suggestions and high-risk or ambiguous actions remain reviewable. |
-| 可观测性 / Observability | Agent Trace、任务状态、修改报告、前后证据、来源记录和待处理操作 / Agent Trace, task state, modification reports, before/after evidence, provenance, and pending actions. |
-| 可靠降级 / Reliable fallback | 确定性的 local 模式；LLM 不可用时，ai 模式降级且不中断主流程 / Deterministic local mode; AI mode falls back without interrupting the main workflow when an LLM is unavailable. |
-| 交付闭环 / Delivery loop | 在线预览并下载处理后的 DOCX / Online preview and download of the resulting DOCX. |
+| Processed DOCX / 处理后 DOCX | 应用已支持且获准执行的修改后生成的可下载 Word 文件。 |
+| Verification summary / 验证摘要 | 按目标统计 verified、failed、unsupported，并保留结构完整性检查。 |
+| Modification report / 修改报告 | 汇总实际格式修改、内容建议、修改计数、评分解释和人工复查项。 |
+| Agent Trace / 执行追踪 | 记录分析、规划、执行、验证、回退和最终决策过程。 |
+| Provenance evidence / 来源证据 | 关联规则、计划步骤、目标、修改前后值以及重新读取后的验证证据。 |
+| Preview and artifacts / 预览与产物 | 提供 HTML 在线预览、DOCX 下载和报告 Artifact。 |
 
-## 信任与控制 / Trust and control
+评分是诊断信息，不是论文质量、录用概率或通用 DOCX 正确率承诺。所有提交前文档仍建议人工复查。
 
-### LLM 是可选项 / LLM is optional
+Scores are diagnostic signals, not promises about paper quality, acceptance probability, or universal DOCX correctness. Human review is still recommended before submission.
 
-local 模式是确定性的，无需 LLM（`ai_score = null`、`ai_used = false`）。ai 模式中，如果 LLM 不可用或调用失败，系统会回退到本地规则，不会中断文档处理。AI 用于分析和审校，而不是未经检查的文档编辑权限。
+## Architecture / 系统架构
 
-Local mode remains deterministic and runs without an LLM (`ai_score = null`, `ai_used = false`). In AI mode, an unavailable or failed LLM falls back to local rules rather than breaking document processing. AI is used where it is useful—analysis and review—not as an unchecked document-editing authority.
+```mermaid
+flowchart TB
+    U[User] --> W[Next.js web app]
+    W -->|HTTPS API| A[FastAPI]
+    W <-->|SSE task events| A
 
-### 按策略保留人工复查 / Human-in-the-loop by policy
+    A --> X[JWT, tenant context, RBAC, quota]
+    A --> T[Task orchestration]
+    T --> Q[Lightweight in-process worker]
 
-支持的低风险操作可以自动应用。事实、数字、实验结果、结论、引用、方法、定义、公式以及有歧义的目标会被提交复查，而不会被静默覆盖。
+    Q --> M[Document Model and Intelligence]
+    M --> R[Template and Rule Engine]
+    R --> P[Planner]
+    P --> E[Target-aware Executor]
+    E --> V[Verifier: re-read DOCX]
+    V --> G[Governance and human-review boundary]
 
-Low-risk, supported actions can be applied automatically. High-risk facts, numbers, experimental results, conclusions, citations, methods, definitions, formulas, and ambiguous targets are surfaced for review instead of being silently overwritten.
-
-### 可观察的执行过程 / Observable execution
-
-结果中包含 Agent Trace，以及关于已规划、已修改、已验证、已延期或仍未解决内容的证据。验证失败或不支持的验证不会被表示为成功结果。
-
-The result includes an Agent Trace plus evidence of what was planned, modified, verified, deferred, or left unresolved. Failed or unsupported verification is not represented as a successful result.
-
-当前 SaaS 界面会持续演进，因此公开入口不使用早期静态 UI 截图代替当前产品状态。历史演示材料仅保留在 [archive](docs/archive/README.md) 中，不能作为当前界面或性能承诺。
-
-The SaaS interface continues to evolve, so this public entrypoint does not use early static UI screenshots as a substitute for current product state. Historical demo material is retained only in the [archive](docs/archive/README.md) and is not a claim about the current UI or performance.
-
-## 系统架构 / System architecture
-
-PaperForge 采用小型、可检查的架构 / PaperForge is a deliberately small, inspectable architecture:
-
-```text
-Next.js frontend
-        ↓ upload, results, review, preview, download
-FastAPI API
-        ↓
-Agent runtime
-        ↓
-Document Model → Rule Engine → Planner → Executor → Verifier → Governance
-        ↓                                                    ↓
-DOCX storage                                      Provenance / Evidence / Trace
+    X <--> DB[(PostgreSQL)]
+    T <--> DB
+    DB --> EV[Task lifecycle and replayable events]
+    E <--> FS[(DOCX and report storage)]
+    G --> O[Trace, evidence, preview, download]
+    FS --> O
+    O --> A
 ```
 
-前端不会直接修改 DOCX。后端维护文档处理边界，并提供分类、运行、预览和下载接口。请参阅 [架构概览 / Architecture Overview](docs/ARCHITECTURE_OVERVIEW.md) 和 [详细架构 / detailed architecture](docs/ARCHITECTURE.md)。
+前端不直接修改 DOCX。FastAPI 负责认证、租户边界、上传校验、任务与 Artifact API；进程内 worker 调用 Agent pipeline；SQLAlchemy/Alembic 管理持久化模型与迁移；生产使用 PostgreSQL，本地开发默认可使用 SQLite。文件通过 `StorageService` 边界处理，当前实现是本地文件系统，不宣称已使用对象存储。
 
-The frontend does not modify DOCX files directly. The backend maintains the document-processing boundary and exposes classify, run, preview, and download endpoints. See [Architecture Overview](docs/ARCHITECTURE_OVERVIEW.md) and [detailed architecture](docs/ARCHITECTURE.md).
+The frontend never edits DOCX files directly. FastAPI owns authentication, tenant boundaries, upload validation, task and artifact APIs; an in-process worker invokes the Agent pipeline; SQLAlchemy and Alembic manage persistence and migrations. Production uses PostgreSQL, while local development can default to SQLite. Files sit behind a `StorageService` boundary whose current implementation is local filesystem storage—not object storage.
 
-### SaaS 任务架构 / SaaS task architecture
+See [Architecture Overview](docs/ARCHITECTURE_OVERVIEW.md) and [Detailed Architecture](docs/ARCHITECTURE.md) for component boundaries and execution details.
 
-```text
-User → Workspace → Project → Task → Agent Pipeline → Artifact
-                                      ↓
-                         Trace / score / verification evidence
-```
+## Technology stack / 技术栈
 
-任务以 Agent Trace 作为面向用户的工作流来源：分析 → 规划 → 执行 → 验证 → 完成（或失败）。Task Detail 页面展示追踪信息、分数变化、生成的 DOCX 和分析报告；Dashboard 展示工作区信息和任务统计。
+| Layer / 层 | Technology / 技术 | Role / 用途 |
+| --- | --- | --- |
+| Web application / Web 应用 | Next.js `15.5.24`, React `19.0.0`, TypeScript `5.7.2`, CSS Modules | SaaS routes, task creation, Dashboard, Task Detail, trace, preview and artifact UX. |
+| API runtime / API 运行时 | Python, FastAPI `0.115.6`, Uvicorn `0.34.0` | REST endpoints, validation, authorization, SSE and document workflow orchestration. |
+| DOCX processing / DOCX 处理 | `python-docx 1.1.2` | Parse, classify, inspect, format, re-read and render DOCX content for preview. |
+| Agent runtime / Agent 运行时 | Document Model, Rule Engine, Planner, Executor, Verifier, Governance | Explicit plan/execute/verify loop with bounded re-planning and human-review decisions. |
+| Optional AI review / 可选 AI 审校 | OpenAI Python SDK `1.59.7`; DeepSeek or OpenAI-compatible endpoint | Language analysis and suggestions with a deterministic local fallback. |
+| Persistence / 持久化 | SQLAlchemy `2.0.36`, Alembic `1.14.0`, PostgreSQL 16, Psycopg `3.2.3`; SQLite for local development | Users, tenants, memberships, templates, tasks, task events, artifacts, quota and feedback metadata. |
+| Authentication and isolation / 认证与隔离 | JWT via PyJWT `2.10.1`, token versioning, tenant context, fixed RBAC | Authenticated sessions, session revocation and tenant-scoped resource access. |
+| Task updates / 任务更新 | Database-backed task lifecycle, append-only task events, SSE with `Last-Event-ID` | Progress display and replayable task history; not a distributed worker queue. |
+| Deployment / 部署 | Docker, Docker Compose, Nginx edge configuration, GitHub Actions, Aliyun ACR/ECS | Immutable frontend/backend image delivery and production runtime configuration. |
+| Validation / 验证 | Pytest suite, Python compile checks, Next.js production build, Alembic migration checks, DOCX regression and production smoke scripts | Regression, build, migration and end-to-end release checks. |
 
-Tasks use the Agent Trace as the source for the user-facing workflow: analyzing → planning → executing → verifying → completed (or failed). The Task Detail page presents the trace, score change, generated DOCX and analysis report; the Dashboard presents workspace information and task statistics.
+## Project status / 项目状态
 
-文件处理位于小型 `StorageService` 边界之后。`LocalStorage` 仍是默认实现，继续使用现有 `uploads/` 和 `outputs/` 路径；`S3Storage` 仅作为未来云部署的适配器接口，本版本不会迁移文件。
+| Item / 项目 | Current state / 当前状态 |
+| --- | --- |
+| Release | `v3.7.5` |
+| Product stage / 产品阶段 | Controlled Public Beta Live |
+| Production / 生产环境 | Frontend and API deployed on Aliyun ECS with immutable images; canonical release path uses ACR. |
+| Recorded validation / 已记录验证 | Backend `pytest -q`: **107 passed**; frontend production build: **PASS**. |
+| Verified release paths / 已验收链路 | Authentication, tenant isolation, local and AI processing, SSE, preview, DOCX download, feedback and admin authorization. |
+| Current execution boundary / 当前执行边界 | Single-process worker; restart recovery marks orphaned running tasks as interrupted rather than pretending to resume. |
+| Known product boundary / 已知产品边界 | Complex templates, advanced Word structures, references and deep content revision still require further work and human review. |
 
-File handling is behind a small `StorageService` boundary. `LocalStorage` remains the default and keeps the existing `uploads/` and `outputs/` paths. `S3Storage` is reserved as an adapter surface for a future cloud deployment; no files are migrated in this release.
+Authoritative release and runtime facts live in [PROJECT_STATUS.md](PROJECT_STATUS.md) and the [production runbook](docs/PRODUCTION_DEPLOYMENT.md). Roadmap work is not presented as an already shipped capability.
 
-## 当前产品工作流 / Current product workflow
+权威发布与运行事实以 [PROJECT_STATUS.md](PROJECT_STATUS.md) 和[生产运行手册](docs/PRODUCTION_DEPLOYMENT.md)为准；路线图不会被描述成已经交付的能力。
 
-登录后，在 Workspace 中创建任务、上传论文与可选模板、选择 local 或 ai 模式，然后查看任务状态、Agent Trace、验证结果、在线预览与下载产物。租户、任务、模板和产物访问均由后端授权边界保护。
+## Known limitations / 已知限制
 
-After signing in, create a task in a Workspace, upload a paper and optional template, choose local or ai mode, then review task state, Agent Trace, verification results, preview, and downloadable artifacts. Tenant, task, template, and artifact access are enforced by backend authorization boundaries.
+PaperForge 不是论文代写工具、通用 Word 自动化系统，也不是正式查重结果的权威来源。当前“重复风险检测 / 相似度预检”只用于风险提示；复杂页眉页脚、目录、脚注、公式编号、图片题注和不可靠定位的内容仍可能需要人工处理。
 
-## 当前验证状态 / Current verification status
+PaperForge is not a paper-writing service, a general Word automation system, or an authority for formal plagiarism results. Its duplicate-risk and similarity pre-checks are advisory. Complex headers and footers, tables of contents, footnotes, equation numbering, figure captions, and content without reliable targets may still require manual work.
 
-截至 2026-09-12，v3.7.5 的后端 `pytest -q` 为 **107 passed**，前端 production build 通过；生产 smoke 已覆盖认证任务、SSE、预览、下载、反馈和管理员授权。完整生产事实以 [生产运行手册 / production runbook](docs/PRODUCTION_DEPLOYMENT.md) 为准。
+See [Limitations](docs/LIMITATIONS.md) and [Risk Level System](docs/RISK_LEVEL_SYSTEM.md) for the supported boundary.
 
-As of 2026-09-12, v3.7.5 recorded **107 passed** from backend `pytest -q`, with a passing frontend production build. Production smoke covered authenticated tasks, SSE, preview, download, feedback, and admin authorization. See the [production runbook](docs/PRODUCTION_DEPLOYMENT.md) for authoritative deployment facts.
+## Quick start / 快速开始
 
-这些是仓库验收结果，并不意味着所有 DOCX 都会得到相同结果。提交前仍建议人工复查。
+### Local development / 本地开发
 
-These are repository acceptance results, not a claim that every DOCX will receive the same outcome. Human review is still recommended before submission.
-
-## 已知限制 / Known limitations
-
-PaperForge 不是通用 Word 自动化系统、论文写作工具，也不是正式查重结果的权威来源。复杂 Word 功能和不支持的目标仍需人工复查。支持范围和非目标请参阅 [限制说明 / Limitations](docs/LIMITATIONS.md)。
-
-PaperForge is not a general Word automation system, a paper-writing tool, or an authority for plagiarism results. Complex Word features and unsupported targets remain subject to review. See [Limitations](docs/LIMITATIONS.md) for supported boundaries and non-goals.
-
-## 路线图 / Roadmap
-
-- 提升复杂模板、参考文献和高级 DOCX 结构的稳定性 / Improve robustness for complex templates, references, and advanced DOCX structures.
-- 在扩大自动修改范围前，增加安全且有证据支持的文档检查 / Expand safe, evidence-backed document checks before widening automated modifications.
-- 在保留策略门控、验证和人工确认的前提下，提升内容审校质量 / Improve content-review quality while retaining policy gates, verification, and human confirmation.
-
-仓库当前处于 Controlled Public Beta；路线图不表示上述能力今天已经全部可用。生产部署事实以 [生产部署手册 / production runbook](docs/PRODUCTION_DEPLOYMENT.md) 为准，而不是聊天记录。
-
-The repository is in Controlled Public Beta; roadmap work does not imply that the listed capabilities are available today. Production deployment facts live in [the production runbook](docs/PRODUCTION_DEPLOYMENT.md), not in chat history.
-
-## 快速开始 / Quick start
-
-### 本地开发 / Local development
-
-后端 / Backend:
+Backend / 后端:
 
 ```powershell
 cd paper-ai/backend
@@ -196,7 +188,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-前端请在第二个终端运行 / Frontend, in a second terminal:
+Frontend / 前端（第二个终端）:
 
 ```powershell
 cd paper-ai/frontend
@@ -204,13 +196,9 @@ npm install
 npm run dev
 ```
 
-打开 `http://127.0.0.1:3000`。后端健康检查地址是 `http://127.0.0.1:8000/health`。
+Open `http://127.0.0.1:3000`; backend health is available at `http://127.0.0.1:8000/health`. Local development defaults to SQLite. To use PostgreSQL, set `DATABASE_URL` and run `alembic upgrade head` from `paper-ai/backend` before starting the API.
 
-Open `http://127.0.0.1:3000`. The backend health endpoint is `http://127.0.0.1:8000/health`.
-
-本地开发默认使用 SQLite。如果要在本地使用 PostgreSQL，请设置 `DATABASE_URL`，并在启动 API 前从 `paper-ai/backend` 执行 `alembic upgrade head`。
-
-Local development uses SQLite by default. To use PostgreSQL locally, set `DATABASE_URL` and run `alembic upgrade head` from `paper-ai/backend` before starting the API.
+打开 `http://127.0.0.1:3000`；后端健康检查为 `http://127.0.0.1:8000/health`。本地开发默认使用 SQLite；如需 PostgreSQL，请设置 `DATABASE_URL`，并在启动 API 前于 `paper-ai/backend` 执行 `alembic upgrade head`。
 
 ### Docker Compose
 
@@ -219,11 +207,11 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
-如果后端不在本机，请设置 `NEXT_PUBLIC_API_BASE_URL`；当前端部署在其他地址时，请配置 `CORS_ORIGINS`。详见 [Docker 部署 / Docker deployment](docs/DOCKER_DEPLOYMENT.md)。
+For non-local deployments, `NEXT_PUBLIC_API_BASE_URL` is a frontend build-time value and `CORS_ORIGINS` is a backend runtime allowlist. See [Docker deployment](docs/DOCKER_DEPLOYMENT.md). Production releases must use the canonical ACR pipeline; the historical `ops/acr-build-v3.6` path is retired.
 
-Set `NEXT_PUBLIC_API_BASE_URL` for a non-local backend and configure `CORS_ORIGINS` when the frontend is hosted elsewhere. See [Docker deployment](docs/DOCKER_DEPLOYMENT.md).
+非本地部署中，`NEXT_PUBLIC_API_BASE_URL` 是前端构建时变量，`CORS_ORIGINS` 是后端运行时白名单。详见 [Docker deployment](docs/DOCKER_DEPLOYMENT.md)。生产发布必须使用 canonical ACR pipeline；历史 `ops/acr-build-v3.6` 路径已经废弃。
 
-## 验证命令 / Verification commands
+## Verification commands / 验证命令
 
 ```powershell
 cd paper-ai/backend
@@ -237,30 +225,20 @@ cd ../frontend
 npm run build
 ```
 
-`paper-ai/backend/run_real_doc_regression.py` 是完整 DOCX 回归入口。它使用仓库测试资源，并将结果写入被忽略的回归输出目录。
+The full DOCX regression entry point is `paper-ai/backend/run_real_doc_regression.py`. It uses repository test assets and writes outputs to ignored regression directories.
 
-`paper-ai/backend/run_real_doc_regression.py` is the full DOCX regression entry point. It uses repository test assets and writes results to an ignored regression-output directory.
+完整 DOCX 回归入口是 `paper-ai/backend/run_real_doc_regression.py`；它使用仓库测试资源，并将输出写入 Git 忽略的回归目录。
 
-## 文档 / Documentation
+## Documentation / 文档
 
-- [架构概览 / Architecture Overview](docs/ARCHITECTURE_OVERVIEW.md)
-- [详细架构 / Detailed Architecture](docs/ARCHITECTURE.md)
-- [安全与公开证据 / Security and public evidence](docs/knowledge/CONTENT_EVIDENCE.md)
-- [限制说明 / Limitations](docs/LIMITATIONS.md)
-- [风险等级系统 / Risk Level System](docs/RISK_LEVEL_SYSTEM.md)
+- [Documentation index / 文档索引](docs/README.md)
+- [Architecture overview / 架构概览](docs/ARCHITECTURE_OVERVIEW.md)
+- [Detailed architecture / 详细架构](docs/ARCHITECTURE.md)
 - [Agent Trace](docs/AGENT_TRACE.md)
-- [文档索引 / Documentation index](docs/README.md)
+- [Security and public evidence / 安全与公开证据](docs/knowledge/CONTENT_EVIDENCE.md)
+- [Limitations / 限制说明](docs/LIMITATIONS.md)
+- [Production deployment / 生产部署](docs/PRODUCTION_DEPLOYMENT.md)
 
-## 发布状态 / Release status
-
-当前公开版本为 **PaperForge v3.7.5**，状态为 **READY FOR CONTROLLED PUBLIC BETA**。
-
-The current public release is **PaperForge v3.7.5**, **READY FOR CONTROLLED PUBLIC BETA**.
-
-## 技术栈 / Technology
-
-FastAPI · Python · `python-docx` · Next.js · React · TypeScript · Docker Compose
-
-## 许可证 / License
+## License / 许可证
 
 MIT License
