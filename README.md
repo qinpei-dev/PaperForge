@@ -16,6 +16,34 @@ PaperForge is a verified AI agent that transforms academic DOCX documents throug
 
 **工程重点 / Engineering focus:** 可验证 Agent 闭环 / Verified Agent Loop · 确定性执行 / Deterministic Execution · LLM 可选 / LLM Optional · 人在回路 / Human-in-the-loop · 证据与追踪 / Evidence & Trace
 
+## Live Product
+
+PaperForge is deployed and running in production at [aetherislab.xyz](https://aetherislab.xyz). The production site is the authoritative live-product entry point; no production usage, customer, score, or volume claims are implied here.
+
+The image below is a sanitized screenshot captured from the real production site. It is deployment evidence only and makes no performance or usage claim.
+
+<p align="center">
+  <img src="docs/assets/screenshots/production/production_01_landing.jpeg" alt="PaperForge production landing page" width="100%">
+</p>
+
+## Product Workflow / 当前产品工作流
+
+真实生产站的 New Task 截图已归档，但因登录态脱敏遮盖影响版面，目前不作为 README 主图。以下补充截图来自当前 `main` 的本地运行版本，使用合成 preview workspace 与测试 DOCX；它们只用于安全展示产品工作流，不代表生产站状态、性能、准确率或成功率承诺。
+
+The production New Task capture is retained in the repository for review but is not used as a primary README image because the login-state redaction affects layout. The supplemental screenshots below come from the current `main` local runtime with a synthetic preview workspace and test DOCX. They show workflow only; they are not production-site evidence or performance, accuracy, or success-rate claims.
+
+<p align="center">
+  <img src="docs/assets/screenshots/current/04_new_task_selected.png" alt="PaperForge supplemental local new task workflow with synthetic DOCX files" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshots/current/06_trace.png" alt="PaperForge current task detail and Agent Trace" width="100%">
+</p>
+
+更多当前素材（包括统一 Auth Layout 与 Task Detail）见 [`docs/assets/screenshots/current/`](docs/assets/screenshots/current/)。历史 UI 素材仍只保留在 [`docs/archive/`](docs/archive/)，不作为当前产品证据。
+
+Additional current assets, including the unified Auth Layout and Task Detail view, are available in [`docs/assets/screenshots/current/`](docs/assets/screenshots/current/). Historical UI material remains under [`docs/archive/`](docs/archive/) and is not current product evidence.
+
 ## 要解决的问题 / The problem
 
 学术文档排版通常重复、容易出错，也很难审计。黑盒式的文本回复无法证明 Word 文档是否被安全修改、结构是否保持完整，或者某个不支持的修改是否被静默执行。
