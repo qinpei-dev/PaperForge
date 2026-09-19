@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Button, Card, EmptyState, Loading } from "../../../components";
 import { apiUrl } from "../../../lib/api-client";
-import { authorizationHeaders, clearAuthSession, getAccessToken, isPreviewEnvironment, suppressPreviewAutoLogin, tryPreviewAutoLogin } from "../../../lib/auth";
+import { authorizationHeaders, clearAuthSession, getAccessToken, isPreviewEnvironment, isUiPreviewSession, suppressPreviewAutoLogin, tryPreviewAutoLogin } from "../../../lib/auth";
 import { userFacingError } from "../../../lib/error-messages";
 import { taskStatusLabel, workflowStatusLabel } from "../../../lib/status-labels";
 import styles from "./page.module.css";
@@ -63,6 +63,15 @@ export default function DashboardPage() {
   useEffect(() => {
     let cancelled = false;
     async function bootstrapDashboard() {
+      if (isUiPreviewSession()) {
+        const savedUser = localStorage.getItem("paperforge_user");
+        const savedWorkspace = localStorage.getItem("paperforge_workspace");
+        if (savedUser) setEmail((JSON.parse(savedUser) as { email?: string }).email || "");
+        if (savedWorkspace) setWorkspace((JSON.parse(savedWorkspace) as { name?: string }).name || "Preview Workspace");
+        setLoading(false);
+        setUsageLoading(false);
+        return;
+      }
       await tryPreviewAutoLogin();
       if (!getAccessToken()) {
         if (!cancelled) router.replace("/login");

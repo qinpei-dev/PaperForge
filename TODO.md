@@ -6,6 +6,8 @@
 
 ## [CURRENT] PaperForge v3.7.5 Production Release
 
+- [ ] Optional follow-up: obtain clean production Login, Dashboard, Task Detail, and Trace captures from the user's normal browser; add only after visual redaction review. Current staged production evidence includes the sanitized Landing capture.
+
 状态：**CONTROLLED PUBLIC BETA LIVE；管理员验收 PASS**。
 
 已完成：canonical ACR run `34678107681`、ECS immutable backend/frontend 部署、非空 PostgreSQL 备份、migration `0013_beta_feedback`、health/readiness、authenticated feedback submit、ordinary-user admin 403、Local task/SSE/preview/DOCX download smoke。修复并发布 feedback ORM 到 `metadata` 列的最小映射 bug。

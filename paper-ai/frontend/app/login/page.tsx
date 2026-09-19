@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiUrl } from "../../lib/api-client";
-import { isPreviewAutoLoginEnabled, storeAuthSession, tryPreviewAutoLogin } from "../../lib/auth";
+import { enterUiPreviewSession, isPreviewAutoLoginEnabled, isUiPreviewEnabled, storeAuthSession, tryPreviewAutoLogin } from "../../lib/auth";
 import { userFacingError } from "../../lib/error-messages";
 import { AuthLayout } from "../../components/auth/AuthLayout";
 import styles from "../../components/auth/AuthLayout.module.css";
@@ -45,6 +45,11 @@ export default function LoginPage() {
     }
   }
 
+  function enterPreview() {
+    enterUiPreviewSession();
+    router.replace("/dashboard");
+  }
+
   return (
     <AuthLayout
       eyebrow="欢迎回来"
@@ -81,6 +86,7 @@ export default function LoginPage() {
         <button className={styles.submitButton} type="submit" disabled={loading}>
           {loading ? "登录中…" : "登录"}
         </button>
+        {isUiPreviewEnabled() ? <button className={styles.submitButton} type="button" onClick={enterPreview} disabled={loading}>仅预览 UI（无需账号）</button> : null}
       </form>
     </AuthLayout>
   );

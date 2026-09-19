@@ -6,6 +6,7 @@ const USER_KEY = "paperforge_user";
 const ACTIVE_TENANT_KEY = "paperforge_active_tenant";
 const WORKSPACE_KEY = "paperforge_workspace";
 const PREVIEW_LOGOUT_KEY = "paperforge_preview_logout";
+const UI_PREVIEW_KEY = "paperforge_ui_preview";
 let previewLoginPromise: Promise<boolean> | null = null;
 
 export function isPreviewEnvironment() {
@@ -15,6 +16,21 @@ export function isPreviewEnvironment() {
 
 export function isPreviewAutoLoginEnabled() {
   return isPreviewEnvironment() && process.env.NEXT_PUBLIC_PAPERFORGE_PREVIEW_AUTO_LOGIN === "true";
+}
+
+/** Frontend-only visual preview. Never enabled in production builds. */
+export function isUiPreviewEnabled() {
+  return isPreviewEnvironment() && process.env.NEXT_PUBLIC_PAPERFORGE_UI_PREVIEW === "true";
+}
+
+export function isUiPreviewSession() {
+  return isUiPreviewEnabled() && typeof window !== "undefined" && localStorage.getItem(UI_PREVIEW_KEY) === "true";
+}
+
+export function enterUiPreviewSession() {
+  if (!isUiPreviewEnabled()) return;
+  localStorage.setItem(UI_PREVIEW_KEY, "true");
+  storeAuthSession("ui-preview-token", { email: "preview@paperforge.local", is_admin: false }, { id: "ui-preview-workspace", name: "Preview Workspace" });
 }
 
 export function authorizationHeaders(): Record<string, string> {
@@ -60,6 +76,7 @@ export function clearAuthSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(WORKSPACE_KEY);
+  localStorage.removeItem(UI_PREVIEW_KEY);
 }
 
 export function suppressPreviewAutoLogin() {

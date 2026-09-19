@@ -5,6 +5,7 @@
 - 项目：**PaperForge — Verified Academic Document Agent**；当前阶段：**READY FOR CONTROLLED PUBLIC BETA**。
 - 公开仓库清理（第一阶段）：当前入口已统一为 v3.7.5，个人/运维标识已脱敏，早期 demo、旧 UI 截图和历史审计已迁至 `docs/archive/`；Git 历史与本地运行数据均未处理。
 - Production：前端 `https://aetherislab.xyz`；浏览器 API：`https://aetherislab.xyz/api`。ECS 已运行本轮 `v3.7.5`，runtime digest、migration/readiness 和部署事实已同步记录。
+- Production Screenshot Audit（2026-09-16）：用户从正常网络提供了 8 张真实生产站 JPEG；已整理至 `docs/assets/screenshots/production/`，Landing 脱敏后 PASS 并用于 README。Dashboard/New Task 因登录态脱敏影响版面列为 REVIEW；未收到 Login、Task Detail、Trace 截图。当前状态：`PRODUCTION_SITE_CONFIRMED_DOWN=NO`、`CODEX_ENVIRONMENT_ACCESS=FAIL`、`PRODUCTION_SCREENSHOT_PENDING=PARTIAL`、`READY_TO_STAGE=YES`。详见 `docs/PRODUCTION_SCREENSHOT_AUDIT.md`。
 - Release candidate：`v3.7.5`；release commit：`4ca4bf29a1eee67f05bcdd6c7b5dfd8a0841a018`；frontend/backend 均从该同一 commit 构建。
 - P0 源码状态：frontend Docker build 已保留 local loopback fallback，并要求生产 CI 显式传递三个 `NEXT_PUBLIC_*` build args；Next.js 已升级到 `15.5.24`，兼容传递依赖审计为 0 vulnerabilities。
 - 本地验证：frontend production `npm run build` **PASS**；backend 从 `paper-ai/backend` 执行 `pytest -q` 为 **107 passed**；`.next/server` 与 `.next/static` 未发现 `http://localhost:8000` 或 `http://127.0.0.1:8000`，并发现生产 API URL。Docker image build 尚未在本机执行；这只代表 local build 环境状态，不代表 production Docker 故障。

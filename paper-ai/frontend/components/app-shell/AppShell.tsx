@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { apiUrl } from "../../lib/api-client";
-import { authorizationHeaders, clearAuthSession, getAccessToken, getStoredAuthUser, isPreviewEnvironment, suppressPreviewAutoLogin, tryPreviewAutoLogin } from "../../lib/auth";
+import { authorizationHeaders, clearAuthSession, getAccessToken, getStoredAuthUser, isPreviewEnvironment, isUiPreviewSession, suppressPreviewAutoLogin, tryPreviewAutoLogin } from "../../lib/auth";
 import type { AuthUser, WorkspaceOption } from "../../types";
 
 type NavigationItem = { href: string; label: string; icon: string };
@@ -39,6 +39,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     async function bootstrapAuthAndWorkspaces() {
       setWorkspaceLoadState("loading");
+      if (isUiPreviewSession()) {
+        setUser(getStoredAuthUser());
+        setWorkspaces([{ tenant_id: "ui-preview-workspace", name: "Preview Workspace", role: "owner" }]);
+        setActiveTenantId("ui-preview-workspace");
+        setWorkspaceLoadState("ready");
+        return;
+      }
       const previewLoggedIn = !getAccessToken() && await tryPreviewAutoLogin();
       if (!getAccessToken()) {
         if (!cancelled) {
