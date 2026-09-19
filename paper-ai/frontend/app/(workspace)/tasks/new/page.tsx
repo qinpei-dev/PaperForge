@@ -360,7 +360,20 @@ export default function NewTaskPage() {
       </header>
 
       <div className={styles.stepRail} aria-label="创建步骤">
-        {["上传论文", "选择模板", "处理模式", "确认运行"].map((label, index) => <div className={styles.stepRailItem} key={label}><span>{index + 1}</span><small>{label}</small></div>)}
+        {[
+          { label: "上传论文", done: Boolean(paperFile) },
+          { label: "选择模板", done: Boolean(templateFile || selectedTemplate) },
+          { label: "处理模式", done: Boolean(agentMode) },
+          { label: "确认运行", done: Boolean(canCreate) },
+        ].map((step, index) => (
+          <div
+            className={`${styles.stepRailItem} ${step.done ? styles.stepRailItemDone : ""}`}
+            key={step.label}
+          >
+            <span>{step.done ? "✓" : index + 1}</span>
+            <small>{step.label}</small>
+          </div>
+        ))}
       </div>
 
       {error ? <div className={styles.errorBanner} role="alert">{error}</div> : null}
@@ -368,49 +381,234 @@ export default function NewTaskPage() {
 
       <div className={styles.flow}>
         <Card className={styles.stepCard}>
-          <div className={styles.stepHeader}><span className={styles.stepNumber}>01</span><div><p className={styles.cardEyebrow}>STEP 1</p><h2>上传论文</h2><p>只接受 DOCX 文件。上传后会先做文档类型识别。</p></div><Badge>{paperFile ? "已选择" : "必需"}</Badge></div>
-          <label className={`${styles.dropzone} ${dragActive ? styles.dropzoneActive : ""} ${paperFile ? styles.dropzoneFilled : ""}`} onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setDragActive(false)} onDrop={(event) => { event.preventDefault(); setDragActive(false); selectPaper(event.dataTransfer.files[0] ?? null); }}>
-            <Input className={styles.fileInput} type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => selectPaper(event.target.files?.[0] ?? null)} />
+          <div className={styles.stepHeader}>
+            <span className={styles.stepNumber}>01</span>
+            <div>
+              <p className={styles.cardEyebrow}>STEP 1</p>
+              <h2>上传论文</h2>
+              <p>当前支持 DOCX 论文文档，上传后将自动进行结构识别、格式处理与验证。</p>
+            </div>
+            <Badge>{paperFile ? "已选择" : "必需"}</Badge>
+          </div>
+          <label
+            className={`${styles.dropzone} ${dragActive ? styles.dropzoneActive : ""} ${paperFile ? styles.dropzoneFilled : ""}`}
+            onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }}
+            onDragOver={(event) => event.preventDefault()}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={(event) => { event.preventDefault(); setDragActive(false); selectPaper(event.dataTransfer.files[0] ?? null); }}
+          >
+            <Input
+              className={styles.fileInput}
+              type="file"
+              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={(event) => selectPaper(event.target.files?.[0] ?? null)}
+            />
             <span className={styles.uploadIcon} aria-hidden="true">↑</span>
             <strong>{paperFile ? "重新选择论文文件" : "拖拽 DOCX 到这里，或点击上传"}</strong>
-            <span>支持 .docx，建议文件小于 20 MB</span>
+            <span>.docx · 最大 20 MB</span>
           </label>
-          {paperFile ? <div className={styles.fileSummary}><div><strong>{paperFile.name}</strong><span>{formatBytes(paperFile.size)} · DOCX</span></div><Badge className={styles.successBadge}>文件已就绪</Badge></div> : null}
+          {paperFile ? (
+            <div className={styles.fileSummary}>
+              <div className={styles.fileSummaryIcon} aria-hidden="true">📄</div>
+              <div className={styles.fileSummaryMeta}>
+                <strong>{paperFile.name}</strong>
+                <span>{formatBytes(paperFile.size)} · DOCX 论文文档</span>
+              </div>
+              <Badge className={styles.successBadge}>文件已就绪</Badge>
+            </div>
+          ) : null}
           {classifying ? <p className={styles.helperText}>正在识别文档类型…</p> : null}
-          {classification ? <div className={classification.requires_confirmation ? styles.warningBox : styles.classificationBox}><div><strong>{classification.label || "已完成文档识别"}</strong><span>识别置信度 {Math.round((classification.confidence || 0) * 100)}%</span></div><p>{classification.warning || "该文档可以按论文流程继续处理。"}</p>{needsConfirmation ? <label className={styles.confirmLabel}><Input className={styles.checkboxInput} type="checkbox" checked={confirmedNonPaper} onChange={(event) => setConfirmedNonPaper(event.target.checked)} />我确认继续按论文流程处理此文档</label> : null}</div> : null}
+          {classification ? (
+            <div className={classification.requires_confirmation ? styles.warningBox : styles.classificationBox}>
+              <div>
+                <strong>{classification.label || "已完成文档识别"}</strong>
+                <span>识别置信度 {Math.round((classification.confidence || 0) * 100)}%</span>
+              </div>
+              <p>{classification.warning || "该文档可以按论文流程继续处理。"}</p>
+              {needsConfirmation ? (
+                <label className={styles.confirmLabel}>
+                  <Input
+                    className={styles.checkboxInput}
+                    type="checkbox"
+                    checked={confirmedNonPaper}
+                    onChange={(event) => setConfirmedNonPaper(event.target.checked)}
+                  />
+                  我确认继续按论文流程处理此文档
+                </label>
+              ) : null}
+            </div>
+          ) : null}
         </Card>
 
         <Card className={styles.stepCard}>
-          <div className={styles.stepHeader}><span className={styles.stepNumber}>02</span><div><p className={styles.cardEyebrow}>STEP 2</p><h2>选择模板</h2><p>模板用于提供学校、学院或专业的格式规则参考。</p></div><Badge>可选</Badge></div>
-          <div className={styles.templateSelection}>
-            <button className={styles.templateTrigger} type="button" aria-haspopup="dialog" aria-expanded={templatePickerOpen} onClick={() => setTemplatePickerOpen(true)}>
-              <span className={styles.templateTriggerCopy}><small>当前模板</small><strong>{templateFile?.name || selectedTemplate?.name || "通用论文规则"}</strong><span>{templateFile ? "临时模板 · 只用于本次任务" : selectedTemplate ? `${selectedTemplate.scope === "tenant" ? "我的模板" : "平台模板"} · v${selectedTemplate.version}` : "可打开列表切换或上传模板"}</span></span>
-              <span className={styles.templateTriggerAction}>选择模板 <span aria-hidden="true">→</span></span>
-            </button>
-            {templateLoadError ? <p className={styles.templateLoadHint} role="status">模板列表加载失败，请点击“选择模板”后重新加载。</p> : null}
+          <div className={styles.stepHeader}>
+            <span className={styles.stepNumber}>02</span>
+            <div>
+              <p className={styles.cardEyebrow}>STEP 2</p>
+              <h2>选择模板</h2>
+              <p>模板用于提供学校、学院或专业的格式规则参考。</p>
+            </div>
+            <Badge>可选</Badge>
           </div>
-          <div className={styles.tempTemplate}><div><p className={styles.cardEyebrow}>临时模板</p><strong>只用于本次任务</strong><span>不会写入模板库，上传后优先于上方模板。</span></div><label className={styles.tempUpload}><Input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => selectTemplate(event.target.files?.[0] ?? null)} />{templateFile ? "重新选择" : "上传 DOCX"}</label></div>
-          {templateFile ? <div className={styles.fileSummary}><div><strong>{templateFile.name}</strong><span>{formatBytes(templateFile.size)} · 临时模板</span></div><Button variant="secondary" onClick={() => { setTemplateFile(null); setNotice("已移除临时模板，将使用已选模板。 "); }}>移除</Button></div> : null}
+          <div className={styles.templateSelection}>
+            <button
+              className={styles.templateTrigger}
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={templatePickerOpen}
+              onClick={() => setTemplatePickerOpen(true)}
+            >
+              <span className={styles.templateTriggerCopy}>
+                <small>当前适用模板</small>
+                <strong>{templateFile?.name || selectedTemplate?.name || "通用论文规则"}</strong>
+                <span>
+                  {templateFile
+                    ? "临时模板 · 只用于本次任务"
+                    : selectedTemplate
+                    ? `${selectedTemplate.scope === "tenant" ? "我的模板" : "平台模板"} · ${selectedTemplate.school || "通用"} · v${selectedTemplate.version}`
+                    : "默认论文排版规范 · 可打开列表切换或上传模板"}
+                </span>
+              </span>
+              <span className={styles.templateTriggerAction}>
+                更换模板 <span aria-hidden="true">→</span>
+              </span>
+            </button>
+            {templateLoadError ? <p className={styles.templateLoadHint} role="status">模板列表加载失败，请点击“更换模板”后重新加载。</p> : null}
+          </div>
+          <div className={styles.tempTemplate}>
+            <div>
+              <p className={styles.cardEyebrow}>临时模板</p>
+              <strong>只用于本次任务</strong>
+              <span>不会写入模板库，上传后本次处理将优先使用该模板。</span>
+            </div>
+            <label className={styles.tempUpload}>
+              <Input
+                type="file"
+                accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={(event) => selectTemplate(event.target.files?.[0] ?? null)}
+              />
+              {templateFile ? "重新选择" : "上传临时 DOCX"}
+            </label>
+          </div>
+          {templateFile ? (
+            <div className={styles.fileSummary}>
+              <div className={styles.fileSummaryIcon} aria-hidden="true">📋</div>
+              <div className={styles.fileSummaryMeta}>
+                <strong>{templateFile.name}</strong>
+                <span>{formatBytes(templateFile.size)} · 临时模板（仅用于本次处理）</span>
+              </div>
+              <Button variant="secondary" onClick={() => { setTemplateFile(null); setNotice("已移除临时模板，将使用已选模板。"); }}>移除</Button>
+            </div>
+          ) : null}
           {selectedTemplate && !templateFile ? <p className={styles.helperText}>当前使用：{selectedTemplate.name} / v{selectedTemplate.version} · 创建任务时将传递对应 template_id。</p> : null}
         </Card>
 
         <Card className={styles.stepCard}>
-          <div className={styles.stepHeader}><span className={styles.stepNumber}>03</span><div><p className={styles.cardEyebrow}>STEP 3</p><h2>处理模式</h2><p>选择处理深度。两种模式都会执行格式验证与重复风险检测。</p></div><Badge>{agentMode === "ai" ? "AI 增强" : "Local"}</Badge></div>
-          <div className={styles.modeGrid} role="radiogroup" aria-label="处理模式">
-            <button className={`${styles.modeOption} ${agentMode === "local" ? styles.modeOptionSelected : ""}`} type="button" role="radio" aria-checked={agentMode === "local"} onClick={() => setAgentMode("local")}><span className={styles.modeIcon}>L</span><span><strong>Local 本地规则</strong><small>本地执行格式修复、文档验证与重复风险检测，不调用 AI。</small></span><Badge>稳定</Badge></button>
-            <button className={`${styles.modeOption} ${agentMode === "ai" ? styles.modeOptionSelected : ""}`} type="button" role="radio" aria-checked={agentMode === "ai"} onClick={() => setAgentMode("ai")}><span className={styles.modeIcon}>AI</span><span><strong>AI 增强模式</strong><small>在本地格式处理基础上，增加语言与学术表达审校建议。</small></span><Badge>推荐</Badge></button>
+          <div className={styles.stepHeader}>
+            <span className={styles.stepNumber}>03</span>
+            <div>
+              <p className={styles.cardEyebrow}>STEP 3</p>
+              <h2>处理模式</h2>
+              <p>选择处理深度。两种模式都会执行格式验证与重复风险检测。</p>
+            </div>
+            <Badge>{agentMode === "ai" ? "AI 增强" : "Local"}</Badge>
           </div>
-          <div className={styles.fallbackNote}><strong>AI 服务不可用时怎么办？</strong><span>AI 模式会自动 fallback 到本地规则流程，不会阻断任务，也不会让任务创建失败。</span></div>
-          <details className={styles.advanced}><summary>高级信息</summary><p>两种模式都会保留任务执行轨迹、验证结果和修改报告；Local 模式保持 ai_score=null、ai_used=false。</p></details>
+          <div className={styles.modeGrid} role="radiogroup" aria-label="处理模式">
+            <button
+              className={`${styles.modeOption} ${agentMode === "local" ? styles.modeOptionSelected : ""}`}
+              type="button"
+              role="radio"
+              aria-checked={agentMode === "local"}
+              onClick={() => setAgentMode("local")}
+            >
+              <span className={styles.modeIcon}>L</span>
+              <span>
+                <strong>Local 本地规则</strong>
+                <small>本地执行格式修复、文档验证与重复风险检测，不调用外部 AI，不消耗 AI 额度。</small>
+              </span>
+              <Badge>稳定可靠</Badge>
+            </button>
+            <button
+              className={`${styles.modeOption} ${agentMode === "ai" ? styles.modeOptionSelected : ""}`}
+              type="button"
+              role="radio"
+              aria-checked={agentMode === "ai"}
+              onClick={() => setAgentMode("ai")}
+            >
+              <span className={styles.modeIcon}>AI</span>
+              <span>
+                <strong>AI 增强模式</strong>
+                <small>在本地格式处理基础上，引入深度审校建议与语言润色，效果更佳。</small>
+              </span>
+              <Badge>推荐首选</Badge>
+            </button>
+          </div>
+          <div className={styles.fallbackNote}>
+            <strong>AI 服务不可用时怎么办？</strong>
+            <span>AI 模式内置自动 fallback 机制：若服务不可用将平滑降级至本地规则流程，绝不中断任务，也不影响整体排版输出。</span>
+          </div>
+          <details className={styles.advanced}>
+            <summary>高级模式说明</summary>
+            <p>两种模式都会保留完整任务执行轨迹、验证结果和修改报告；Local 模式严格保证 ai_score = null、ai_used = false，符合纯本地合规要求。</p>
+          </details>
         </Card>
 
         <Card className={`${styles.stepCard} ${styles.confirmCard}`}>
-          <div className={styles.stepHeader}><span className={styles.stepNumber}>04</span><div><p className={styles.cardEyebrow}>STEP 4</p><h2>确认运行</h2><p>确认输入后创建任务，后台处理完成后会自动进入 Task Detail。</p></div><Badge className={quotaExhausted ? styles.warningBadge : styles.successBadge}>{quotaExhausted ? "额度不足" : "准备就绪"}</Badge></div>
-          <div className={styles.confirmGrid}><div><span>论文</span><strong>{paperFile?.name || "尚未上传"}</strong></div><div><span>模板</span><strong>{templateFile?.name || selectedTemplate?.name || "通用论文规则"}</strong></div><div><span>模式</span><strong>{agentMode === "ai" ? "AI 增强模式" : "Local 本地规则"}</strong></div><div><span>预计消耗额度</span><strong>1 次 Agent 运行</strong></div></div>
-          {usage ? <div className={styles.quotaSummary}><div><span>本周期额度</span><strong>{usage.remaining} / {usage.quota.limit} 次剩余</strong></div><div className={styles.progressTrack}><span style={{ width: `${quotaPercent}%` }} /></div><small>{usage.period_end ? `周期结束：${new Date(usage.period_end).toLocaleDateString("zh-CN")}` : "额度以服务器最终校验为准"}</small></div> : <p className={styles.helperText}>额度将在创建时由服务器最终校验。</p>}
-          <div className={styles.confirmActions}><Button onClick={() => void createTask()} disabled={!canCreate}>{running ? "创建中…" : "创建 Task 并进入详情"}</Button><Link href="/dashboard" className={styles.backLink}>稍后再做</Link></div>
-          {needsConfirmation && !confirmedNonPaper ? <p className={styles.actionHint}>完成文档确认后才能创建任务。</p> : null}
-          {quotaExhausted ? <p className={styles.actionHint}>本周期额度已用尽，当前按钮不可用。</p> : null}
+          <div className={styles.stepHeader}>
+            <span className={styles.stepNumber}>04</span>
+            <div>
+              <p className={styles.cardEyebrow}>STEP 4</p>
+              <h2>确认并开始</h2>
+              <p>确认各项配置后启动任务，Agent 将开始自动执行论文处理流水线。</p>
+            </div>
+            <Badge className={quotaExhausted ? styles.warningBadge : styles.successBadge}>
+              {quotaExhausted ? "额度不足" : "准备就绪"}
+            </Badge>
+          </div>
+          <div className={styles.confirmGrid}>
+            <div>
+              <span>论文文件</span>
+              <strong>{paperFile?.name || "尚未上传"}</strong>
+            </div>
+            <div>
+              <span>适用模板</span>
+              <strong>{templateFile?.name || selectedTemplate?.name || "通用论文规则"}</strong>
+            </div>
+            <div>
+              <span>处理模式</span>
+              <strong>{agentMode === "ai" ? "AI 增强模式" : "Local 本地规则"}</strong>
+            </div>
+            <div>
+              <span>预计消耗</span>
+              <strong>1 次 Agent 运行</strong>
+            </div>
+          </div>
+          {usage ? (
+            <div className={styles.quotaSummary}>
+              <div>
+                <span>本周期运行额度</span>
+                <strong>{usage.remaining} / {usage.quota.limit} 次剩余</strong>
+              </div>
+              <div className={styles.progressTrack}>
+                <span style={{ width: `${quotaPercent}%` }} />
+              </div>
+              <small>{usage.period_end ? `额度重置日期：${new Date(usage.period_end).toLocaleDateString("zh-CN")}` : "额度以服务器最终执行校验为准"}</small>
+            </div>
+          ) : (
+            <p className={styles.helperText}>额度将在创建时由服务器校验。</p>
+          )}
+          <div className={styles.confirmActions}>
+            <Button onClick={() => void createTask()} disabled={!canCreate}>
+              {running ? "正在启动论文处理…" : "开始论文处理"}
+            </Button>
+            <Link href="/dashboard" className={styles.backLink}>稍后再做</Link>
+          </div>
+          {needsConfirmation && !confirmedNonPaper ? (
+            <p className={styles.actionHint}>请勾选上方确认声明后，方可启动论文处理任务。</p>
+          ) : null}
+          {quotaExhausted ? (
+            <p className={styles.actionHint}>本周期 Agent 运行额度已耗尽，请稍后再试或联系管理员。</p>
+          ) : null}
         </Card>
       </div>
 

@@ -341,61 +341,260 @@ export default function TaskDetailPage() {
 
   return (
     <section className={styles.page}>
+      {/* Layer 1: Task Summary */}
       <header className={styles.pageHeader}>
         <div className={styles.headerIntro}>
           <Link className={styles.backLink} href="/dashboard">← 返回任务中心</Link>
           <p className={styles.eyebrow}>TASK DETAIL</p>
           <div className={styles.titleRow}>
             <h1>{task.paper_name || "PaperForge 论文任务"}</h1>
-            <Badge className={task.status === "completed" ? styles.badgeSuccess : ["failed", "cancelled", "interrupted"].includes(task.status) ? styles.badgeDanger : styles.badgeProgress}>{taskStatusLabel(task.status)}</Badge>
+            <Badge className={task.status === "completed" ? styles.badgeSuccess : ["failed", "cancelled", "interrupted"].includes(task.status) ? styles.badgeDanger : styles.badgeProgress}>
+              {taskStatusLabel(task.status)}
+            </Badge>
           </div>
-          <p className={styles.createdAt}>创建于 {formatDate(task.created_at)}{task.template ? ` · 模板 ${task.template.name || task.template.id || "默认"} / v${task.template.version || "—"}` : ""}</p>
+          <p className={styles.createdAt}>
+            创建于 {formatDate(task.created_at)}
+            {task.template ? ` · 适用模板：${task.template.name || task.template.id || "默认"} / v${task.template.version || "—"}` : ""}
+          </p>
         </div>
         <div className={styles.headerActions}>
-          {docxArtifact ? <Button variant="secondary" onClick={() => void downloadArtifact(docxArtifact)}>下载 DOCX</Button> : null}
-          {task.retry_available ? <Button variant="primary" disabled={retrying} onClick={() => void retryTask()}>{retrying ? "正在重试…" : "重新执行"}</Button> : null}
+          {docxArtifact ? (
+            <>
+              <Button variant="secondary" onClick={() => void downloadArtifact(docxArtifact)}>
+                下载 DOCX
+              </Button>
+              <Button variant="primary" disabled={previewLoading} onClick={() => void previewArtifact(docxArtifact)}>
+                {previewLoading ? "加载预览…" : "在线预览"}
+              </Button>
+            </>
+          ) : null}
+          {task.retry_available ? (
+            <Button variant="primary" disabled={retrying} onClick={() => void retryTask()}>
+              {retrying ? "正在重试…" : "重新执行"}
+            </Button>
+          ) : null}
         </div>
       </header>
 
       {error ? <p className={styles.errorMessage}>{error}</p> : null}
-      {task.error_message && task.status !== "completed" ? <Card className={styles.errorCard}><strong>{task.status_explanation || "任务未完成"}</strong><p>{task.error_message}</p></Card> : null}
+      {task.error_message && task.status !== "completed" ? (
+        <Card className={styles.errorCard}>
+          <strong>{task.status_explanation || "任务未完成"}</strong>
+          <p>{task.error_message}</p>
+        </Card>
+      ) : null}
 
+      {/* Layer 2: Result & Verification */}
       <Card className={styles.resultCard} aria-labelledby="result-overview-title">
-        <div className={styles.sectionHeading}><div><p className={styles.cardEyebrow}>RESULT OVERVIEW</p><h2 id="result-overview-title">结果概览</h2></div><Badge className={verificationTone(verification)}>{verificationLabel}</Badge></div>
+        <div className={styles.sectionHeading}>
+          <div>
+            <p className={styles.cardEyebrow}>RESULT OVERVIEW</p>
+            <h2 id="result-overview-title">结果与验证概览</h2>
+          </div>
+          <Badge className={verificationTone(verification)}>{verificationLabel}</Badge>
+        </div>
         <div className={styles.resultGrid}>
-          <div className={styles.primaryMetric}><span>总评分</span><strong>{formatScore(score)}</strong><small>{task.score_history?.before != null ? `修改前 ${formatScore(task.score_history.before)} · ${score != null ? "已更新" : "待评分"}` : "最终质量评分"}</small></div>
-          <div className={styles.metric}><span>修改数量</span><strong>{modificationCount ?? "—"}</strong><small>{modificationCount == null ? "报告摘要加载中" : "项处理"}</small></div>
-          <div className={styles.metric}><span>验证结果</span><strong>{verification ? `${verification.verified ?? 0}/${verification.total ?? 0}` : "—"}</strong><small>{verification ? `通过 / 总检查 · 失败 ${verification.failed ?? 0}` : "等待验证数据"}</small></div>
+          <div className={styles.primaryMetric}>
+            <span>综合质量评分</span>
+            <strong>{formatScore(score)}</strong>
+            <small>
+              {task.score_history?.before != null
+                ? `修改前 ${formatScore(task.score_history.before)} → ${score != null ? `修改后 ${formatScore(score)}` : "待评分"}`
+                : "格式规范与学术表达综合评估"}
+            </small>
+          </div>
+          <div className={styles.metric}>
+            <span>格式与内容修改</span>
+            <strong>{modificationCount ?? "—"}</strong>
+            <small>
+              {reportSummary?.change_counts
+                ? `格式修复 ${reportSummary.change_counts.format_changes ?? 0} 项 · 语言建议 ${reportSummary.change_counts.language_changes ?? 0} 项`
+                : modificationCount == null
+                ? "报告摘要加载中"
+                : "项处理已完成"}
+            </small>
+          </div>
+          <div className={styles.metric}>
+            <span>规则验证通过率</span>
+            <strong>{verification ? `${verification.verified ?? 0}/${verification.total ?? 0}` : "—"}</strong>
+            <small>
+              {verification
+                ? `通过 ${verification.verified ?? 0} 项 · 未通过 ${verification.failed ?? 0} 项${(verification.conflicts || 0) > 0 ? ` · 冲突 ${verification.conflicts}` : ""}`
+                : "等待验证流水线数据"}
+            </small>
+          </div>
         </div>
       </Card>
 
+      {/* Layer 3: Preview & Artifacts */}
+      <Card className={styles.artifactsCard} aria-labelledby="artifacts-title">
+        <div className={styles.sectionHeading}>
+          <div>
+            <p className={styles.cardEyebrow}>DELIVERABLES & PREVIEW</p>
+            <h2 id="artifacts-title">输出交付与在线预览</h2>
+          </div>
+          <span className={styles.stageSummary}>{task.artifacts?.length || 0} 个交付文件</span>
+        </div>
+        {task.artifacts?.length ? (
+          <div className={styles.artifactGrid}>
+            {task.artifacts.map((artifact) => (
+              <article className={styles.artifact} key={artifact.id}>
+                <div className={styles.artifactIcon}>
+                  {artifact.file_type === "docx" ? "W" : "R"}
+                </div>
+                <div className={styles.artifactInfo}>
+                  <strong>{artifact.file_type === "docx" ? "输出 DOCX 论文" : "修改与验证报告"}</strong>
+                  <small>{artifact.file_type === "docx" ? "已完成规范格式修复与学术审校的论文文档" : "包含详细修改项、格式对比与规则验证清单"}</small>
+                  <code>{artifactName(artifact)}</code>
+                </div>
+                <div className={styles.artifactActions}>
+                  <Button variant="secondary" onClick={() => void downloadArtifact(artifact)}>
+                    下载文件
+                  </Button>
+                  {artifact.file_type === "docx" ? (
+                    <Button variant="primary" disabled={previewLoading} onClick={() => void previewArtifact(artifact)}>
+                      {previewLoading ? "加载预览…" : "在线预览"}
+                    </Button>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className={styles.muted}>任务处理完成后，输出 DOCX 文档与修改报告将在此处生成并供下载预览。</p>
+        )}
+
+        {previewLoading ? (
+          <div className={styles.previewLoadingBox}>
+            <Loading label="正在渲染学术论文在线预览…" />
+          </div>
+        ) : null}
+
+        {previewHtml ? (
+          <div className={styles.previewPanel}>
+            <div className={styles.previewHeading}>
+              <div className={styles.previewTitleArea}>
+                <p className={styles.cardEyebrow}>DOCUMENT VIEWER</p>
+                <h3>{previewTitle || "在线预览"}</h3>
+              </div>
+              <div className={styles.previewActions}>
+                {docxArtifact ? (
+                  <Button variant="secondary" onClick={() => void downloadArtifact(docxArtifact)}>
+                    下载此文档
+                  </Button>
+                ) : null}
+                <Button variant="secondary" onClick={() => setPreviewHtml("")}>
+                  关闭预览
+                </Button>
+              </div>
+            </div>
+            <div className={styles.docPreviewViewport}>
+              <article className={styles.docPreview} dangerouslySetInnerHTML={{ __html: previewHtml }} />
+            </div>
+          </div>
+        ) : null}
+      </Card>
+
+      {/* Layer 4: Execution & Trace */}
       <Card className={styles.timelineCard} aria-labelledby="workflow-timeline-title">
-        <div className={styles.sectionHeading}><div><p className={styles.cardEyebrow}>WORKFLOW TIMELINE</p><h2 id="workflow-timeline-title">处理流程</h2></div><span className={styles.stageSummary}>{workflowStatusLabel(task.workflow_stage) || taskStatusLabel(task.status)}{typeof task.progress === "number" ? ` · ${task.progress}%` : ""}</span></div>
+        <div className={styles.sectionHeading}>
+          <div>
+            <p className={styles.cardEyebrow}>WORKFLOW PROGRESS</p>
+            <h2 id="workflow-timeline-title">处理流水线</h2>
+          </div>
+          <span className={styles.stageSummary}>
+            {workflowStatusLabel(task.workflow_stage) || taskStatusLabel(task.status)}
+            {typeof task.progress === "number" ? ` · ${task.progress}%` : ""}
+          </span>
+        </div>
         <ol className={styles.timeline}>
-          {TIMELINE.map((item) => <li className={timelineTone(task, item.key)} key={item.key}><span className={styles.timelineDot} aria-hidden="true">{item.key === "completed" && task.status === "completed" ? "✓" : item.key === "failed" && ["failed", "cancelled", "interrupted"].includes(task.status) ? "!" : ""}</span><div><strong>{item.label}</strong><small>{item.key === "running" && task.workflow_stage ? workflowStatusLabel(task.workflow_stage) || item.description : item.description}</small></div></li>)}
+          {TIMELINE.map((item) => (
+            <li className={timelineTone(task, item.key)} key={item.key}>
+              <span className={styles.timelineDot} aria-hidden="true">
+                {item.key === "completed" && task.status === "completed"
+                  ? "✓"
+                  : item.key === "failed" && ["failed", "cancelled", "interrupted"].includes(task.status)
+                  ? "!"
+                  : ""}
+              </span>
+              <div>
+                <strong>{item.label}</strong>
+                <small>
+                  {item.key === "running" && task.workflow_stage
+                    ? workflowStatusLabel(task.workflow_stage) || item.description
+                    : item.description}
+                </small>
+              </div>
+            </li>
+          ))}
         </ol>
       </Card>
 
       <Card className={styles.executionCard} aria-labelledby="agent-execution-title">
-        <div className={styles.sectionHeading}><div><p className={styles.cardEyebrow}>AGENT EXECUTION</p><h2 id="agent-execution-title">Agent 执行</h2></div><Badge className={streamMode === "polling" ? styles.badgeWarning : styles.badgeNeutral}>{connectionLabel}</Badge></div>
+        <div className={styles.sectionHeading}>
+          <div>
+            <p className={styles.cardEyebrow}>AGENT EXECUTION & TRACE</p>
+            <h2 id="agent-execution-title">Agent 执行监控</h2>
+          </div>
+          <Badge className={streamMode === "polling" ? styles.badgeWarning : styles.badgeNeutral}>
+            {connectionLabel}
+          </Badge>
+        </div>
         <div className={styles.executionSummary}>
-          <div><span>当前阶段</span><strong>{workflowStatusLabel(task.workflow_stage) || taskStatusLabel(task.status)}</strong><small>{typeof task.progress === "number" ? `处理进度 ${task.progress}%` : "阶段信息随任务更新"}</small></div>
-          <div><span>Fallback 状态</span><strong>{fallbackCount ? "已启用兜底" : "标准路径"}</strong><small>{fallbackCount ? `${fallbackCount} 个 Trace 节点使用 fallback` : "未检测到 fallback"}</small></div>
+          <div>
+            <span>当前处理阶段</span>
+            <strong>{workflowStatusLabel(task.workflow_stage) || taskStatusLabel(task.status)}</strong>
+            <small>{typeof task.progress === "number" ? `流水线进度 ${task.progress}%` : "阶段状态随任务实时同步"}</small>
+          </div>
+          <div>
+            <span>系统容灾状态</span>
+            <strong>{fallbackCount ? "已启用平滑兜底" : "标准处理路径"}</strong>
+            <small>{fallbackCount ? `${fallbackCount} 个节点启用本地规则 fallback` : "所有步骤按标准路径平稳运行"}</small>
+          </div>
         </div>
         <details className={styles.traceDisclosure}>
-          <summary><span>开发级 Trace</span><small>{traceItems.length + events.length} 条记录 · 默认折叠</small></summary>
+          <summary>
+            <span>开发者执行轨迹 (Trace Log)</span>
+            <small>{traceItems.length + events.length} 条记录 · 点击展开</small>
+          </summary>
           <div className={styles.traceBody}>
-            {events.length ? <div><p className={styles.traceLabel}>实时事件</p><ol className={styles.traceList}>{events.slice().reverse().map((item, index) => <li className={item.status === "failed" ? styles.traceFailed : styles.traceRunning} key={`${item.timestamp || "event"}-${index}`}><div><strong>{item.message || item.event_type || "工作流更新"}</strong><small>{workflowStatusLabel(item.workflow_stage) || item.workflow_stage || "任务状态"}</small></div><span>{typeof item.progress === "number" ? `${item.progress}%` : ""}</span></li>)}</ol></div> : null}
-            {traceItems.length ? <div><p className={styles.traceLabel}>Agent Trace</p><ol className={styles.traceList}>{traceItems.map((item, index) => <li className={traceTone(item)} key={`${traceTitle(item)}-${index}`}><div><strong>{traceTitle(item)}</strong><small>{traceDescription(item)}</small></div><span>{item.fallback_used ? "fallback" : item.duration_ms ? `${item.duration_ms} ms` : item.status || "记录"}</span></li>)}</ol></div> : null}
-            {!events.length && !traceItems.length ? <p className={styles.muted}>暂无 Trace 记录，任务状态仍会通过 SSE/轮询更新。</p> : null}
+            {events.length ? (
+              <div>
+                <p className={styles.traceLabel}>实时事件流 (Live SSE Events)</p>
+                <ol className={styles.traceList}>
+                  {events.slice().reverse().map((item, index) => (
+                    <li className={item.status === "failed" ? styles.traceFailed : styles.traceRunning} key={`${item.timestamp || "event"}-${index}`}>
+                      <div>
+                        <strong>{item.message || item.event_type || "工作流状态变更"}</strong>
+                        <small>{workflowStatusLabel(item.workflow_stage) || item.workflow_stage || "任务状态"}</small>
+                      </div>
+                      <span>{typeof item.progress === "number" ? `${item.progress}%` : ""}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+            {traceItems.length ? (
+              <div>
+                <p className={styles.traceLabel}>Agent 节点轨迹 (Trace Steps)</p>
+                <ol className={styles.traceList}>
+                  {traceItems.map((item, index) => (
+                    <li className={traceTone(item)} key={`${traceTitle(item)}-${index}`}>
+                      <div>
+                        <strong>{traceTitle(item)}</strong>
+                        <small>{traceDescription(item)}</small>
+                      </div>
+                      <span>{item.fallback_used ? "fallback" : item.duration_ms ? `${item.duration_ms} ms` : item.status || "完成"}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+            {!events.length && !traceItems.length ? (
+              <p className={styles.muted}>暂无 Trace 记录，任务状态仍会通过 SSE/轮询实时更新。</p>
+            ) : null}
           </div>
         </details>
-      </Card>
-
-      <Card className={styles.artifactsCard} aria-labelledby="artifacts-title">
-        <div className={styles.sectionHeading}><div><p className={styles.cardEyebrow}>ARTIFACTS</p><h2 id="artifacts-title">交付物</h2></div><span className={styles.stageSummary}>{task.artifacts?.length || 0} 项</span></div>
-        {task.artifacts?.length ? <div className={styles.artifactGrid}>{task.artifacts.map((artifact) => <article className={styles.artifact} key={artifact.id}><div className={styles.artifactIcon}>{artifact.file_type === "docx" ? "W" : "R"}</div><div className={styles.artifactInfo}><strong>{artifact.file_type === "docx" ? "输出 DOCX" : "修改报告"}</strong><small>{artifact.file_type === "docx" ? "已完成格式处理的论文文档" : "Agent 修改与验证摘要"}</small><code>{artifactName(artifact)}</code></div><div className={styles.artifactActions}><Button variant="secondary" onClick={() => void downloadArtifact(artifact)}>下载</Button>{artifact.file_type === "docx" ? <Button variant="primary" disabled={previewLoading} onClick={() => void previewArtifact(artifact)}>{previewLoading ? "预览中…" : "在线预览"}</Button> : null}</div></article>)}</div> : <p className={styles.muted}>任务完成后，输出 DOCX 与修改报告会显示在这里。</p>}
-        {previewHtml ? <div className={styles.previewPanel}><div className={styles.previewHeading}><div><p className={styles.cardEyebrow}>PREVIEW</p><h3>{previewTitle || "在线预览"}</h3></div><Button variant="secondary" onClick={() => setPreviewHtml("")}>关闭预览</Button></div><article className={styles.docPreview} dangerouslySetInnerHTML={{ __html: previewHtml }} /></div> : null}
       </Card>
     </section>
   );

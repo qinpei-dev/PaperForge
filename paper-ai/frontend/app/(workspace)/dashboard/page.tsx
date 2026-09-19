@@ -155,103 +155,112 @@ export default function DashboardPage() {
 
   return (
     <section className={styles.dashboard} aria-busy={loading}>
-      <Card className={styles.welcomeCard}>
-        <div>
-          <p className={styles.eyebrow}>PAPERFORGE WORKSPACE</p>
+      <header className={styles.header}>
+        <div className={styles.headerMain}>
+          <div className={styles.headerMeta}>
+            <span className={styles.workspacePill}>{workspace || "PaperForge Workspace"}</span>
+            {usage ? (
+              <span className={styles.quotaPill}>
+                本月额度: <strong>{usage.usage.used}</strong> / {usage.quota.limit} 次
+                {usage.remaining === 0 ? <span className={styles.quotaWarning}>已用尽</span> : null}
+              </span>
+            ) : null}
+          </div>
           <h1>欢迎回来{email ? `，${email.split("@")[0]}` : ""}</h1>
-          <p className={styles.welcomeText}>集中管理论文处理任务，查看 Agent 进度，并快速获取可交付文档。</p>
+          <p className={styles.lead}>集中管理论文处理任务，跟踪格式修复与验证进度。</p>
         </div>
-        <div className={styles.workspaceInfo}>
-          <span>当前 Workspace</span>
-          <strong>{workspace || "PaperForge Workspace"}</strong>
-          <small>任务与额度均按当前工作空间统计</small>
+        <div className={styles.headerActions}>
+          <Button onClick={openNewTask} className={styles.createTaskButton}>
+            ＋ 新建论文任务
+          </Button>
         </div>
-      </Card>
+      </header>
 
-      <div className={styles.actionRow}>
-        <Card className={styles.quickStartCard}>
-          <div>
-            <p className={styles.cardEyebrow}>QUICK START</p>
-            <h2>开始一篇新论文</h2>
-            <p>上传论文，可选配合模板，启动格式 Agent 处理流程。</p>
-          </div>
-          <Button onClick={openNewTask}>创建新论文任务 <span aria-hidden="true">→</span></Button>
-        </Card>
-
-        <Card className={styles.quotaCard} aria-label="本月使用额度">
-          <div className={styles.sectionHeading}>
-            <div>
-              <p className={styles.cardEyebrow}>USAGE / QUOTA</p>
-              <h2>本月使用额度</h2>
-            </div>
-            <Badge className={usage && usage.remaining === 0 ? styles.badgeWarning : styles.badgeSuccess}>
-              {usage ? (usage.remaining === 0 ? "额度已用尽" : "额度可用") : "统计中"}
-            </Badge>
-          </div>
-          {usageLoading && !usage ? <Loading label="正在加载额度…" /> : usage ? <>
-            <div className={styles.quotaNumbers}>
-              <div><span>已使用</span><strong>{usage.usage.used}</strong><small>/ {usage.quota.limit} 次</small></div>
-              <div><span>剩余</span><strong>{usage.remaining}</strong><small>本周期可用</small></div>
-            </div>
-            <div className={styles.progressTrack} aria-label={`已使用 ${usagePercent}%`}><span style={{ width: `${usagePercent}%` }} /></div>
-            <p className={styles.period}>周期：{formatPeriod(usage.period_start)} – {formatPeriod(usage.period_end)}</p>
-          </> : <p className={styles.inlineMessage}>{usageError || "本月额度暂时无法加载。"}</p>}
-        </Card>
+      <div className={styles.statsStrip}>
+        <div className={styles.statItem}>
+          <span className={styles.statLabel}>总任务数</span>
+          <strong className={styles.statValue}>{tasks.length}</strong>
+        </div>
+        <div className={styles.statDivider} aria-hidden="true" />
+        <div className={styles.statItem}>
+          <span className={styles.statLabel}>已完成</span>
+          <strong className={styles.statValue}>{completedCount}</strong>
+        </div>
+        <div className={styles.statDivider} aria-hidden="true" />
+        <div className={styles.statItem}>
+          <span className={styles.statLabel}>处理中</span>
+          <strong className={styles.statValue}>{processingCount}</strong>
+        </div>
+        <div className={styles.statDivider} aria-hidden="true" />
+        <div className={styles.statItem}>
+          <span className={styles.statLabel}>剩余额度</span>
+          <strong className={styles.statValue}>{usage ? `${usage.remaining} 次` : "—"}</strong>
+        </div>
       </div>
-
-      <section aria-labelledby="dashboard-metrics-title">
-        <div className={styles.sectionHeading}><div><p className={styles.cardEyebrow}>METRICS</p><h2 id="dashboard-metrics-title">工作台概览</h2></div></div>
-        <div className={styles.metricsGrid}>
-          <Card className={styles.metricCard}><span>总任务数</span><strong>{tasks.length}</strong><small>当前 Workspace</small></Card>
-          <Card className={styles.metricCard}><span>已完成</span><strong>{completedCount}</strong><small>已生成交付结果</small></Card>
-          <Card className={styles.metricCard}><span>处理中</span><strong>{processingCount}</strong><small>正在运行的任务</small></Card>
-          <Card className={styles.metricCard}><span>本月使用量</span><strong>{usage ? usage.usage.used : "—"}</strong><small>{usage ? `/ ${usage.quota.limit} 次额度` : "等待额度数据"}</small></Card>
-        </div>
-      </section>
 
       <Card className={styles.recentCard} aria-labelledby="recent-tasks-title">
         <div className={styles.sectionHeading}>
-          <div><p className={styles.cardEyebrow}>RECENT TASKS</p><h2 id="recent-tasks-title">最近任务</h2></div>
-          <Link className={styles.sectionLink} href="/tasks">查看全部</Link>
-        </div>
-        {error ? <p className={styles.errorMessage}>{error}</p> : null}
-        {loading ? <Loading label="正在加载任务…" /> : tasks.length === 0 ? (
-          <div className={styles.emptyState}>
-            <div className={styles.emptyStateCopy}>
-              <EmptyState
-                title={isPreviewEnvironment() ? "这是一个全新的 Preview Workspace" : "从第一篇论文开始"}
-                description={isPreviewEnvironment() ? "当前没有测试任务，正适合走一遍完整流程。你的上传内容会按当前 Workspace 隔离。" : "上传论文后，PaperForge 会完成格式检查、Agent 处理、结果验证，并提供在线预览和下载。"}
-              />
-              <p className={styles.emptyValue}>用一次处理，把论文从“待整理”推进到“可检查、可预览、可交付”。</p>
-            </div>
-            <div className={styles.emptyFlow} aria-label="示例流程">
-              <p className={styles.emptyFlowTitle}>示例流程</p>
-              <ol>
-                <li><b>01</b><span>上传论文</span><small>选择 .docx 文件</small></li>
-                <li><b>02</b><span>选择处理模式</span><small>Local 或 AI 增强</small></li>
-                <li><b>03</b><span>查看并下载</span><small>预览验证后的结果</small></li>
-              </ol>
-            </div>
-            <Button onClick={openNewTask}>创建第一个任务 <span aria-hidden="true">→</span></Button>
+          <div>
+            <h2 id="recent-tasks-title">最近任务</h2>
+            <p className={styles.sectionSub}>最近处理的学术论文与验证状态</p>
           </div>
-        ) : <div className={styles.taskList}>
-          {tasks.slice(0, 5).map((task) => <article className={styles.taskRow} key={task.id}>
-            <div className={styles.taskMain}>
-              <strong>{task.title || task.paper_name || "PaperForge 论文任务"}</strong>
-              <span>{formatDate(task.created_at)}</span>
-            </div>
-            <div className={styles.taskMeta}>
-              <Badge className={statusTone(task.status)}>{taskStatusLabel(task.status)}</Badge>
-              <small>{task.workflow_stage ? workflowStatusLabel(task.workflow_stage) : task.score === null || task.score === undefined ? "等待评分" : `${task.score} 分`}</small>
-            </div>
-            <Button variant="secondary" className={styles.detailButton} onClick={() => router.push(`/tasks/${task.id}`)}>进入详情</Button>
-          </article>)}
-        </div>}
-      </Card>
+          <Link className={styles.sectionLink} href="/tasks">查看全部任务 →</Link>
+        </div>
 
-      <div className={styles.footerActions}>
-        <Button variant="secondary" onClick={logout}>退出登录</Button>
-      </div>
+        {error ? <p className={styles.errorMessage} role="alert">{error}</p> : null}
+
+        {loading ? (
+          <div className={styles.loadingBox}><Loading label="正在加载任务列表…" /></div>
+        ) : tasks.length === 0 ? (
+          <div className={styles.emptyState}>
+            <EmptyState
+              title={isPreviewEnvironment() ? "这是一个全新的 Preview Workspace" : "开始你的第一篇论文"}
+              description={isPreviewEnvironment() ? "当前工作区暂无测试任务，你的上传内容会按当前工作空间严格隔离。" : "上传 DOCX 论文后，PaperForge 会自动解析模板、修复格式并重新验证输出。"}
+            />
+            <div className={styles.emptyActions}>
+              <Button onClick={openNewTask}>创建第一个论文任务 <span aria-hidden="true">→</span></Button>
+            </div>
+          </div>
+        ) : (
+          <div className={styles.tableWrap}>
+            <div className={styles.tableHeader}>
+              <span className={styles.colDoc}>文档名称</span>
+              <span className={styles.colStatus}>状态</span>
+              <span className={styles.colDate}>创建时间</span>
+              <span className={styles.colResult}>处理阶段 / 评分</span>
+              <span className={styles.colAction}>操作</span>
+            </div>
+            <div className={styles.taskList}>
+              {tasks.slice(0, 5).map((task) => (
+                <article className={styles.taskRow} key={task.id}>
+                  <div className={styles.colDoc}>
+                    <span className={styles.docIcon} aria-hidden="true">DOCX</span>
+                    <strong className={styles.docTitle} title={task.title || task.paper_name || "PaperForge 论文任务"}>
+                      {task.title || task.paper_name || "PaperForge 论文任务"}
+                    </strong>
+                  </div>
+                  <div className={styles.colStatus}>
+                    <Badge className={statusTone(task.status)}>{taskStatusLabel(task.status)}</Badge>
+                  </div>
+                  <div className={styles.colDate}>
+                    <span>{formatDate(task.created_at)}</span>
+                  </div>
+                  <div className={styles.colResult}>
+                    <span className={styles.resultText}>
+                      {task.workflow_stage ? workflowStatusLabel(task.workflow_stage) : task.score === null || task.score === undefined ? "—" : `${task.score} 分`}
+                    </span>
+                  </div>
+                  <div className={styles.colAction}>
+                    <Button variant="secondary" className={styles.detailButton} onClick={() => router.push(`/tasks/${task.id}`)}>
+                      进入详情
+                    </Button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
+      </Card>
     </section>
   );
 }

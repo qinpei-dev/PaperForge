@@ -14,9 +14,8 @@
 
 .headerIntro { min-width: 0; }
 .backLink { color: var(--pf-color-primary-hover); font-size: 13px; font-weight: 800; text-decoration: none; }
-.backLink:hover { text-decoration: underline; }
-.eyebrow, .cardEyebrow { margin: 0; color: var(--pf-color-muted); font-size: 11px; font-weight: 900; letter-spacing: .1em; }
-.eyebrow { margin-top: var(--pf-space-6); }
+.eyebrow, .cardEyebrow { margin: 0 0 4px; color: var(--pf-color-primary); font-size: 11px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+.eyebrow { margin-top: var(--pf-space-3); }
 .titleRow { display: flex; align-items: center; flex-wrap: wrap; gap: var(--pf-space-3); margin-top: 6px; }
 .titleRow h1 { min-width: 0; margin: 0; color: var(--pf-color-text); font-size: clamp(28px, 4vw, 40px); letter-spacing: -.03em; overflow-wrap: anywhere; }
 .createdAt { margin: var(--pf-radius-sm) 0 0; color: var(--pf-color-muted); font-size: 13px; }
@@ -95,10 +94,14 @@
 .artifactInfo small { color: var(--pf-color-muted); }
 .artifactInfo code { color: var(--pf-color-muted); font-family: Consolas, "Courier New", monospace; font-size: 11px; overflow-wrap: anywhere; }
 .artifactActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
-.previewPanel { display: grid; gap: 14px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--pf-color-border); }
-.previewHeading { display: flex; align-items: center; justify-content: space-between; gap: var(--pf-space-3); }
-.previewHeading h3 { margin: 4px 0 0; color: var(--pf-color-text); font-size: 17px; }
-.docPreview { max-height: 72vh; overflow: auto; padding: 42px 52px; border: 1px solid var(--pf-color-border); border-radius: var(--pf-radius-sm); background: #fff; color: var(--pf-color-text); line-height: 1.85; }
+.previewLoadingBox { display: grid; place-items: center; min-height: 140px; margin-top: var(--pf-space-4); padding: var(--pf-space-6); border: 1px dashed var(--pf-color-border); border-radius: var(--pf-radius-md); background: var(--pf-color-surface-subtle); }
+.previewPanel { display: grid; gap: var(--pf-space-4); margin-top: var(--pf-space-6); padding-top: var(--pf-space-6); border-top: 1px solid var(--pf-color-border); }
+.previewHeading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--pf-space-3); }
+.previewTitleArea { display: grid; gap: 2px; }
+.previewTitleArea h3 { margin: 0; color: var(--pf-color-text); font-size: 18px; font-weight: 700; }
+.previewActions { display: flex; align-items: center; gap: var(--pf-space-2); }
+.docPreviewViewport { background: #f8fafc; border: 1px solid var(--pf-color-border); border-radius: var(--pf-radius-md); padding: clamp(16px, 3vw, 32px); display: flex; justify-content: center; overflow: hidden; }
+.docPreview { width: 100%; max-width: 860px; max-height: 75vh; overflow-y: auto; padding: 48px 56px; border: 1px solid #e2e8f0; border-radius: var(--pf-radius-sm); background: #fff; box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.08); color: var(--pf-color-text); line-height: 1.85; }
 .docPreview :global(h1) { margin: 0 0 28px; text-align: center; font-size: 26px; line-height: 1.45; }
 .docPreview :global(h2) { margin: 30px 0 var(--pf-space-3); padding-bottom: var(--pf-radius-sm); border-bottom: 1px solid var(--pf-color-border); font-size: 20px; }
 .docPreview :global(h3) { margin: var(--pf-space-6) 0 var(--pf-radius-md); font-size: 17px; }
@@ -121,12 +124,15 @@
   .artifact { grid-template-columns: auto minmax(0, 1fr); }
   .artifactActions { grid-column: 1 / -1; justify-content: flex-start; }
   .stageSummary { text-align: left; }
+  .previewHeading { align-items: flex-start; flex-direction: column; }
+  .previewActions { width: 100%; justify-content: flex-start; }
+  .docPreviewViewport { padding: var(--pf-space-2); }
   .docPreview { padding: var(--pf-space-6) 20px; }
 }
 
 @media (max-width: 440px) {
   .loadingCard, .errorCard, .resultCard, .timelineCard, .executionCard, .artifactsCard { padding: 18px; }
   .traceDisclosure summary { align-items: flex-start; flex-direction: column; }
-  .headerActions, .headerActions button, .artifactActions, .artifactActions button { width: 100%; }
-  .headerActions button, .artifactActions button { justify-content: center; }
+  .headerActions, .headerActions button, .artifactActions, .artifactActions button, .previewActions button { width: 100%; }
+  .headerActions button, .artifactActions button, .previewActions button { justify-content: center; }
 }

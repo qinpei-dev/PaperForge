@@ -8,9 +8,12 @@
 .cancelLink:hover, .backLink:hover { color: var(--pf-color-primary-hover); text-decoration: underline; }
 
 .stepRail { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--pf-space-3); padding: var(--pf-space-1) 0; }
-.stepRailItem { display: flex; align-items: center; gap: var(--pf-space-2); color: var(--pf-color-muted); font-size: 13px; font-weight: 600; }
-.stepRailItem span { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 50%; background: var(--pf-color-primary-light); color: var(--pf-color-primary); font-size: 12px; font-weight: 700; }
+.stepRailItem { display: flex; align-items: center; gap: var(--pf-space-2); color: var(--pf-color-muted); font-size: 13px; font-weight: 600; transition: color 0.2s ease; }
+.stepRailItem span { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 50%; background: var(--pf-color-primary-light); color: var(--pf-color-primary); font-size: 12px; font-weight: 700; transition: all 0.2s ease; }
+.stepRailItemDone { color: var(--pf-color-primary-hover); }
+.stepRailItemDone span { background: var(--pf-color-primary); color: #ffffff; box-shadow: 0 0 0 3px #dbeafe; }
 .stepRailItem:not(:last-child)::after { content: ""; height: 2px; flex: 1; background: var(--pf-color-border); border-radius: var(--pf-radius-full); }
+.stepRailItemDone:not(:last-child)::after { background: #93c5fd; }
 
 .errorBanner, .noticeBanner { padding: var(--pf-space-3) var(--pf-space-4); border-radius: var(--pf-radius-md); font-size: 14px; font-weight: 500; line-height: 1.5; }
 .errorBanner { border: 1px solid #fecaca; background: var(--pf-color-danger-light); color: var(--pf-color-danger); }
@@ -32,7 +35,8 @@
 .fileInput { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; padding: 0; opacity: 0; cursor: pointer; }
 
 .fileSummary { display: flex; align-items: center; justify-content: space-between; gap: var(--pf-space-3); padding: var(--pf-space-3) var(--pf-space-4); border: 1px solid var(--pf-color-border); border-radius: var(--pf-radius-md); background: var(--pf-color-surface-subtle); }
-.fileSummary > div { display: grid; min-width: 0; gap: 4px; }
+.fileSummaryIcon { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border-radius: var(--pf-radius-sm); background: var(--pf-color-primary-light); font-size: 18px; }
+.fileSummaryMeta { display: grid; min-width: 0; flex: 1; gap: 3px; }
 .fileSummary strong { overflow: hidden; color: var(--pf-color-text); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .fileSummary span, .helperText { color: var(--pf-color-muted); font-size: 13px; }
 .helperText { margin: 0; line-height: 1.5; }

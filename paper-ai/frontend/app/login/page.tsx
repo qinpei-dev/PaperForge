@@ -86,7 +86,7 @@ export default function LoginPage() {
         <button className={styles.submitButton} type="submit" disabled={loading}>
           {loading ? "登录中…" : "登录"}
         </button>
-        {isUiPreviewEnabled() ? <button className={styles.submitButton} type="button" onClick={enterPreview} disabled={loading}>仅预览 UI（无需账号）</button> : null}
+        {isUiPreviewEnabled() ? <button className={styles.previewButton} type="button" onClick={enterPreview} disabled={loading}>仅预览 UI（无需账号）</button> : null}
       </form>
     </AuthLayout>
   );

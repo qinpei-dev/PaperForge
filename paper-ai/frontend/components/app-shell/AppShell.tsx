@@ -146,7 +146,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <nav className="app-nav">
           {navigation.map((item) => <Link className={`app-nav-link${isActivePath(pathname, item.href) ? " active" : ""}`} href={item.href} key={item.href}><span aria-hidden="true">{item.icon}</span>{item.label}</Link>)}
         </nav>
-        <div className="app-sidebar-footer"><Link href="/tasks/new" className="app-new-task">＋ 新建论文处理</Link></div>
+        <div className="app-sidebar-footer"><Link href="/tasks/new" className="app-new-task">＋ 新建论文任务</Link></div>
       </aside>
       <div className="app-content">
         <header className="app-topbar">
