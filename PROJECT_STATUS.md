@@ -1,21 +1,21 @@
 # 项目状态
 
-## 当前权威状态（2026-09-12）
+## 当前权威状态（2026-09-20）
 
 - 项目：**PaperForge — Verified Academic Document Agent**；当前阶段：**READY FOR CONTROLLED PUBLIC BETA**。
-- 公开仓库清理（第一阶段）：当前入口已统一为 v3.7.5，个人/运维标识已脱敏，早期 demo、旧 UI 截图和历史审计已迁至 `docs/archive/`；Git 历史与本地运行数据均未处理。
-- Production：前端 `https://aetherislab.xyz`；浏览器 API：`https://aetherislab.xyz/api`。ECS 已运行本轮 `v3.7.5`，runtime digest、migration/readiness 和部署事实已同步记录。
+- 公开仓库清理（第一阶段）：当前入口已统一为 v3.7.6，个人/运维标识已脱敏，早期 demo、旧 UI 截图和历史审计已迁至 `docs/archive/`；Git 历史与本地运行数据均未处理。
+- Production：前端 `https://aetherislab.xyz`；浏览器 API：`https://aetherislab.xyz/api`。ECS 已运行本轮 `v3.7.6`，runtime digest、migration/readiness 和部署事实已同步记录。
 - Production Screenshot Audit（2026-09-16）：用户从正常网络提供了 8 张真实生产站 JPEG；已整理至 `docs/assets/screenshots/production/`，Landing 脱敏后 PASS 并用于 README。Dashboard/New Task 因登录态脱敏影响版面列为 REVIEW；未收到 Login、Task Detail、Trace 截图。当前状态：`PRODUCTION_SITE_CONFIRMED_DOWN=NO`、`CODEX_ENVIRONMENT_ACCESS=FAIL`、`PRODUCTION_SCREENSHOT_PENDING=PARTIAL`、`READY_TO_STAGE=YES`。详见 `docs/PRODUCTION_SCREENSHOT_AUDIT.md`。
-- Release candidate：`v3.7.5`；release commit：`4ca4bf29a1eee67f05bcdd6c7b5dfd8a0841a018`；frontend/backend 均从该同一 commit 构建。
+- Release candidate：`v3.7.6`；release commit：`ec56fcfe9603b1d7c5b65915e799bf5cb09fcf19`；frontend/backend 均从该同一 commit 构建。
 - P0 源码状态：frontend Docker build 已保留 local loopback fallback，并要求生产 CI 显式传递三个 `NEXT_PUBLIC_*` build args；Next.js 已升级到 `15.5.24`，兼容传递依赖审计为 0 vulnerabilities。
 - 本地验证：frontend production `npm run build` **PASS**；backend 从 `paper-ai/backend` 执行 `pytest -q` 为 **107 passed**；`.next/server` 与 `.next/static` 未发现 `http://localhost:8000` 或 `http://127.0.0.1:8000`，并发现生产 API URL。Docker image build 尚未在本机执行；这只代表 local build 环境状态，不代表 production Docker 故障。
-- 发布状态：canonical ACR run `34678107681` 已从 release commit 成功构建并推送 immutable backend/frontend images；ECS 已按 digest 部署，Alembic 已验证为 `0013_beta_feedback (head)`，公开 `/api/health`、`/api/ready` 和首页均为 200。Feedback authenticated submit、unauthenticated 401、数据库写入、普通用户 admin 403、Local task、SSE、preview、合法 DOCX download 均 PASS。2026-09-12 已备份生产 `.env`，配置 `ADMIN_EMAILS` 并将其注入 ECS historical Compose backend；管理员登录、`/admin/stats`、`/admin/feedback`、`/admin`、`/admin/feedback` 页面均 PASS，未认证请求为 401，临时普通测试账号请求为 403。旧 `ops/acr-build-v3.6` workflow 已废弃。ECS 数据库、PostgreSQL volume 和现有数据 bind mounts 未被删除或替换。
+- 发布状态：canonical ACR run `35463813507` 已从 release commit 成功构建并推送 immutable backend/frontend images；ECS 已按 digest 部署，Alembic 已验证为 `0013_beta_feedback (head)`，公开 `/api/health`、`/api/ready` 和首页均为 200。v3.7.6 frontend/backend 容器、CORS、Request-ID、未认证 401、登录/注册/New Task 路由和 DOCX 文案验收 PASS。旧 `ops/acr-build-v3.6` workflow 已废弃。ECS 数据库、PostgreSQL volume 和现有数据 bind mounts 未被删除或替换。
 - Production AI：2026-09-12 已通过本机仅监听 loopback 的安全输入链路配置 `DEEPSEEK_API_KEY`；正式输入前以隔离假值连续两次验证 POST、trim、content-type/body parsing 和 HTTP 200，假值未写入 production。ECS `.env` 与 backend 容器注入已做长度一致和精确匹配检查，backend recreate 后内部/公开 health、ready 均为 200；生产容器内完整 `mode=ai` Agent smoke 返回 `language_mode_ai=true`、`ai_used=true` 且 AI score 存在。近 15 分钟 backend 日志无 traceback/HTTP 500，未发现 Secret 值或变量赋值泄漏；一次性 smoke 与安全输入临时状态已清理。仓库未记录任何 Secret 值。
 - 受控 smoke 资源：`task_<redacted>` 与 `task_<redacted>`。账号密码、JWT、数据库、provider 凭据和完整任务标识均不写入公开仓库。
 - 运行时事实：ECS `/opt/paperforge` 沿用历史 Compose 数据挂载结构，仅替换 backend/frontend image；不得未经数据迁移审查直接切换到仓库新版 named-volume Compose。
 - 当前 P1：localStorage bearer token 的 XSS 暴露面、单进程限流/缺少 WAF 与外部监控、单进程 worker 重启后 `interrupted`、复杂 DOCX/AI 内容审校深度仍需后续治理；不得把这些未完成项伪装成 P0 已完成。
 - 当前 P2：checkpoint/resume、分布式队列/多副本调度、对象存储、企业 SSO/SCIM、计费与更深的内容 Agent 仍不在本次 P0 发布范围。
-- Beta Feedback Entry：已部署 v3.7.5；`feedback` 表、认证提交和只读 admin console API/UI 已上线。生产 smoke 发现并修复 ORM `metadata_json` 未显式映射 migration `metadata` 列的问题；修复已通过专项回归并随 v3.7.5 发布。
+- Beta Feedback Entry：已部署 v3.7.6；`feedback` 表、认证提交和只读 admin console API/UI 已上线。生产 smoke 发现并修复 ORM `metadata_json` 未显式映射 migration `metadata` 列的问题；修复已通过专项回归并随 v3.7.6 保持上线。
 - Beta Feedback 安全边界：API 必须 JWT 认证，user/tenant 由服务端 membership context 绑定；task_id 仅接受当前 tenant 任务；不保存 JWT、Authorization、cookie、上传文件或论文正文。速度反馈复用现有 task status/started_at/finished_at，后续 observability enhancement 留在 TODO。
 - 事实冲突处理：先核实 source code、Git、ECS/Compose、health/readiness 和浏览器行为，再更新仓库文档；聊天仅为临时上下文。
 

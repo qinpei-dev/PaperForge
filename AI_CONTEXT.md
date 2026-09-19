@@ -9,12 +9,12 @@
 PaperForge 已正式采用 Repository-Driven Development。聊天记录只是临时上下文；长期状态、交接和生产事实必须以仓库文件和真实运行环境为准。完整规则见 [`AGENTS.md`](AGENTS.md) 与 [`docs/REPOSITORY_GOVERNANCE.md`](docs/REPOSITORY_GOVERNANCE.md)。
 
 - 当前阶段：P0 源码、ACR 镜像和 ECS production runtime 已发布；公开 beta 最终验收仍等待受控的登录后浏览器 E2E 与 A/B tenant isolation。
-- Production：前端 `https://aetherislab.xyz`，浏览器 API base `https://aetherislab.xyz/api`；release candidate `v3.7.5` 从 commit `4ca4bf29a1eee67f05bcdd6c7b5dfd8a0841a018` 构建并已部署。真实 ECS 运行状态、镜像 digest 和最终发布事实以 `PROJECT_STATUS.md` 与 `docs/PRODUCTION_DEPLOYMENT.md` 的最新记录为准。
+- Production：前端 `https://aetherislab.xyz`，浏览器 API base `https://aetherislab.xyz/api`；release candidate `v3.7.6` 从 commit `ec56fcfe9603b1d7c5b65915e799bf5cb09fcf19` 构建并已部署。真实 ECS 运行状态、镜像 digest 和最终发布事实以 `PROJECT_STATUS.md` 与 `docs/PRODUCTION_DEPLOYMENT.md` 的最新记录为准。
 - 当前 P0：源码、frontend production build args、Next.js 15.5.24、ACR immutable image、ECS migration/deploy/readiness 和 JWT rotation 已完成；受控登录后 upload/template/local/ai/preview/download/SSE 与 A/B tenant isolation 尚待有授权测试账号的浏览器验收。
 - 前端生产构建必须显式传入 `NEXT_PUBLIC_API_BASE_URL`、`NEXT_PUBLIC_PAPERFORGE_PREVIEW_AUTO_LOGIN=false`、`NEXT_PUBLIC_PAPERFORGE_APP_ENV=production`；Compose production 只消费预构建 image，不在运行时注入这些 Next public 变量。
 - 本机 Docker Desktop 只用于 local image build/validation；Aliyun ECS Docker/Compose 才是 production runtime。Docker Desktop 未运行不是 production 故障，不得因此修改 production Docker 配置。
 - 历史 `ops/acr-build-v3.6` / `acr-build-v3.6.yml` 已废弃；它指向旧 commit/IP 且缺少完整 frontend build args。当前只使用 `.github/workflows/acr-build-paperforge.yml` 或等价的 `scripts/build_and_push_acr.ps1`。
-- canonical ACR run 已从上述 commit 成功构建并推送 backend/frontend；release digest、ECS deployment、migration、health/readiness、JWT rotation 和浏览器公开 smoke 结果已写入 `PROJECT_STATUS.md` 与 `docs/PRODUCTION_DEPLOYMENT.md`。首次 login 失败的历史 run 不代表当前发布状态；后续发布仍必须从精确 release commit 运行 canonical pipeline。
+- canonical ACR run `35463813507` 已从上述 commit 成功构建并推送 backend/frontend；release digest、ECS deployment、migration、health/readiness、CORS、Request-ID、未认证行为和浏览器公开 smoke 结果已写入 `PROJECT_STATUS.md` 与 `docs/PRODUCTION_DEPLOYMENT.md`。后续发布仍必须从精确 release commit 运行 canonical pipeline。
 
 Secret 只允许在仓库记录名称、用途和是否 required，绝不记录实际值、AccessKey、password、token、JWT secret 或私钥。
 

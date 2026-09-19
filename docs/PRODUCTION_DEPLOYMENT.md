@@ -2,11 +2,11 @@
 
 ## Current release facts
 
-This is the production source of truth for deployment facts. As of 2026-09-12,
+This is the production source of truth for deployment facts. As of 2026-09-20,
 the target public frontend is `https://aetherislab.xyz` and the browser API base
-is `https://aetherislab.xyz/api`. Release `v3.7.5` was built from commit
-`4ca4bf29a1eee67f05bcdd6c7b5dfd8a0841a018`, published by canonical ACR run
-`34678107681`, and deployed to Aliyun ECS. The production runtime is operational;
+is `https://aetherislab.xyz/api`. Release `v3.7.6` was built from commit
+`ec56fcfe9603b1d7c5b65915e799bf5cb09fcf19`, published by canonical ACR run
+`35463813507`, and deployed to Aliyun ECS. The production runtime is operational;
 the final public-beta gate is **READY FOR CONTROLLED PUBLIC BETA** after the
 2026-09-12 authenticated production audit.
 
@@ -37,12 +37,12 @@ This runbook deploys immutable images through `docker-compose.prod.yml`; it does
 
 ## Current ECS runtime snapshot
 
-- ACR workflow run: `34678107681` (success); the prior runs are historical.
-- Backend image: `crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/paperforge-backend:v3.7.5@sha256:27522b2f2c04010c657d03d30e3e741abd17843700df04241ed6853f3c1167c8`.
-- Frontend image: `crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/paperforge-frontend:v3.7.5@sha256:40f26beb77117a434f002e498c20abdd69ef24b3e4ed7bd224b67378617acb09`.
+- ACR workflow run: `35463813507` (success); the prior runs are historical.
+- Backend image: `crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/paperforge-backend:v3.7.6@sha256:2371cc6be296fae6eee020820894be5a28d535a96f3e956ad1ea19e8d48fa45e`.
+- Frontend image: `crpi-z345rofd99au0che.cn-chengdu.personal.cr.aliyuncs.com/paperforge/paperforge-frontend:v3.7.6@sha256:407e861b99a2a937b8a785181615d1e60cbb5431bf3348a045e4568dfd7607c8`.
 - ACR frontend layer scan: production API URL present; localhost and loopback API URLs absent; all three production build args were present in the workflow logs.
 - Production endpoint: `https://aetherislab.xyz`; deployment directory `/opt/paperforge`. The public repository intentionally does not record the ECS public IP.
-- Migration: `0013_beta_feedback (head)`; explicit `upgrade head` completed before the runtime update.
+- Migration: `0013_beta_feedback (head)`; existing Compose startup migration check completed without a schema change before the runtime update.
 - Runtime probes after deployment and JWT rotation: internal/public health, readiness and public homepage all returned HTTP 200; backend and PostgreSQL health were healthy. The historical frontend Compose file has no container healthcheck, so its public HTTP 200 is the route health signal.
 - Data safety: PostgreSQL image/container and named volume were retained. Existing bind mounts `/opt/paperforge-data/uploads`, `/opt/paperforge-data/outputs`, and `/opt/paperforge-data/template_storage` were retained; no database, volume, or production data was deleted or rebuilt. A non-empty PostgreSQL custom-format pre-release dump was stored in the ECS deployment backup directory; only its metadata belongs in project records.
 - Secrets: repository ACR secret names `ACR_USERNAME` and `ACR_PASSWORD` were refreshed through encrypted secret management; `JWT_SECRET_KEY` was rotated after stable deployment without recording its value. `POSTGRES_PASSWORD` was not changed. On 2026-09-12 `DEEPSEEK_API_KEY` was configured through a loopback-only, no-echo input flow after two isolated fake-value HTTP 200 self-tests; the fake value never entered production. Compose injection matched the protected `.env` value exactly, backend was recreated, and a production-container AI Agent smoke returned `language_mode_ai=true`, `ai_used=true`, and a non-null AI score. Health/readiness and log/Secret-leak checks passed. No credential value is recorded here or elsewhere in the repository.

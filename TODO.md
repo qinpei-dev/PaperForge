@@ -2,13 +2,15 @@
 
 ## [DONE] Public repository cleanup — phase 1
 
-当前公开入口已统一为 PaperForge v3.7.5 / Controlled Public Beta；个人与运维标识已脱敏，早期 demo、旧 UI 截图和历史工程审计已迁至 `docs/archive/`。Git 历史、tracked regression artifacts、模板跟踪策略、当前 SaaS 截图和本地运行数据保留至后续阶段处理。
+当前公开入口已统一为 PaperForge v3.7.6 / Controlled Public Beta；个人与运维标识已脱敏，早期 demo、旧 UI 截图和历史工程审计已迁至 `docs/archive/`。Git 历史、tracked regression artifacts、模板跟踪策略、当前 SaaS 截图和本地运行数据保留至后续阶段处理。
 
-## [CURRENT] PaperForge v3.7.5 Production Release
+## [CURRENT] PaperForge v3.7.6 Production Release
 
 - [ ] Optional follow-up: obtain clean production Login, Dashboard, Task Detail, and Trace captures from the user's normal browser; add only after visual redaction review. Current staged production evidence includes the sanitized Landing capture.
 
 状态：**CONTROLLED PUBLIC BETA LIVE；管理员验收 PASS**。
+
+v3.7.6 已通过 canonical ACR run `35463813507` 从 commit `ec56fcfe9603b1d7c5b65915e799bf5cb09fcf19` 构建并推送；ECS backend/frontend 已按 immutable digest 更新，PostgreSQL volume、数据 bind mounts 和数据库均保留。
 
 已完成：canonical ACR run `34678107681`、ECS immutable backend/frontend 部署、非空 PostgreSQL 备份、migration `0013_beta_feedback`、health/readiness、authenticated feedback submit、ordinary-user admin 403、Local task/SSE/preview/DOCX download smoke。修复并发布 feedback ORM 到 `metadata` 列的最小映射 bug。
 
