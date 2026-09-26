@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
+from main import APP_VERSION
 from db.models import Feedback, Project, Task, TenantMembership, Workspace
 from test_saas import auth_header, register, saas_client
 
@@ -39,7 +40,7 @@ def test_feedback_binds_identity_and_records_speed_context(saas_client) -> None:
         assert item is not None
         assert item.user_id == owner["user"]["id"]
         assert item.tenant_id == membership.tenant_id
-        assert item.app_version == "v3.7.3"
+        assert item.app_version == APP_VERSION
         assert item.request_id
         assert item.contact == "beta@example.com"
 
