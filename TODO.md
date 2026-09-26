@@ -1,5 +1,11 @@
 # TODO
 
+## [CURRENT] 2026-09-27 仓库维护后续项
+
+- [ ] 在单独的前端工程任务中配置非交互式 ESLint CLI 与规则，再把 `npm run lint` 作为 CI 门禁；当前脚本会启动配置问答，不能声称 lint PASS。
+- [ ] 获得可公开的无敏感信息、画面完整的产品截图后，再决定是否纳入 README；本轮 5 张未跟踪截图保留本地且不提交。
+- [ ] 未来生产发布时，从精确提交重新构建 canonical ACR 镜像并做目标环境验收；本轮只同步代码与仓库文档，不部署 ECS。
+
 ## [DONE] Public repository cleanup — phase 1
 
 当前公开入口已统一为 PaperForge v3.7.6 / Controlled Public Beta；个人与运维标识已脱敏，早期 demo、旧 UI 截图和历史工程审计已迁至 `docs/archive/`。Git 历史、tracked regression artifacts、模板跟踪策略、当前 SaaS 截图和本地运行数据保留至后续阶段处理。

@@ -53,7 +53,7 @@ This runbook deploys immutable images through `docker-compose.prod.yml`; it does
 2. Verify the immutable backend/frontend image references, release tag, public API URL, CORS origin, and persistent Docker volumes. Build `NEXT_PUBLIC_API_BASE_URL` into the frontend image before publishing it; Next.js public variables are compiled into the image and cannot be changed by the production Compose runtime.
 3. Run `scripts/backup_postgres.ps1` (or the equivalent host command), verify the backup exists and is non-empty, then record the current `alembic current` revision.
 4. Pull immutable images: `docker compose --env-file /secure/paperforge.env -f docker-compose.prod.yml pull`.
-5. Run the forward migration using the backend image: `docker compose --env-file /secure/paperforge.env -f docker-compose.prod.yml run --rm backend alembic upgrade head`. Verify `docker compose --env-file /secure/paperforge.env -f docker-compose.prod.yml run --rm backend alembic current` is `0012_day17_token_version`. Do not run production downgrade automatically.
+5. Run the forward migration using the backend image: `docker compose --env-file /secure/paperforge.env -f docker-compose.prod.yml run --rm backend alembic upgrade head`. Verify `docker compose --env-file /secure/paperforge.env -f docker-compose.prod.yml run --rm backend alembic current` is `0013_beta_feedback` for the recorded v3.7.6 deployment, and compare future releases against their migration head. Do not run production downgrade automatically.
 6. Start services with `docker compose --env-file /secure/paperforge.env -f docker-compose.prod.yml up -d`; verify PostgreSQL, backend health, frontend route, authentication, active workspace task views, SSE, and artifact download.
 7. Monitor logs for migration errors, repeated 500s, auth failures, and secret exposure.
 
@@ -76,7 +76,7 @@ Classification uploads are deleted immediately after classification. Task input 
 
 On backend startup, every persisted `running` task is treated as orphaned because the in-process worker cannot safely resume DOCX execution. It is transitioned to `interrupted`, with a `backend_restart` reason, detection timestamp, and the prior worker run identity. This is intentional: PaperForge currently has no verified checkpoint/resume semantics.
 
-SSE clients may reconnect with `Last-Event-ID`; the server authorizes the task against the selected tenant and replays only later tenant-scoped rows from `task_events`. Production operators must run the current Alembic head `0012_day17_token_version` before deploying the backend image; it includes the durable runtime and token-version migrations.
+SSE clients may reconnect with `Last-Event-ID`; the server authorizes the task against the selected tenant and replays only later tenant-scoped rows from `task_events`. The recorded v3.7.6 deployment runs Alembic head `0013_beta_feedback`, which includes the durable runtime and token-version migrations.
 
 # Day12 Security Baseline
 

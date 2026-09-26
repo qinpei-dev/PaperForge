@@ -11,7 +11,7 @@ PaperForge 将学术 DOCX 的格式处理变成一条可检查的工作流：**�
 PaperForge turns academic DOCX processing into an inspectable workflow: **understand the document, resolve template rules, plan changes, execute supported low-risk actions, re-read the output, and deliver evidence with the artifact**. AI may assist with language review and suggestions, but model output alone is never treated as proof of a successful edit.
 
 **Live product / 在线产品:** [aetherislab.xyz](https://aetherislab.xyz)<br>
-**Release / 当前版本:** `v3.7.5`<br>
+**Deployed release / 已部署版本:** `v3.7.6` (this repository may contain later, undeployed maintenance commits)<br>
 **Stage / 当前阶段:** Controlled Public Beta Live<br>
 **Docs / 文档:** [Documentation index](docs/README.md) · [Architecture](docs/ARCHITECTURE_OVERVIEW.md) · [Limitations](docs/LIMITATIONS.md) · [Repository governance](docs/REPOSITORY_GOVERNANCE.md)
 
@@ -154,10 +154,10 @@ See [Architecture Overview](docs/ARCHITECTURE_OVERVIEW.md) and [Detailed Archite
 
 | Item / 项目 | Current state / 当前状态 |
 | --- | --- |
-| Release | `v3.7.5` |
+| Deployed release / 已部署版本 | `v3.7.6`; see the production runbook for its source commit and image digests. |
 | Product stage / 产品阶段 | Controlled Public Beta Live |
 | Production / 生产环境 | Frontend and API deployed on Aliyun ECS with immutable images; canonical release path uses ACR. |
-| Recorded validation / 已记录验证 | Backend `pytest -q`: **107 passed**; frontend production build: **PASS**. |
+| Recorded validation / 已记录验证 | Backend `pytest -q`: **112 passed** after this repository maintenance; frontend production build and independent TypeScript check: **PASS**. These are local repository checks, not a new production acceptance run. |
 | Verified release paths / 已验收链路 | Authentication, tenant isolation, local and AI processing, SSE, preview, DOCX download, feedback and admin authorization. |
 | Current execution boundary / 当前执行边界 | Single-process worker; restart recovery marks orphaned running tasks as interrupted rather than pretending to resume. |
 | Known product boundary / 已知产品边界 | Complex templates, advanced Word structures, references and deep content revision still require further work and human review. |
@@ -210,6 +210,18 @@ docker compose up --build
 For non-local deployments, `NEXT_PUBLIC_API_BASE_URL` is a frontend build-time value and `CORS_ORIGINS` is a backend runtime allowlist. See [Docker deployment](docs/DOCKER_DEPLOYMENT.md). Production releases must use the canonical ACR pipeline; the historical `ops/acr-build-v3.6` path is retired.
 
 非本地部署中，`NEXT_PUBLIC_API_BASE_URL` 是前端构建时变量，`CORS_ORIGINS` 是后端运行时白名单。详见 [Docker deployment](docs/DOCKER_DEPLOYMENT.md)。生产发布必须使用 canonical ACR pipeline；历史 `ops/acr-build-v3.6` 路径已经废弃。
+
+Key configuration names / 主要配置项（值由部署环境提供，不要提交真实凭据）：
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` or `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Local database URL, or Compose PostgreSQL connection inputs. |
+| `JWT_SECRET_KEY`, `AUTH_REQUIRED`, `CORS_ORIGINS` | Required production authentication and browser-origin controls. |
+| `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_PAPERFORGE_APP_ENV`, `NEXT_PUBLIC_PAPERFORGE_PREVIEW_AUTO_LOGIN` | Frontend build-time API and environment settings; production preview auto login must be `false`. |
+| `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `DEEPSEEK_MODEL` | Optional AI reviewer provider; local processing works without a provider key. |
+| `APP_VERSION`, `DEFAULT_AGENT_RUN_QUOTA` | Feedback version label and monthly per-tenant Agent quota. |
+
+The root [`.env.example`](.env.example) and backend [`paper-ai/backend/.env.example`](paper-ai/backend/.env.example) contain safe local examples. Production image and migration steps are in the [runbook](docs/PRODUCTION_DEPLOYMENT.md); a repository commit is not deployed until that release process is completed and verified.
 
 ## Verification commands / 验证命令
 
