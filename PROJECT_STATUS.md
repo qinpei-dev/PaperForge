@@ -4,9 +4,11 @@
 
 ### 2026-09-27 仓库维护记录
 
+- 本轮前端工程收尾：在 Next.js 15.5.24 / React 19 不变的前提下，安装兼容的 ESLint 9 与 `eslint-config-next` 15.5.24，使用官方 `next/core-web-vitals`、`next/typescript` 配置；`npm run lint` 可非交互执行。清理 7 项未使用代码警告后，Lint 为 0 errors、1 warning（New Task 初始加载的 `react-hooks/exhaustive-deps`，后续单独审查）。frontend build、独立 TypeScript、backend 112 tests 均 PASS。本条是尚未部署的仓库维护，不改变 v3.7.6 ECS 运行镜像或生产版本。
+
 - `main` 与 `origin/main` 在本轮开始时均为 `437d839`；无未提交前端代码，只有 5 张未跟踪截图。截图因脱敏遮挡、测试标识或预览乱码不纳入公开提交，也未删除本地文件。
 - 反馈记录默认 `APP_VERSION` 与已部署版本口径对齐为 `v3.7.6`，测试改为校验实际运行配置；README 与生产手册的版本和 migration head 已同步。仓库维护提交不代表 ECS 已部署新镜像，生产运行事实仍以上一发布记录为准。
-- 本轮 frontend `npm run build`、独立 `npx tsc --noEmit` 均 PASS；backend `python -m pytest -q` 为 112 passed；本地 DOCX manifest 回归为 10/10 PASS。现有 `npm run lint` 缺少 ESLint 配置，会进入交互式初始化，未作为通过的质量门禁。这些是仓库检查，不是新一轮生产环境验收。
+- 前次仓库维护检查：frontend `npm run build`、独立 `npx tsc --noEmit` 均 PASS；backend `python -m pytest -q` 为 112 passed；本地 DOCX manifest 回归为 10/10 PASS。当时 `npm run lint` 缺少 ESLint 配置，未纳入门禁；现已由上方本轮记录解决。这些是仓库检查，不是新一轮生产环境验收。
 
 - 项目：**PaperForge — Verified Academic Document Agent**；当前阶段：**READY FOR CONTROLLED PUBLIC BETA**。
 - 公开仓库清理（第一阶段）：当前入口已统一为 v3.7.6，个人/运维标识已脱敏，早期 demo、旧 UI 截图和历史审计已迁至 `docs/archive/`；Git 历史与本地运行数据均未处理。

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Button, Card, EmptyState, Loading } from "../../../components";
 import { apiUrl } from "../../../lib/api-client";
-import { authorizationHeaders, clearAuthSession, getAccessToken, isPreviewEnvironment, isUiPreviewSession, suppressPreviewAutoLogin, tryPreviewAutoLogin } from "../../../lib/auth";
+import { authorizationHeaders, getAccessToken, isPreviewEnvironment, isUiPreviewSession, tryPreviewAutoLogin } from "../../../lib/auth";
 import { userFacingError } from "../../../lib/error-messages";
 import { taskStatusLabel, workflowStatusLabel } from "../../../lib/status-labels";
 import styles from "./page.module.css";
@@ -37,11 +37,6 @@ function formatDate(value?: string) {
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("zh-CN");
 }
 
-function formatPeriod(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("zh-CN");
-}
-
 function statusTone(status: string) {
   if (status === "completed") return styles.statusSuccess;
   if (["failed", "cancelled", "interrupted"].includes(status)) return styles.statusDanger;
@@ -54,9 +49,7 @@ export default function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [usageLoading, setUsageLoading] = useState(true);
   const [error, setError] = useState("");
-  const [usageError, setUsageError] = useState("");
   const [email, setEmail] = useState("");
   const [workspace, setWorkspace] = useState("");
 
@@ -69,7 +62,6 @@ export default function DashboardPage() {
         if (savedUser) setEmail((JSON.parse(savedUser) as { email?: string }).email || "");
         if (savedWorkspace) setWorkspace((JSON.parse(savedWorkspace) as { name?: string }).name || "Preview Workspace");
         setLoading(false);
-        setUsageLoading(false);
         return;
       }
       await tryPreviewAutoLogin();
@@ -124,10 +116,8 @@ export default function DashboardPage() {
             remaining: data.remaining,
           });
         }
-      } catch (reason) {
-        if (!cancelled) setUsageError(userFacingError(reason, "本月额度暂时无法加载，请稍后重试。"));
-      } finally {
-        if (!cancelled) setUsageLoading(false);
+      } catch {
+        // Usage is advisory; task creation enforces the server quota.
       }
     }
 
@@ -143,15 +133,8 @@ export default function DashboardPage() {
     router.push("/tasks/new");
   }
 
-  function logout() {
-    suppressPreviewAutoLogin();
-    clearAuthSession();
-    router.push("/login");
-  }
-
   const completedCount = tasks.filter((task) => task.status === "completed").length;
   const processingCount = tasks.filter((task) => PROCESSING_STATUSES.includes(task.status)).length;
-  const usagePercent = usage ? Math.min(100, Math.round((usage.usage.used / Math.max(usage.quota.limit, 1)) * 100)) : 0;
 
   return (
     <section className={styles.dashboard} aria-busy={loading}>

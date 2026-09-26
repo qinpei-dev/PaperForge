@@ -2,7 +2,8 @@
 
 ## [CURRENT] 2026-09-27 仓库维护后续项
 
-- [ ] 在单独的前端工程任务中配置非交互式 ESLint CLI 与规则，再把 `npm run lint` 作为 CI 门禁；当前脚本会启动配置问答，不能声称 lint PASS。
+- [x] 为当前 Next.js 15.5.24 配置官方 ESLint 规则；`npm run lint` 已可非交互执行（0 errors、1 warning）。后续 CI 可接入此命令；Next 16 升级前应把已弃用的 `next lint` 迁至 ESLint CLI。
+- [ ] 单独审查 New Task 初始加载中 `loadTemplates` 的 Hook 依赖稳定性；当前 `react-hooks/exhaustive-deps` 有 1 条警告，避免为消警告改变模板选择行为。
 - [ ] 获得可公开的无敏感信息、画面完整的产品截图后，再决定是否纳入 README；本轮 5 张未跟踪截图保留本地且不提交。
 - [ ] 未来生产发布时，从精确提交重新构建 canonical ACR 镜像并做目标环境验收；本轮只同步代码与仓库文档，不部署 ECS。
 
